@@ -8,7 +8,15 @@ import type {
 export const revenueLossRatePerMinute: RevenueLossRatePerMinute = {
   throttled: 300,
   "escalating-violations": 500,
-  degraded: 90,
+  // The two partial-improvement tiers get distinct incidentState labels
+  // (see rules.ts) specifically so this table can rank them by their
+  // actual violationRate: jitter-only (rate 14) genuinely leaks less
+  // revenue than fixed-delay-only (rate 28), which in turn is better
+  // than doing nothing (throttled, rate 42/300 per minute) — without
+  // this split both partials shared "degraded" and were indistinguishable
+  // to every revenue-sensitive scoring dimension.
+  "degraded-jitter-only": 60,
+  "degraded-fixed-delay-only": 150,
   recovering: 0,
   healthy: 0,
 };

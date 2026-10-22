@@ -24,14 +24,29 @@ export const RATE_LIMIT_FAILURE_SCORING: AuthoredScoringConfig = {
       ],
     },
     {
+      // Bands are tuned to this scenario's own revenue-loss scale, not
+      // copied from Kafka Consumer Lag's — Rate-Limit Failure's revenue
+      // loss accrues in the tens-to-low-thousands of USD (see
+      // revenue-and-cost.ts's per-incidentState rates), not the tens of
+      // thousands a provider-outage scenario produces. `failed` gets its
+      // own terminal override: an attempt left to actively breach the
+      // failure threshold is the worst customer outcome regardless of how
+      // quickly it failed (a fast fail can otherwise look deceptively
+      // "cheap" in raw revenueLossUsd purely because it ended sooner than
+      // a longer-running but merely degraded partial-improvement path).
+      // `unresolved` deliberately falls through to normal banding so the
+      // two partial-improvement tiers (different violationRate, different
+      // revenueLossUsd via distinct incidentState rates) score measurably
+      // differently rather than collapsing to the same band.
       dimension: "customerImpact",
       maxPoints: 200,
       measure: "revenueLossUsd",
+      terminalOverrides: { failed: 20 },
       bands: [
-        { atMost: 5_000, points: 200 },
-        { atMost: 15_000, points: 160 },
-        { atMost: 30_000, points: 110 },
-        { atMost: 50_000, points: 60 },
+        { atMost: 100, points: 200 },
+        { atMost: 1_000, points: 150 },
+        { atMost: 2_500, points: 100 },
+        { atMost: 5_000, points: 50 },
         { points: 10 },
       ],
     },

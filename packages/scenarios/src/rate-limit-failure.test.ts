@@ -1,4 +1,4 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { rateLimitFailure } from "./rate-limit-failure";
@@ -8,6 +8,8 @@ import {
   REQUEST_CONCURRENCY_KEY,
   RETRY_BACKOFF_STRATEGY_KEY,
 } from "./rate-limit-failure/definition";
+import { RATE_LIMIT_FAILURE_SCORING } from "./rate-limit-failure/scoring";
+import { scoreAuthoredAttempt } from "./authoring/score";
 
 interface TimedAction {
   atMs: number;
@@ -148,5 +150,64 @@ describe("Rate-Limit Failure", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  describe("scoring differentiates the partial-improvement tiers from baseline", () => {
+    // Regression test for a bug where jitter-only (violationRate 14) and
+    // fixed-delay-only (violationRate 28) partials, and even the
+    // no-action baseline (violationRate 42), all scored an identical 550
+    // total: terminalOverrides.unresolved/failed zeroed recovery/
+    // reliability identically for all three, and no other dimension was
+    // sensitive to violationRate/revenue-loss differences at realistic
+    // attempt durations. Fixed by giving the two partial rules distinct
+    // incidentState labels (see rules.ts) with distinct
+    // revenueLossRatePerMinute entries (see revenue-and-cost.ts), tuning
+    // customerImpact's bands to this scenario's actual revenue-loss
+    // scale, and giving customerImpact its own `failed` terminal override
+    // so a fast-failing baseline can't look artificially cheap purely
+    // because it ended sooner than a longer-running partial.
+    const FULL_ATTEMPT_MS = 12 * 60_000; // scenario's own estimatedMinutes: 12
+
+    function scoreOf(state: ReturnType<typeof runScenario>) {
+      const inputs = extractScoringInputs(rateLimitFailureSimulation, state);
+      return scoreAuthoredAttempt(RATE_LIMIT_FAILURE_SCORING, inputs);
+    }
+
+    it("orders good > jitter-only partial > fixed-delay-only partial > baseline", () => {
+      const good = runScenario(50_000, [
+        { atMs: 31_000, controlKey: CLIENT_SIDE_RATE_LIMIT_ENABLED_KEY, value: true },
+        { atMs: 31_000, controlKey: RETRY_BACKOFF_STRATEGY_KEY, value: "exponential-with-jitter" },
+      ]);
+
+      // Neither partial ever crosses the failure condition's threshold
+      // (40) or satisfies the success condition, so both run the full
+      // attempt length and end "unresolved".
+      const jitterOnly = runScenario(FULL_ATTEMPT_MS, [
+        { atMs: 31_000, controlKey: RETRY_BACKOFF_STRATEGY_KEY, value: "exponential-with-jitter" },
+      ]);
+      const fixedDelayOnly = runScenario(FULL_ATTEMPT_MS, [
+        { atMs: 31_000, controlKey: RETRY_BACKOFF_STRATEGY_KEY, value: "fixed-delay" },
+      ]);
+
+      // Baseline's violationRate (42) crosses the failure threshold and
+      // naturally ends via the failure condition's 60s sustain window,
+      // well before the full attempt length.
+      const baseline = runScenario(30_000 + 61_000);
+
+      expect(jitterOnly.status).not.toBe("resolved");
+      expect(jitterOnly.status).not.toBe("failed");
+      expect(fixedDelayOnly.status).not.toBe("resolved");
+      expect(fixedDelayOnly.status).not.toBe("failed");
+      expect(baseline.status).toBe("failed");
+
+      const goodScore = scoreOf(good).total;
+      const jitterScore = scoreOf(jitterOnly).total;
+      const fixedDelayScore = scoreOf(fixedDelayOnly).total;
+      const baselineScore = scoreOf(baseline).total;
+
+      expect(goodScore).toBeGreaterThan(jitterScore);
+      expect(jitterScore).toBeGreaterThan(fixedDelayScore);
+      expect(fixedDelayScore).toBeGreaterThan(baselineScore);
+    });
   });
 });

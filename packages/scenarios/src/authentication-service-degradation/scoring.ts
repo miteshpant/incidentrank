@@ -32,26 +32,37 @@ export const AUTHENTICATION_SERVICE_DEGRADATION_SCORING: AuthoredScoringConfig =
       ],
     },
     {
+      // Bands tightened to this scenario's actual revenue-loss scale —
+      // regression test for a bug where the two genuine partial-
+      // improvement paths (cache-TTL-only, partial scaling) and the
+      // no-action baseline all saturated the same wide top band and tied
+      // on customerImpact, despite measurably different revenueLossUsd
+      // (baseline accrues at the full degrading rate; both partials
+      // accrue at a much lower rate once their mitigation takes hold).
       dimension: "customerImpact",
       maxPoints: 200,
       measure: "revenueLossUsd",
       bands: [
-        { atMost: 5_000, points: 200 },
-        { atMost: 15_000, points: 160 },
-        { atMost: 30_000, points: 110 },
-        { atMost: 50_000, points: 60 },
+        { atMost: 600, points: 200 },
+        { atMost: 900, points: 165 },
+        { atMost: 2_000, points: 130 },
+        { atMost: 10_000, points: 60 },
         { points: 10 },
       ],
     },
     {
-      // No duplicate/lost-write modeling yet — same documented limitation
-      // as every other built-in scenario: award full marks via a single
-      // catch-all band rather than fabricating a measure that doesn't
-      // exist in the closed AuthoredScoringMeasure set.
+      // Unlike every other built-in scenario (which has no duplicate/
+      // lost-write modeling and awards full marks via a single catch-all
+      // band), this scenario's harmful trap IS a literal data-integrity
+      // regression: bypassing signature verification means the system
+      // accepts unverified tokens, independent of what the live metrics
+      // show. Penalized via the same harmfulChangeCount measure
+      // operationalEfficiency already uses — this is the dimension where
+      // "accepting unverified tokens" most honestly belongs, not merely
+      // an efficiency/waste concern.
       dimension: "dataIntegrity",
       maxPoints: 200,
-      measure: "dataIntegrity",
-      bands: [{ points: 200 }],
+      penalties: [{ measure: "harmfulChangeCount", atLeast: 1, subtractPoints: 200 }],
     },
     {
       dimension: "reliability",

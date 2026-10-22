@@ -99,10 +99,41 @@ export const poisonMessageRules: Rule[] = [
     componentHealth: recoveringHealth,
   },
 
-  // ── Slow-masking partial: a much higher but still-bounded retry
-  // limit, DLQ enabled — the poison message does eventually route out,
-  // but only after burning through 50 attempts first, so the backlog
-  // grows substantially before it drains.
+  // ── Slow-masking partial, eventually recovered: once the 50-attempt
+  // bounded retry limit actually exhausts (see timed-events.ts's
+  // highRetryLimitExhausted trigger), the poison message finally routes
+  // to the dead-letter queue and the backlog drains — matching this
+  // rule's own documented "eventually routes out" intent. Ordered before
+  // the still-degraded slow rule below since it additionally requires
+  // the exhaustion trigger.
+  {
+    id: "high-bounded-retries-with-dlq-slow-recovered",
+    when: {
+      triggerEquals: {
+        poisonMessagePresent: true,
+        highRetryLimitExhausted: true,
+      },
+      controlEquals: {
+        [MAX_RETRY_ATTEMPTS_KEY]: 50,
+        [DEAD_LETTER_QUEUE_ENABLED_KEY]: true,
+      },
+    },
+    incidentState: "recovering-slow",
+    values: {
+      queueDepth: 30,
+      retryLoopCount: 50,
+      healthyMessageBacklog: 15,
+      consumerCpuUtilization: 22,
+      queueStatus: "normal",
+    },
+    componentHealth: recoveringHealth,
+  },
+
+  // ── Slow-masking partial, still in progress: a much higher but still-
+  // bounded retry limit, DLQ enabled — the poison message is still
+  // burning through its 50 attempts (see the recovered variant above for
+  // once it finally exhausts), so the backlog has grown substantially
+  // but has not drained yet.
   {
     id: "high-bounded-retries-with-dlq-slow",
     when: {

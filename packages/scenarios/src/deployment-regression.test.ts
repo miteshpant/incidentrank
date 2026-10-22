@@ -1,4 +1,4 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { deploymentRegression } from "./deployment-regression";
@@ -8,6 +8,8 @@ import {
   deploymentRegressionSimulation,
   ROLLBACK_TO_PREVIOUS_VERSION_KEY,
 } from "./deployment-regression/definition";
+import { DEPLOYMENT_REGRESSION_SCORING } from "./deployment-regression/scoring";
+import { scoreAuthoredAttempt } from "./authoring/score";
 
 interface TimedAction {
   atMs: number;
@@ -156,5 +158,58 @@ describe("Deployment Regression", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  describe("scoring orders good > baseline > harmful", () => {
+    // Regression test for a bug where the harmful trap (debug logging
+    // left on, full traffic still on the regressed version) and the pure
+    // baseline/no-action path both mapped to the same "regressing"
+    // incidentState, so revenueLossRatePerMinute (keyed only by
+    // incidentState) accrued identically for both, and customerImpact's
+    // bands were wide enough that both saturated the same top band
+    // anyway — the harmful path scored only ~15/1000 points below doing
+    // nothing, driven entirely by the small operationalEfficiency
+    // penalty. Fixed by giving the harmful rule its own
+    // "regressing-harmful" incidentState with a higher revenue-loss rate
+    // (rules.ts, revenue-and-cost.ts) and tightening customerImpact's
+    // bands to this scenario's actual revenue scale (scoring.ts) so the
+    // measurable difference in revenueLossUsd actually crosses a band.
+    function scoreOf(state: ReturnType<typeof runScenario>) {
+      const inputs = extractScoringInputs(deploymentRegressionSimulation, state);
+      return scoreAuthoredAttempt(DEPLOYMENT_REGRESSION_SCORING, inputs);
+    }
+
+    it("the harmful debug-logging trap scores below the baseline no-action path", () => {
+      const baseline = runScenario(5 * 60_000);
+      const harmful = runScenario(5 * 60_000, [
+        { atMs: 31_000, controlKey: DEBUG_LOGGING_ENABLED_KEY, value: true },
+      ]);
+
+      expect(baseline.status).toBe("failed");
+      expect(harmful.status).toBe("failed");
+
+      const baselineScore = scoreOf(baseline);
+      const harmfulScore = scoreOf(harmful);
+
+      expect(harmfulScore.total).toBeLessThan(baselineScore.total);
+      expect(harmfulScore.breakdown.customerImpact).toBeLessThan(
+        baselineScore.breakdown.customerImpact,
+      );
+      expect(harmfulScore.breakdown.operationalEfficiency).toBeLessThan(
+        baselineScore.breakdown.operationalEfficiency,
+      );
+    });
+
+    it("the good rollback path scores above both baseline and the harmful trap", () => {
+      const good = runScenario(60_000, [
+        { atMs: 31_000, controlKey: ROLLBACK_TO_PREVIOUS_VERSION_KEY, value: true },
+      ]);
+      const baseline = runScenario(5 * 60_000);
+
+      const goodScore = scoreOf(good).total;
+      const baselineScore = scoreOf(baseline).total;
+
+      expect(goodScore).toBeGreaterThan(baselineScore);
+    });
   });
 });

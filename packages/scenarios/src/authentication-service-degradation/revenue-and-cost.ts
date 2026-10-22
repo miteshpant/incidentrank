@@ -10,7 +10,13 @@ export const revenueLossRatePerMinute: RevenueLossRatePerMinute = {
   degrading: 600,
   "severe-degradation": 900,
   "security-compromised": 0,
-  degraded: 150,
+  // Two distinct "degraded" tiers rather than one shared rate — the
+  // cache-TTL-only partial and the partially-scaled partial are
+  // authored as different mitigations with different authFailureRate/
+  // activeSessionCount outcomes (see rules.ts), and customerImpact
+  // should actually reflect that difference rather than tying.
+  "degraded-cache-ttl": 110,
+  "degraded-partial-scale": 180,
   recovering: 0,
   healthy: 0,
 };

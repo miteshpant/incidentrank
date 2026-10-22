@@ -8,6 +8,19 @@ import type { AuthoredScoringConfig } from "../authoring/schema";
  * Kafka Consumer Lag's since legitimate capacity headroom (moderate pool
  * scaling) is a real, if partial, mitigation here rather than pure waste.
  * See docs/implementation_plan/phase6.md's scoring-convergence mandate.
+ *
+ * customerImpact and costEfficiency are tuned together as a pair (see each
+ * dimension's own comment below): recovery(300pts) and reliability(150pts)
+ * both zero out identically via terminalOverrides.unresolved for EVERY
+ * non-resolved outcome — baseline (did nothing), the harmful lower-TTL
+ * trap, and both partial pool-scaling paths all end "unresolved" within
+ * this scenario's short failure window, so those 450 points carry zero
+ * signal between them. customerImpact and costEfficiency are therefore
+ * the only two dimensions that can distinguish "visibly reduced live
+ * harm, even without a full resolve" from "did nothing" or "made it
+ * worse" — they must never let a visible partial improvement (moderate or
+ * heavy pool scaling) score at or below doing nothing or the labeled-
+ * harmful action.
  */
 export const CACHE_STAMPEDE_SCORING: AuthoredScoringConfig = {
   dimensions: [
@@ -26,15 +39,25 @@ export const CACHE_STAMPEDE_SCORING: AuthoredScoringConfig = {
       ],
     },
     {
+      // Banded far tighter than Kafka Consumer Lag's or Payment Retry
+      // Storm's customerImpact: those scenarios' recovery/reliability
+      // dimensions still differentiate every unresolved outcome from
+      // every other via actual elapsed/critical time, so their
+      // customerImpact dimension can afford to saturate at a coarse
+      // top band early. This scenario's recovery/reliability do not (see
+      // the module comment above) — every unresolved path hits the exact
+      // same zeroed 450 points — so customerImpact must itself carry the
+      // "did this action visibly reduce live customer harm" signal within
+      // the realistic unresolved range this scenario's own revenue rates
+      // produce (rules.ts's revenueLossRatePerMinute: masked-stampede 120,
+      // degraded 150 < stampeding 450 < recurring-stampede 600 USD/min).
       dimension: "customerImpact",
       maxPoints: 200,
       measure: "revenueLossUsd",
       bands: [
-        { atMost: 5_000, points: 200 },
-        { atMost: 15_000, points: 160 },
-        { atMost: 30_000, points: 110 },
-        { atMost: 50_000, points: 60 },
-        { points: 10 },
+        { atMost: 300, points: 200 },
+        { atMost: 500, points: 90 },
+        { points: 30 },
       ],
     },
     {
@@ -61,15 +84,25 @@ export const CACHE_STAMPEDE_SCORING: AuthoredScoringConfig = {
       ],
     },
     {
+      // Banded more forgivingly toward heavy pool scaling than Kafka
+      // Consumer Lag's equivalent dimension: paying for more origin
+      // capacity here is a real (if incomplete and non-durable)
+      // mitigation that visibly reduces the active queue/cache-status
+      // symptoms (see pool-scaled-without-coalescing in rules.ts), not
+      // pure waste. A candidate who spent money to visibly reduce live
+      // harm must never be penalized by costEfficiency alone enough to
+      // fall below a candidate who spent nothing and changed nothing (or
+      // made things worse) — these bands are deliberately shallow rather
+      // than punitive; customerImpact (above) carries the harm-reduction
+      // signal, this dimension only taxes waste at the margin.
       dimension: "costEfficiency",
       maxPoints: 100,
       measure: "costIncreaseRatio",
       bands: [
         { atMost: 0, points: 100 },
-        { atMost: 1, points: 85 },
-        { atMost: 2.5, points: 60 },
-        { atMost: 4, points: 30 },
-        { points: 10 },
+        { atMost: 1, points: 90 },
+        { atMost: 4, points: 60 },
+        { points: 30 },
       ],
     },
     {

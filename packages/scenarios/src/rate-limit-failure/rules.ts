@@ -91,14 +91,16 @@ export const rateLimitRules: Rule[] = [
   // ── Partial improvement: exponential-with-jitter backoff alone,
   // without proactive client-side limiting — violations keep occurring
   // but retries no longer resynchronize into a new burst, so the window
-  // can shrink over time.
+  // can shrink over time. Own incidentState (not the shared "degraded")
+  // so revenue-loss-rate-per-minute can tell this tier apart from
+  // fixed-delay-only below — see revenue-and-cost.ts.
   {
     id: "jitter-backoff-only-partial",
     when: {
       triggerEquals: { rateLimited: true },
       controlEquals: { [RETRY_BACKOFF_STRATEGY_KEY]: "exponential-with-jitter" },
     },
-    incidentState: "degraded",
+    incidentState: "degraded-jitter-only",
     values: {
       rateLimitViolationRate: 14,
       effectiveThroughput: 320,
@@ -111,14 +113,16 @@ export const rateLimitRules: Rule[] = [
 
   // ── Smaller partial improvement: fixed-delay backoff — better than no
   // backoff at all, but a fixed delay can still synchronize retries into
-  // a burst and re-trigger the limit.
+  // a burst and re-trigger the limit. Own incidentState (not the shared
+  // "degraded") so revenue-loss-rate-per-minute can tell this tier apart
+  // from jitter-only above — see revenue-and-cost.ts.
   {
     id: "fixed-delay-backoff-smaller-partial",
     when: {
       triggerEquals: { rateLimited: true },
       controlEquals: { [RETRY_BACKOFF_STRATEGY_KEY]: "fixed-delay" },
     },
-    incidentState: "degraded",
+    incidentState: "degraded-fixed-delay-only",
     values: {
       rateLimitViolationRate: 28,
       effectiveThroughput: 220,

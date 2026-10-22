@@ -94,14 +94,17 @@ export const authDegradationRules: Rule[] = [
   },
 
   // ── Partial improvement: moderate scaling, not yet enough to fully
-  // absorb the load.
+  // absorb the load. Distinct incidentState from the cache-TTL partial
+  // below so revenueLossRatePerMinute (keyed by incidentState) actually
+  // differentiates these two different partial mitigations instead of
+  // tying.
   {
     id: "partially-scaled",
     when: {
       triggerEquals: { authDegraded: true },
       controlAtLeast: { [AUTH_SERVICE_INSTANCES_KEY]: 4 },
     },
-    incidentState: "degraded",
+    incidentState: "degraded-partial-scale",
     values: {
       authServiceLatencyMs: 850,
       authFailureRate: 4,
@@ -121,7 +124,7 @@ export const authDegradationRules: Rule[] = [
       triggerEquals: { authDegraded: true },
       controlAtLeast: { [TOKEN_CACHE_TTL_SECONDS_KEY]: 300 },
     },
-    incidentState: "degraded",
+    incidentState: "degraded-cache-ttl",
     values: {
       authServiceLatencyMs: 1_400,
       authFailureRate: 6,

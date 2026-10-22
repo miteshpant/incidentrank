@@ -923,3 +923,204 @@ row's own `organizationId` matches, so an organization can never list,
 revoke, promote, or remove another organization's invitations or
 members even if it somehow obtained a valid-looking id for one — the
 lookup itself returns "not found," not merely "forbidden."
+
+## Phase 6 scope
+
+Phase 6 takes the built-in scenario catalog from 2 hand-wired scenarios
+to 20 (the full launch set is spec'd at ~100; Phase 6 proves the
+architecture scales to that without further engine or UI changes), and
+turns `/incidents` from a static list into a searchable, filterable
+library with a real free/paid access model. Two things had to converge
+for 20 (or 100) scenarios to be addable as pure content: one generic
+scoring engine, and one data-driven catalog that every consumer
+(registry, seeding, library UI, scoring dispatch) reads from instead of
+branching on scenario slug.
+
+### One generic scoring engine, not one scorer per scenario
+
+Before Phase 6, Payment Retry Storm had its own hand-written scoring
+function (`packages/scoring/src/payment-retry-storm.ts`) — a second,
+parallel way of computing a score that every new built-in scenario would
+otherwise need to reinvent. Phase 6 generalizes the *authored* scenario
+scoring engine (`packages/scenarios/src/authoring/score.ts`,
+`scoreAuthoredAttempt`, introduced in Phase 5 for organization-authored
+scenarios) into the **only** scoring engine in the system, and migrates
+Payment Retry Storm onto it declaratively
+(`packages/scenarios/src/payment-retry-storm/scoring.ts`). The original
+hand-written scorer is kept as a byte-for-byte reference oracle in
+`packages/scoring/src/payment-retry-storm-equivalence.test.ts` — 8 exact-
+equivalence cases proving the declarative config reproduces it exactly —
+rather than deleted outright, so the migration's correctness is provable
+rather than asserted.
+
+```text
+AuthoredScoringConfig
+  dimensions: [{ dimension, maxPoints, measure, bands | penalties,
+                  naturalRecoveryOverride?, terminalOverrides? }]
+  naturalRecoveryCondition?
+       ↓
+scoreAuthoredAttempt(config, ScoringInputs)   — the one scoring function
+       ↓
+0–1000 score + per-dimension breakdown
+```
+
+`AuthoredScoringMeasure` is a closed set (`recoveryTimeSeconds`,
+`revenueLossUsd`, `dataIntegrity`, `criticalTimeRatio`,
+`costIncreaseRatio`, `harmfulChangeCount`, `configurationChangeCount`) —
+every dimension bands or penalizes against one of these, never a
+scenario-specific formula. `terminalOverrides: { failed?, unresolved? }`
+gives each dimension an explicit, author-controlled score for an attempt
+that never successfully resolved, replacing what was previously a
+sentinel-value hack (`if (resolvedAtMs === null) return 0`) with a real,
+validated schema field. This generalization is what makes "scenario #21
+needs no scoring code" true: every new scenario's `scoring.ts` is pure
+declarative data read by the same function every other scenario's
+`scoring.ts` is read by.
+
+> **A scoring regression this phase's own verification caught**: giving
+> every dimension a `terminalOverrides.unresolved: 0` is correct in
+> isolation, but if a scenario's baseline (no action) and harmful (the
+> plausible-but-wrong action) paths both end up unresolved, both get
+> zeroed identically on the dimensions that override carries — collapsing
+> a well-authored "harmful action should score clearly worse than doing
+> nothing" teaching point into a 10–15-point difference carried entirely
+> by the `operationalEfficiency` penalty. This affected 7 of the 20
+> launch scenarios and was fixed by tuning each scenario's own
+> `terminalOverrides`/bands/penalties and, in two cases, its rules —
+> see `docs/implementation_plan/outputs/phase6-completion-report.md` for
+> the full per-scenario breakdown. This is a content-authoring failure
+> mode specific to how a scenario's bands/overrides are tuned, not an
+> engine defect — the schema already has the tools (`terminalOverrides`,
+> distinct `failed`/`unresolved` values, authored rule values that make a
+> harmful path *measurably* worse rather than just differently labeled)
+> to avoid it. Phase 6 treats this as a standing verification concern for
+> every future scenario's scoring config, not a one-time fix.
+
+### The built-in scenario catalog: one map, not N branches
+
+`BUILT_IN_SCENARIO_CATALOG` (`packages/scenarios/src/library/catalog.ts`)
+is a single `Record<slug, { definition, candidateUI, scoring }>` that
+every data-driven consumer resolves against:
+
+```text
+BUILT_IN_SCENARIO_CATALOG
+       ├─ scenario-registry.ts   — isPlayableBuiltinScenario, version resolution
+       ├─ seed.ts                — DB seeding (packages/db)
+       ├─ library-browser.tsx    — /incidents search/filter/sort
+       ├─ [slug]/page.tsx        — practice route + locked-state rendering
+       └─ scoring dispatch       — scoreAttempt resolves config from here,
+                                    never a slug switch statement
+```
+
+Adding scenario #21 means adding one entry to this map — no new route,
+no new scoring branch, no new seeding code. `packages/db/src/seed.ts`
+iterates `listBuiltInScenarioEntries(catalog)` generically; it has no
+knowledge of any individual scenario's slug. This was proven directly:
+re-running `pnpm db:seed` after authoring all 18 new scenarios (and again
+after the scoring-fix pass) required zero code changes and produced
+"Seed complete (20 built-in scenario(s))" both times.
+
+### Scoped slug uniqueness
+
+Built-in and organization-owned scenarios share one `scenarios.slug`
+column but must never collide *within* their own ownership scope while
+remaining free to reuse a slug *across* scopes (an organization should be
+able to name their own private scenario `payment-retry-storm` without
+colliding with the built-in one). A single global unique index can't
+express this — Postgres partial unique indexes can:
+
+```sql
+UNIQUE (slug)                    WHERE ownership_type = 'incidentrank'
+UNIQUE (organization_id, slug)   WHERE ownership_type = 'organization'
+```
+
+(`packages/db/drizzle/0006_kind_dracula.sql`.) `scenario-registry.ts`'s
+`isPlayableBuiltinScenario` checks `ownershipType === "incidentrank"`
+explicitly rather than inferring it from the slug alone — this is also
+the fix for a real privacy bug the Phase 6 work surfaced: an
+organization-owned scenario that happened to share a slug pattern with a
+built-in one could otherwise be served through the public built-in
+route.
+
+### Practice access: one function, no fake entitlements
+
+```text
+evaluatePracticeAccess({ isFree }) -> { allowed: true }
+                                     | { allowed: false, reason: "paid_scenario_locked" }
+```
+
+(`apps/web/src/lib/practice-access.ts`, isomorphic — the same function
+the library UI's lock badge and every server-side enforcement point both
+call, so they cannot drift apart.) Per spec: there is no billing or
+entitlement system yet. Free scenarios are always playable, including
+anonymous/signed-out candidates; paid scenarios are locked for everyone
+in practice mode, signed in or not, until a real personal-entitlement
+system exists. The function deliberately does not grow a fake
+entitlement to make testing more convenient — see "Local-dev-only paid
+unlock" below for how that need is actually met.
+
+This is **practice** access only. Company-assigned assessment attempts
+never call this function at all — assessment entitlement is the
+completely separate authorization path established in Phase 4
+(organization → assessment → candidate →`candidate.attemptId`), which
+has no concept of `isFree` and never consults the catalog's pricing.
+Per spec, this means a candidate assigned a paid scenario through an
+assessment can complete it normally, and remains unable to start that
+same scenario independently in practice mode afterward — proven by
+`apps/web/src/lib/server/paid-scenario-assessment-override.test.ts`.
+
+### Local-dev-only paid unlock
+
+A developer running the app locally needs to exercise paid-scenario
+practice flows without a real entitlement system existing yet. Rather
+than inventing a fake entitlement inside `evaluatePracticeAccess` itself
+(which would blur the one real policy function with a test convenience,
+and risk leaking into a deployed environment), this is a narrow,
+separately-gated override:
+
+```text
+DEV_UNLOCK_PAID_SCENARIOS=true
+       +
+NODE_ENV !== "production"
+       +
+request Host header is localhost / 127.0.0.1 / ::1
+       ↓
+evaluatePracticeAccess(scenario, { devUnlockPaid: true })
+```
+
+(`apps/web/src/lib/server/dev-unlock.ts`.) All three conditions are
+required — the env flag alone is not trusted, because an env var can be
+set by mistake on a deployed preview/staging environment; the host check
+means that mistake still unlocks nothing there. The three practice-access
+call sites (`POST /api/attempts`, `POST /api/attempts/score-preview`, and
+the `/incidents/[slug]` server component) each compute this flag from
+their own request/headers and pass it through as an explicit opt — it is
+never a hidden global. The library browser's "🔒 Paid" badge intentionally
+does **not** read this flag: the scenario is still genuinely paid
+product-wise, so the badge stays honest even while a developer's own
+`/incidents/[slug]` session is unlocked underneath it.
+
+### Scenario library: search, filter, sort, URL state
+
+`/incidents` (`apps/web/src/app/incidents/library-browser.tsx`) reads and
+writes its entire filter state as query parameters — category,
+difficulty, access (all/free/paid), tags (OR within the group), text
+search (name/description/category/tags), progress status for signed-in
+users, and sort — so the page is shareable, bookmarkable, and survives a
+refresh with no client-side global state required. Filter groups combine
+with AND semantics; multi-select values within one group (e.g. multiple
+tags) combine with OR, matching the spec's documented behavior exactly.
+
+Practice progress (`apps/web/src/lib/server/practice-progress.ts`,
+`getPracticeProgressBySlug()`) is scoped to `attemptType: "practice"`
+only — assessment attempts, scored or not, never affect a card's "Best:
+N / M attempts" display or the signed-in "Completed" filter. A
+signed-out visitor sees no progress indicator at all rather than an
+empty/zero one, and the function never creates an account merely from
+browsing the library.
+
+Organization-owned scenarios are structurally excluded from every public
+library surface (search, filters, the catalog itself) — they were never
+part of `BUILT_IN_SCENARIO_CATALOG` to begin with, so there is no filter
+or query to bypass; privacy here is a type-level absence, not a runtime
+check.

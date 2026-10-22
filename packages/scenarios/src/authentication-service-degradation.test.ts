@@ -1,4 +1,4 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { authenticationServiceDegradation } from "./authentication-service-degradation";
@@ -8,6 +8,8 @@ import {
   SIGNATURE_VERIFICATION_BYPASS_ENABLED_KEY,
   TOKEN_CACHE_TTL_SECONDS_KEY,
 } from "./authentication-service-degradation/definition";
+import { AUTHENTICATION_SERVICE_DEGRADATION_SCORING } from "./authentication-service-degradation/scoring";
+import { scoreAuthoredAttempt } from "./authoring/score";
 
 interface TimedAction {
   atMs: number;
@@ -166,5 +168,68 @@ describe("Authentication Service Degradation", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  describe("scoring orders good > cache-TTL partial > scaling partial > baseline > security-bypass trap", () => {
+    // Regression test for a bug where recovery/reliability collapsed to 0
+    // identically for the harmful signature-bypass path, both genuine
+    // partial-improvement paths, and the no-action baseline (none of them
+    // ever resolve within a realistic attempt horizon), and
+    // customerImpact's wide bands saturated the same top tier for all of
+    // them too — so a candidate who genuinely improved authFailureRate
+    // scored no better than inaction, and the harmful security bypass
+    // (this scenario's central teaching point) scored only ~50/1000
+    // points below baseline, driven entirely by operationalEfficiency.
+    // Fixed by: tightening customerImpact's bands to this scenario's
+    // actual revenue scale; splitting the two partials into distinct
+    // incidentStates with distinct revenueLossRatePerMinute entries so
+    // they stop tying with each other (rules.ts, revenue-and-cost.ts);
+    // and — since the bypass path's revenueLossUsd is deliberately near
+    // zero by design (dashboards look fine) — penalizing dataIntegrity
+    // via the same harmfulChangeCount measure operationalEfficiency
+    // already used, since "the system now accepts unverified tokens" is
+    // honestly a data-integrity regression, not merely an efficiency one
+    // (scoring.ts).
+    function scoreOf(state: ReturnType<typeof runScenario>) {
+      const inputs = extractScoringInputs(authenticationServiceDegradationSimulation, state);
+      return scoreAuthoredAttempt(AUTHENTICATION_SERVICE_DEGRADATION_SCORING, inputs);
+    }
+
+    it("orders good > cacheTtlPartial > scalingPartial > baseline > harmful", () => {
+      const good = runScenario(60_000, [
+        { atMs: 31_000, controlKey: AUTH_SERVICE_INSTANCES_KEY, value: 8 },
+      ]);
+      const cacheTtlPartial = runScenario(5 * 60_000, [
+        { atMs: 31_000, controlKey: TOKEN_CACHE_TTL_SECONDS_KEY, value: 300 },
+      ]);
+      const scalingPartial = runScenario(5 * 60_000, [
+        { atMs: 31_000, controlKey: AUTH_SERVICE_INSTANCES_KEY, value: 4 },
+      ]);
+      const baseline = runScenario(5 * 60_000);
+      const harmful = runScenario(5 * 60_000, [
+        { atMs: 31_000, controlKey: SIGNATURE_VERIFICATION_BYPASS_ENABLED_KEY, value: true },
+      ]);
+
+      const goodScore = scoreOf(good).total;
+      const cacheTtlScore = scoreOf(cacheTtlPartial).total;
+      const scalingScore = scoreOf(scalingPartial).total;
+      const baselineScore = scoreOf(baseline).total;
+      const harmfulScore = scoreOf(harmful).total;
+
+      expect(goodScore).toBeGreaterThan(cacheTtlScore);
+      expect(cacheTtlScore).toBeGreaterThan(scalingScore);
+      expect(scalingScore).toBeGreaterThan(baselineScore);
+      expect(baselineScore).toBeGreaterThan(harmfulScore);
+    });
+
+    it("penalizes the security-bypass trap's dataIntegrity even though its live metrics look healthy", () => {
+      const harmful = runScenario(5 * 60_000, [
+        { atMs: 31_000, controlKey: SIGNATURE_VERIFICATION_BYPASS_ENABLED_KEY, value: true },
+      ]);
+
+      const score = scoreOf(harmful);
+      expect(score.breakdown.dataIntegrity).toBeLessThan(200);
+      expect(score.breakdown.operationalEfficiency).toBe(0);
+    });
   });
 });

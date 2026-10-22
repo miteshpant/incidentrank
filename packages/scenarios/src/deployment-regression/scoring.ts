@@ -23,14 +23,21 @@ export const DEPLOYMENT_REGRESSION_SCORING: AuthoredScoringConfig = {
       ],
     },
     {
+      // Bands tightened to this scenario's actual revenue-loss scale
+      // (a sustained-60s failure window means even the harmful path's
+      // accrual stays under $5,000) — regression test for a bug where
+      // the harmful trap (debug logging left on, full traffic still on
+      // the regressed version) and the pure baseline/no-action path both
+      // saturated the same top band and scored identically on
+      // customerImpact despite measurably different revenueLossUsd.
       dimension: "customerImpact",
       maxPoints: 200,
       measure: "revenueLossUsd",
       bands: [
-        { atMost: 5_000, points: 200 },
-        { atMost: 15_000, points: 160 },
-        { atMost: 30_000, points: 110 },
-        { atMost: 50_000, points: 60 },
+        { atMost: 2_000, points: 200 },
+        { atMost: 3_500, points: 160 },
+        { atMost: 5_000, points: 120 },
+        { atMost: 15_000, points: 60 },
         { points: 10 },
       ],
     },

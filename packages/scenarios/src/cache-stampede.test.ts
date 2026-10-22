@@ -1,6 +1,7 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { scoreAuthoredAttempt } from "./authoring/score";
 import { cacheStampede } from "./cache-stampede";
 import {
   CACHE_TTL_SECONDS_KEY,
@@ -8,6 +9,7 @@ import {
   ORIGIN_CONNECTION_POOL_SIZE_KEY,
   REQUEST_COALESCING_ENABLED_KEY,
 } from "./cache-stampede/definition";
+import { CACHE_STAMPEDE_SCORING } from "./cache-stampede/scoring";
 
 interface TimedAction {
   atMs: number;
@@ -130,6 +132,48 @@ describe("Cache Stampede", () => {
     state = simulate(cacheStampedeSimulation, state, action, tickMs).state;
 
     expect(state.cost.currentMonthlyCostUsd).toBe(540);
+  });
+
+  it("scores a visible-but-partial mitigation above a no-op or an actively harmful change, and never below it", () => {
+    // Regression test for a confirmed scoring bug: recovery(300pts) and
+    // reliability(150pts) both zero out identically via
+    // terminalOverrides.unresolved for EVERY non-resolved outcome, so a
+    // candidate who visibly reduced live harm via pool scaling (queuedRequests
+    // 700->80, cacheStatus critical->warning) must not score at or below a
+    // candidate who did nothing, or one who took the actively-labeled-harmful
+    // lower-TTL action — customerImpact/costEfficiency must carry that signal
+    // instead. Run just before the 60s sustained failure window completes
+    // (matching the bug's original reproduction), so all four attempts remain
+    // "unresolved" rather than "failed".
+    const UNTIL_MS = 88_000;
+
+    function scoreFor(actions: TimedAction[]) {
+      const state = runScenario(UNTIL_MS, actions);
+      expect(state.status).not.toBe("resolved");
+      expect(state.status).not.toBe("failed");
+      const inputs = extractScoringInputs(cacheStampedeSimulation, state);
+      return scoreAuthoredAttempt(CACHE_STAMPEDE_SCORING, inputs).total;
+    }
+
+    const baselineScore = scoreFor([]);
+    const harmfulScore = scoreFor([
+      { atMs: 31_000, controlKey: CACHE_TTL_SECONDS_KEY, value: 10 },
+    ]);
+    const partialScore = scoreFor([
+      { atMs: 31_000, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 50 },
+    ]);
+    const maskedCostWasteScore = scoreFor([
+      { atMs: 31_000, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 200 },
+    ]);
+
+    // The harmful trap must never outscore a visible partial improvement,
+    // and a candidate who visibly reduced live harm (either pool-scaling
+    // path) must never score at or below someone who did nothing or who
+    // took the actively-harmful action.
+    expect(partialScore).toBeGreaterThan(maskedCostWasteScore);
+    expect(maskedCostWasteScore).toBeGreaterThan(baselineScore);
+    expect(maskedCostWasteScore).toBeGreaterThan(harmfulScore);
+    expect(baselineScore).toBeGreaterThan(harmfulScore);
   });
 
   it("produces identical state for the same action sequence (determinism)", () => {

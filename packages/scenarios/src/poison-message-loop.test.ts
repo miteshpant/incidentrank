@@ -1,4 +1,4 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { poisonMessageLoop } from "./poison-message-loop";
@@ -8,6 +8,8 @@ import {
   MAX_RETRY_ATTEMPTS_KEY,
   poisonMessageLoopSimulation,
 } from "./poison-message-loop/definition";
+import { POISON_MESSAGE_LOOP_SCORING } from "./poison-message-loop/scoring";
+import { scoreAuthoredAttempt } from "./authoring/score";
 
 interface TimedAction {
   atMs: number;
@@ -114,6 +116,59 @@ describe("Poison Message Loop", () => {
     expect(slow.status).not.toBe("resolved");
     expect(slow.values.queueStatus).toBe("warning");
     expect(slow.values.healthyMessageBacklog).toBe(380);
+  });
+
+  it("a high but bounded retry limit eventually exhausts and routes the poison message out", () => {
+    // Regression test for a bug where "high-bounded-retries-with-dlq-slow"
+    // had no time-based path to resolution at all — resolvedAtMs stayed
+    // null forever, a genuine permanent dead-end rather than the "slow
+    // recovery" the scenario's own docs describe. Fixed by adding a
+    // highRetryLimitExhausted timed event (4 minutes after the retry
+    // limit is set) and a recovery rule keyed on it.
+    const slow = runScenario(5 * 60_000, [
+      { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
+      { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+    ]);
+
+    expect(slow.status).toBe("resolved");
+    expect(slow.resolvedAtMs).not.toBeNull();
+    expect(slow.values.healthyMessageBacklog).toBeLessThanOrEqual(20);
+  });
+
+  describe("scoring orders good > slow-but-real partial > baseline > harmful", () => {
+    function scoreOf(state: ReturnType<typeof runScenario>) {
+      const inputs = extractScoringInputs(poisonMessageLoopSimulation, state);
+      return scoreAuthoredAttempt(POISON_MESSAGE_LOOP_SCORING, inputs);
+    }
+
+    it("the slow-but-real partial scores between baseline and the full fast recovery", () => {
+      const good = runScenario(60_000, [
+        { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
+        { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+      ]);
+      const slow = runScenario(5 * 60_000, [
+        { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
+        { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+      ]);
+      const baseline = runScenario(30_000 + 61_000);
+      const harmful = runScenario(5 * 60_000, [
+        { atMs: 31_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 8 },
+      ]);
+
+      expect(good.status).toBe("resolved");
+      expect(slow.status).toBe("resolved");
+      expect(baseline.status).toBe("failed");
+      expect(harmful.status).toBe("failed");
+
+      const goodScore = scoreOf(good).total;
+      const slowScore = scoreOf(slow).total;
+      const baselineScore = scoreOf(baseline).total;
+      const harmfulScore = scoreOf(harmful).total;
+
+      expect(goodScore).toBeGreaterThan(slowScore);
+      expect(slowScore).toBeGreaterThan(baselineScore);
+      expect(baselineScore).toBeGreaterThan(harmfulScore);
+    });
   });
 
   it("fails if the healthy message backlog stays critical for the full sustained window", () => {

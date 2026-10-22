@@ -1,6 +1,7 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { scoreAuthoredAttempt } from "./authoring/score";
 import { badConfigurationRollout } from "./bad-configuration-rollout";
 import {
   API_SERVICE_INSTANCES_KEY,
@@ -8,6 +9,7 @@ import {
   CONFIG_CHANGE_FREEZE_ENABLED_KEY,
   CONFIG_REVERT_ENABLED_KEY,
 } from "./bad-configuration-rollout/definition";
+import { BAD_CONFIGURATION_ROLLOUT_SCORING } from "./bad-configuration-rollout/scoring";
 
 interface TimedAction {
   atMs: number;
@@ -151,5 +153,51 @@ describe("Bad Configuration Rollout", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  it("scores good (revert) > baseline (does nothing) > harmful (scale-to-8 without revert)", () => {
+    // Baseline: no candidate actions at all. The incident never recovers
+    // and ultimately fails via failureCondition.
+    const baselineState = runScenario(30_000 + 61_000);
+    // Harmful: scales API service instances to 8 without ever reverting
+    // the bad config — wastes money and never fixes the actual problem,
+    // so it must fail exactly like the baseline, only worse.
+    const harmfulState = runScenario(30_000 + 61_000, [
+      { atMs: 31_000, controlKey: API_SERVICE_INSTANCES_KEY, value: 8 },
+    ]);
+    // Good: reverts the bad config promptly.
+    const goodState = runScenario(45_000, [
+      { atMs: 31_000, controlKey: CONFIG_REVERT_ENABLED_KEY, value: true },
+    ]);
+
+    expect(baselineState.status).toBe("failed");
+    expect(harmfulState.status).toBe("failed");
+    expect(goodState.status).toBe("resolved");
+
+    const baselineScore = scoreAuthoredAttempt(
+      BAD_CONFIGURATION_ROLLOUT_SCORING,
+      extractScoringInputs(badConfigurationRolloutSimulation, baselineState),
+    );
+    const harmfulScore = scoreAuthoredAttempt(
+      BAD_CONFIGURATION_ROLLOUT_SCORING,
+      extractScoringInputs(badConfigurationRolloutSimulation, harmfulState),
+    );
+    const goodScore = scoreAuthoredAttempt(
+      BAD_CONFIGURATION_ROLLOUT_SCORING,
+      extractScoringInputs(badConfigurationRolloutSimulation, goodState),
+    );
+
+    // The core regression: doing nothing must not be scored as flawlessly
+    // cost/operationally efficient just because it took zero actions —
+    // and actively wasting capacity without fixing the real problem must
+    // score clearly worse than doing nothing.
+    expect(harmfulScore.breakdown.costEfficiency).toBeLessThan(
+      baselineScore.breakdown.costEfficiency,
+    );
+    expect(harmfulScore.breakdown.operationalEfficiency).toBeLessThan(
+      baselineScore.breakdown.operationalEfficiency,
+    );
+    expect(harmfulScore.total).toBeLessThan(baselineScore.total);
+    expect(baselineScore.total).toBeLessThan(goodScore.total);
   });
 });

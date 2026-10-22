@@ -1,4 +1,4 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { memoryLeak } from "./memory-leak";
@@ -8,6 +8,8 @@ import {
   memoryLeakSimulation,
   MEMORY_LIMIT_AUTO_RESTART_ENABLED_KEY,
 } from "./memory-leak/definition";
+import { MEMORY_LEAK_SCORING } from "./memory-leak/scoring";
+import { scoreAuthoredAttempt } from "./authoring/score";
 
 interface TimedAction {
   atMs: number;
@@ -105,6 +107,61 @@ describe("Memory Leak", () => {
 
     expect(state.values.memoryUsageMb).toBe(420);
     expect(state.values.serviceStatus).toBe("normal");
+  });
+
+  describe("scoring classifies the early manual-restart trap as harmful", () => {
+    // Regression test for a bug where the manual-restart trap's
+    // actionClassifications rule gated on `whenTriggerEquals: {
+    // leakRecurred: true }` — a trigger that only flips true 5 minutes
+    // into the incident (see timed-events.ts). classifyAction evaluates
+    // this at the moment the action is applied, not against future
+    // state, so the scenario's own documented primary trap path (a
+    // candidate restarting early, at 31s, well before leakRecurred ever
+    // flips) was classified "neutral" instead of "harmful" — the
+    // operationalEfficiency dimension never penalized it. Fixed by
+    // keying the harmful classification to `leakActive` instead (the
+    // trigger that is already true for the whole duration the restart
+    // would plausibly be taken), matching the sibling beneficial rules
+    // in action-classifications.ts and every other scenario's pattern.
+    function scoreOf(state: ReturnType<typeof runScenario>) {
+      const inputs = extractScoringInputs(memoryLeakSimulation, state);
+      return scoreAuthoredAttempt(MEMORY_LEAK_SCORING, inputs);
+    }
+
+    it("penalizes an early one-time manual restart via operationalEfficiency", () => {
+      const trap = runScenario(5 * 60_000 + 10_000, [
+        { atMs: 31_000, controlKey: MANUAL_RESTART_TRIGGERED_KEY, value: true },
+      ]);
+
+      const score = scoreOf(trap);
+      expect(score.breakdown.operationalEfficiency).toBeLessThan(50);
+    });
+
+    it("scores the durable fix higher than the early manual-restart trap", () => {
+      // Both paths actually resolve quickly (the trap's one-time restart
+      // does bring memory back under the success threshold at 46s, well
+      // before the 5-minute recurrence) — the scenario's teaching point
+      // is not "the trap fails to resolve," but that it is not durable
+      // and is a worse operational decision, which must show up in the
+      // score even though both runs reach a "resolved" status.
+      const good = runScenario(46_000, [
+        { atMs: 31_000, controlKey: MEMORY_LIMIT_AUTO_RESTART_ENABLED_KEY, value: true },
+      ]);
+      const trap = runScenario(5 * 60_000 + 10_000, [
+        { atMs: 31_000, controlKey: MANUAL_RESTART_TRIGGERED_KEY, value: true },
+      ]);
+
+      expect(good.status).toBe("resolved");
+      expect(trap.status).toBe("resolved");
+
+      const goodBreakdown = scoreOf(good);
+      const trapBreakdown = scoreOf(trap);
+
+      expect(goodBreakdown.total).toBeGreaterThan(trapBreakdown.total);
+      expect(goodBreakdown.breakdown.operationalEfficiency).toBeGreaterThan(
+        trapBreakdown.breakdown.operationalEfficiency,
+      );
+    });
   });
 
   it("cache eviction alone slows but does not fully stop the climb", () => {

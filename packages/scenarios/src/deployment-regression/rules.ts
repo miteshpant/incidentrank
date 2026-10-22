@@ -57,12 +57,17 @@ export const regressionRules: Rule[] = [
       },
       controlAtLeast: { [CANARY_TRAFFIC_PERCENT_KEY]: 100 },
     },
-    incidentState: "regressing",
+    // Distinct incidentState from the baseline ("regressing-harmful" vs
+    // "regressing") so revenueLossRatePerMinute can differentiate this
+    // path — verbose debug logging under an already-regressed, high-
+    // traffic service adds real overhead on top of doing nothing, not an
+    // identical outcome to inaction.
+    incidentState: "regressing-harmful",
     values: {
-      errorRate: 9.5,
-      latencyP99Ms: 2_400,
-      memoryUsageMb: 850,
-      affectedRequestCount: 4_200,
+      errorRate: 11.5,
+      latencyP99Ms: 3_200,
+      memoryUsageMb: 1_050,
+      affectedRequestCount: 5_400,
       deployStatus: "critical",
     },
     componentHealth: criticalHealth,

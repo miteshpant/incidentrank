@@ -7,6 +7,13 @@ import type {
 
 export const revenueLossRatePerMinute: RevenueLossRatePerMinute = {
   regressing: 400,
+  // Distinct from "regressing": the harmful trap (debug logging left on,
+  // full traffic still on the regressed version) doesn't just fail to
+  // help — the extra logging overhead measurably compounds latency/error
+  // impact under load, so it must accrue revenue loss faster than inaction,
+  // not at the identical rate (see rules.ts's
+  // debug-logging-without-rollback-harmful).
+  "regressing-harmful": 900,
   degraded: 80,
   recovering: 0,
   healthy: 0,

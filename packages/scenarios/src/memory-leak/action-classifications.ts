@@ -21,7 +21,7 @@ export const actionClassifications: ActionClassificationRule[] = [
   {
     controlKey: MANUAL_RESTART_TRIGGERED_KEY,
     valueEquals: true,
-    whenTriggerEquals: { leakRecurred: true },
+    whenTriggerEquals: { leakActive: true },
     outcome: "harmful",
   },
 ];
