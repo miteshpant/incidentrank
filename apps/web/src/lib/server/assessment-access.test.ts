@@ -201,7 +201,8 @@ describe("company result access and privacy boundary", () => {
         scenarioId,
         scenarioVersion,
         attemptType: "practice",
-        status: "resolved",
+        status: "completed",
+        outcome: "resolved",
         score: 912,
       })
       .returning();

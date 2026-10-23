@@ -78,4 +78,18 @@ export const paymentRetryStormSimulation: ScenarioSimulationDefinition = {
   successCondition,
   failureCondition,
   actionClassifications,
+  // Phase 6.1: candidate-declared completion — deliberately no
+  // acceptableCondition. The partial-improvement tiers (storm-controlled:
+  // 82% checkout success; storm-reduced: 84-92%) still represent 8-18%
+  // of checkout traffic actively failing — a materially ongoing
+  // incident, not a deliberate safe-to-leave-imperfect handback state
+  // (unlike e.g. Consumer Rebalance Storm's near-miss tradeoff). They
+  // remain useful, higher-scoring intermediate mitigation states, but
+  // Finish from either must produce declared_unstable, never resolved.
+  // This scenario's candidate-declared value is instead the provider-
+  // recovery attribution confound (the payment provider recovers
+  // naturally by minute 15 regardless of candidate action) — testing
+  // whether the candidate recognizes durable vs. natural/temporary
+  // recovery before declaring done, not a tiered-tradeoff judgment.
+  completion: { mode: "candidate_declared" },
 };

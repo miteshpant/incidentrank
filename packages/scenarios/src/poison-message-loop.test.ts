@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { poisonMessageLoop } from "./poison-message-loop";
@@ -76,14 +82,20 @@ describe("Poison Message Loop", () => {
     expect(state.values.queueStatus).toBe("critical");
   });
 
-  it("recovers cleanly with a bounded retry limit and the dead-letter queue enabled", () => {
+  it("reaches a sustained healthy state with a bounded retry limit and the dead-letter queue enabled (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const state = runScenario(50_000, [
       { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
       { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
+    expect(state.resolvedAtMs).toBeNull();
     expect(state.values.healthyMessageBacklog).toBe(0);
+    expect(state.values.queueDepth).toBeLessThanOrEqual(50);
+    expect(state.values.queueStatus).not.toBe("critical");
+    expect(state.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      poisonMessageLoopSimulation.successCondition.sustainedSeconds,
+    );
   });
 
   it("scaling consumer concurrency without touching retries or the DLQ is harmful, not helpful", () => {
@@ -118,7 +130,7 @@ describe("Poison Message Loop", () => {
     expect(slow.values.healthyMessageBacklog).toBe(380);
   });
 
-  it("a high but bounded retry limit eventually exhausts and routes the poison message out", () => {
+  it("a high but bounded retry limit eventually exhausts and reaches a sustained healthy state (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     // Regression test for a bug where "high-bounded-retries-with-dlq-slow"
     // had no time-based path to resolution at all — resolvedAtMs stayed
     // null forever, a genuine permanent dead-end rather than the "slow
@@ -130,14 +142,26 @@ describe("Poison Message Loop", () => {
       { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
     ]);
 
-    expect(slow.status).toBe("resolved");
-    expect(slow.resolvedAtMs).not.toBeNull();
+    expect(slow.status).not.toBe("resolved");
+    expect(slow.resolvedAtMs).toBeNull();
     expect(slow.values.healthyMessageBacklog).toBeLessThanOrEqual(20);
+    expect(slow.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      poisonMessageLoopSimulation.successCondition.sustainedSeconds,
+    );
   });
 
   describe("scoring orders good > slow-but-real partial > baseline > harmful", () => {
+    // Poison Message Loop is candidate_declared (Phase 6.1): the engine
+    // never auto-writes resolvedAtMs, so score via the same Finish-
+    // equivalent derivation finishAttempt uses for the genuinely-resolved
+    // cases (good/slow) — never a raw extractScoringInputs call, which
+    // would incorrectly score them as "unresolved".
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(poisonMessageLoopSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(poisonMessageLoopSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(poisonMessageLoopSimulation, finishResult)
+          : extractScoringInputs(poisonMessageLoopSimulation, state);
       return scoreAuthoredAttempt(POISON_MESSAGE_LOOP_SCORING, inputs);
     }
 
@@ -155,8 +179,14 @@ describe("Poison Message Loop", () => {
         { atMs: 31_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 8 },
       ]);
 
-      expect(good.status).toBe("resolved");
-      expect(slow.status).toBe("resolved");
+      expect(good.status).not.toBe("resolved");
+      expect(
+        good.transitions.consecutiveSuccessSeconds,
+      ).toBeGreaterThanOrEqual(poisonMessageLoopSimulation.successCondition.sustainedSeconds);
+      expect(slow.status).not.toBe("resolved");
+      expect(
+        slow.transitions.consecutiveSuccessSeconds,
+      ).toBeGreaterThanOrEqual(poisonMessageLoopSimulation.successCondition.sustainedSeconds);
       expect(baseline.status).toBe("failed");
       expect(harmful.status).toBe("failed");
 

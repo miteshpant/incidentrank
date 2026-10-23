@@ -191,11 +191,66 @@ export interface FailureCondition {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
+// Completion mode (Phase 6.1) — "automatic" (default, unchanged prior
+// behavior): the engine itself flips status to "resolved" the instant
+// successCondition has been sustained long enough. "candidate_declared":
+// the engine tracks the exact same sustain-window bookkeeping
+// (transitions.consecutiveSuccessSeconds) but never auto-resolves on it —
+// the attempt stays "critical"/"degraded"/"healthy" indefinitely until
+// either the candidate explicitly declares completion (evaluated
+// server-side against this same tracked state, never a second parallel
+// evaluator — see apps/web/src/lib/server/finish-attempt.ts) or the
+// failure condition fires automatically (failure is never gated by
+// completion mode — see tick.ts).
+//
+// acceptableCondition is optional and only meaningful for
+// candidate_declared scenarios: a second, looser bar representing a
+// deliberate, genuinely-safe-but-imperfect handback state (distinct from
+// successCondition's full/optimal recovery bar). Both conditions track
+// their own independent sustain windows in parallel; Finish succeeds if
+// EITHER has been sustained long enough, with successCondition taking
+// priority (scored as "optimal") over acceptableCondition ("acceptable")
+// when both are currently satisfied. Omitting it (every automatic
+// scenario, and any candidate_declared scenario with no genuine safe-but-
+// imperfect tier) means only the full successCondition can ever Finish to
+// resolved.
+export type CompletionMode = "automatic" | "candidate_declared";
+
+export interface CompletionConfig {
+  mode: CompletionMode;
+  acceptableCondition?: SuccessCondition;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Action classification — authored per control+value, used only for
 // scoring-input bookkeeping (never for resolution logic itself).
 // ─────────────────────────────────────────────────────────────────────────
 
+/**
+ * Phase 6.1: candidate-facing post-incident educational explanation for
+ * why a classification was beneficial/harmful/neutral — e.g. "Reduced
+ * retry amplification" / "Lowering retries reduced pressure on the
+ * degraded payment provider." Presentation metadata only: never read by
+ * simulate()/tick.ts resolution logic, never affects scoring. Hidden
+ * authored evaluator metadata — must never cross the live candidate API
+ * boundary (see apps/web/src/lib/server/action-feedback.ts's
+ * sanitization). Optional: a neutral/no-op classification does not need
+ * prose.
+ */
+export interface ActionFeedback {
+  title: string;
+  explanation: string;
+}
+
 export interface ActionClassificationRule {
+  /** Stable identity for this rule, persisted as matchedRuleId at the
+   * moment an action is classified (never re-derived later by
+   * re-running classifyAction against final state, since
+   * whenTriggerEquals-gated rules can match differently at different
+   * points in time). Optional — when omitted, classifyAction falls back
+   * to the rule's array index, which is equally stable as long as
+   * authors don't reorder existing rules. */
+  id?: string;
   controlKey: string;
   valueAtMost?: number;
   valueAtLeast?: number;
@@ -204,6 +259,9 @@ export interface ActionClassificationRule {
    * whenProviderDegraded boolean. Omit to match regardless of triggers. */
   whenTriggerEquals?: Record<string, boolean>;
   outcome: ActionOutcome;
+  /** Optional authored post-incident explanation — see ActionFeedback's
+   * doc comment. */
+  feedback?: ActionFeedback;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -225,6 +283,9 @@ export interface ScenarioSimulationDefinition {
   successCondition: SuccessCondition;
   failureCondition: FailureCondition;
   actionClassifications: ActionClassificationRule[];
+  /** Defaults to { mode: "automatic" } when omitted — every scenario
+   * compiled before Phase 6.1 behaves identically with no changes. */
+  completion?: CompletionConfig;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -273,6 +334,16 @@ export interface TransitionTrackingState {
   incidentState: string;
   consecutiveSuccessSeconds: number;
   consecutiveFailureSeconds: number;
+  /** Phase 6.1: mirrors consecutiveSuccessSeconds's exact sustain-window
+   * mechanics (resets to 0 whenever the condition goes false) but tracks
+   * a scenario's optional completion.acceptableCondition instead of
+   * successCondition. Always computed, even for scenarios with no
+   * acceptableCondition defined (where it simply stays 0) or automatic-
+   * mode scenarios — cheap to maintain unconditionally and keeps this the
+   * single place "is the acceptable bar currently sustained" is ever
+   * computed, read directly by finishAttempt's eligibility check rather
+   * than re-evaluated there. */
+  consecutiveAcceptableSeconds: number;
   /** Per severity-field-key: whether that field's "entering critical"
    * event has already been announced (so the engine only emits it once
    * per critical episode), generalizing the three old hardcoded booleans. */
@@ -351,4 +422,16 @@ export interface ScoringInputs {
    * generalizing the old fixed finalKafkaLagMessages/peakKafkaLagMessages. */
   finalNumericValues: Record<string, number>;
   peakNumericValues: Record<string, number>;
+
+  /**
+   * Final string-valued state.values entries (e.g. a scenario's own
+   * tradeoff-tracking field like "orderingMode": "preserved"|"degraded").
+   * Phase 6.1: added so scoring can reward a candidate_declared
+   * scenario's acceptable-tier tradeoff generically, declaratively,
+   * off real scenario state — never a scenario-specific measure, and
+   * never inferred from completionTier (which only says which tier, not
+   * why). Siblings finalNumericValues; populated the same way by
+   * extractScoringInputs.
+   */
+  finalStringValues: Record<string, string>;
 }

@@ -11,6 +11,7 @@ import {
 import { useIncidentAttempt } from "@/lib/use-incident-attempt";
 import { formatUsd } from "@/lib/format";
 import { GenericResultScreen } from "@/components/scenario-console/result-screen";
+import { FinishIncidentDialog } from "@/components/scenario-console/finish-incident-dialog";
 import { BriefingScreen } from "./briefing-screen";
 import { IncidentHeader } from "./incident-header";
 import { ArchitectureView } from "./architecture-view";
@@ -51,6 +52,7 @@ export function IncidentConsole() {
   const [selectedComponentId, setSelectedComponentId] = useState(
     DEFAULT_SELECTED_COMPONENT,
   );
+  const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const previousValues = usePreviousValues(attempt.state.values);
 
   if (attempt.phase === "briefing") {
@@ -69,13 +71,23 @@ export function IncidentConsole() {
         actionGroups={attempt.actionGroups}
         descriptor={paymentRetryStormCandidateUI}
         serverScore={attempt.serverScore}
+        scoringError={attempt.scoringError}
+        retryScoring={attempt.retryScoring}
+        outcome={attempt.outcome}
+        completionTier={attempt.completionTier}
         onTryAgain={attempt.resetAttempt}
         showSignInNudge={isLoaded && !isSignedIn}
+        attemptId={attempt.attemptId}
       />
     );
   }
 
   const isTerminal = attempt.state.status === "resolved" || attempt.state.status === "failed";
+  const canFinish =
+    attempt.completionMode === "candidate_declared" &&
+    attempt.phase === "active" &&
+    attempt.incidentStarted &&
+    !isTerminal;
 
   return (
     <main className="flex flex-1 flex-col">
@@ -127,6 +139,31 @@ export function IncidentConsole() {
             onChangePendingValue={attempt.setPendingValue}
             onApplyChanges={attempt.applyChanges}
           />
+
+          {attempt.completionMode === "candidate_declared" && (
+            <div className="mt-6 border-t border-border pt-6">
+              <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                Candidate Judgment
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                When you believe the system is sufficiently stabilized, declare
+                the incident finished.
+              </p>
+              <button
+                type="button"
+                onClick={() => setFinishDialogOpen(true)}
+                disabled={!canFinish}
+                className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Finish Incident
+              </button>
+              {attempt.finishError && !finishDialogOpen && (
+                <p className="mt-2 text-sm text-[#dc2626]" role="alert">
+                  {attempt.finishError}
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="bg-background p-6">
@@ -136,6 +173,18 @@ export function IncidentConsole() {
           />
         </section>
       </div>
+
+      {attempt.completionMode === "candidate_declared" && (
+        <FinishIncidentDialog
+          open={finishDialogOpen}
+          finishing={attempt.finishing}
+          finishError={attempt.finishError}
+          onCancel={() => setFinishDialogOpen(false)}
+          onConfirm={(note) => {
+            void attempt.finishIncident(note);
+          }}
+        />
+      )}
     </main>
   );
 }

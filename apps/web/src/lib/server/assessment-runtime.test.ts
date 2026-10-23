@@ -16,6 +16,8 @@ import { createDb } from "@incidentrank/db";
 import { paymentRetryStorm, paymentRetryStormSimulation } from "@incidentrank/scenarios";
 import { compileAuthoredScenario, type AuthoredScenario } from "@incidentrank/scenarios/authoring";
 import {
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
   extractScoringInputs,
   replayAttempt,
   type ReplayActionGroup,
@@ -37,6 +39,7 @@ import {
 } from "./assessment-runtime";
 import { createOrgScenario, publishScenarioDraft } from "./scenario-authoring";
 import { scoreAttempt } from "./scoring-helper";
+import { finishAttempt } from "./finish-attempt";
 
 /**
  * Integration tests against local Postgres for Phase 5.1's
@@ -290,7 +293,11 @@ describe("hidden data in runtime payloads", () => {
     expect(serialized).not.toContain("revenueLossRatePerMinute");
 
     // Type-level guarantee, not just string-absence: RuntimeView has no
-    // field any of these could occupy.
+    // field any of these could occupy. completionMode (Phase 6.1) is
+    // deliberately allowed here — it is static scenario metadata (which
+    // UI affordance to render), never a live eligibility signal; the
+    // actual hidden sustain-tracking/eligibility state stays server-only
+    // (see evaluateCompletionEligibility's doc comment).
     expect(Object.keys(result.view)).toEqual([
       "architecture",
       "controls",
@@ -298,6 +305,7 @@ describe("hidden data in runtime payloads", () => {
       "events",
       "status",
       "incidentStartMs",
+      "completionMode",
     ]);
   });
 
@@ -676,7 +684,7 @@ describe("terminal attempt immutability", () => {
 
     await testDb
       .update(attempts)
-      .set({ status: "resolved", score: 900, completedAt: new Date() })
+      .set({ status: "completed", outcome: "resolved", score: 900, completedAt: new Date() })
       .where(eq(attempts.id, attempt.id));
 
     const owned = await loadOwnedAssessmentAttempt(attempt.id, candidate.id);
@@ -783,7 +791,7 @@ describe("authored scenario through the server runtime", () => {
 });
 
 describe("Payment Retry Storm regression through the server runtime", () => {
-  it("a known-good mitigation sequence resolves the incident with a server-computed score, matching the pre-5.1 scoring path", async () => {
+  it("Phase 6.1: a known-good mitigation sequence reaches sustained success but stays in_progress — Finish is required to resolve, matching candidate_declared semantics", async () => {
     const { owner, org } = await createOrgWithOwner(TEST_ORG_SLUG);
     const candidate = await createCandidateUser(TEST_AUTH_CANDIDATE, "Candidate");
     const { assessment, candidate: candidateRow } = await createClaimedCandidateAssessment(
@@ -800,16 +808,118 @@ describe("Payment Retry Storm regression through the server runtime", () => {
       assessment.id,
       candidateRow.id,
     );
+    await resumeRuntimeClock(attempt.id);
 
+    // Same known-good mitigation sequence/timing as the score-equality
+    // test above (proven to reach sustained success well before the
+    // 15-minute provider-recovery mark).
+    const afterAdvance = await driveServerRuntimeThroughActions(
+      testDb,
+      attempt.id,
+      candidate.id,
+      [
+        { atMs: 65_000, controlKey: "retries", value: 1 },
+        { atMs: 90_000, controlKey: "backoff", value: "exponential" },
+        { atMs: 120_000, controlKey: "circuitBreaker", value: "on" },
+      ],
+      15 * 60 * 1000 + 60_000,
+    );
+
+    // candidate_declared: reaching sustained success through advanceRuntime/
+    // submitAction must NOT resolve the incident — only establish
+    // eligibility for a subsequent Finish declaration.
+    expect(afterAdvance.status).toBe("in_progress");
+    expect(afterAdvance.outcome).toBeNull();
+    expect(afterAdvance.score).toBeNull();
+
+    const finishable = await testDb.query.attempts.findFirst({
+      where: eq(attempts.id, attempt.id),
+      with: { scenario: true },
+    });
+    if (!finishable) throw new Error("attempt disappeared");
+
+    // Only an explicit Finish declaration resolves it, with a persisted
+    // server-computed score — matching the pre-6.1 scoring path's output
+    // shape, just reached through the candidate's decision instead of
+    // automatically.
+    const finishOutcome = await finishAttempt(finishable, "req-regression-finish", null);
+    expect(finishOutcome.ok).toBe(true);
+    if (!finishOutcome.ok) return;
+    expect(finishOutcome.result.outcome).toBe("resolved");
+    expect(finishOutcome.result.score?.total).toBeTypeOf("number");
+
+    const finalAttempt = await testDb.query.attempts.findFirst({ where: eq(attempts.id, attempt.id) });
+    expect(finalAttempt?.status).toBe("completed");
+    expect(finalAttempt?.outcome).toBe("resolved");
+    expect(finalAttempt?.score).not.toBeNull();
+  });
+
+  it("Phase 6.1: an automatic failure still completes the assessment attempt without any Finish call", async () => {
+    const { owner, org } = await createOrgWithOwner(TEST_ORG_SLUG);
+    const candidate = await createCandidateUser(TEST_AUTH_CANDIDATE, "Candidate");
+    const { assessment, candidate: candidateRow } = await createClaimedCandidateAssessment(
+      org.id,
+      owner.id,
+      builtinScenarioId,
+      builtinScenarioVersion,
+      candidate.id,
+    );
+    const attempt = await startAttempt(
+      candidate.id,
+      builtinScenarioId,
+      builtinScenarioVersion,
+      assessment.id,
+      candidateRow.id,
+    );
+    await resumeRuntimeClock(attempt.id);
+
+    // A proven harmful action sequence (same as packages/scenarios/src/
+    // payment-retry-storm/simulation.test.ts) drives the failure
+    // condition (checkoutSuccessRate < 60, sustained 3min) past its
+    // sustain window well before the 15-minute provider-recovery mark.
+    // Failure remains fully automatic in every completion mode
+    // (docs/implementation_plan/phase6.1.md's "Failure Remains
+    // Automatic") — the assessment runtime must complete this on its
+    // own, with no candidate Finish action involved.
+    const afterAdvance = await driveServerRuntimeThroughActions(
+      testDb,
+      attempt.id,
+      candidate.id,
+      [
+        { atMs: 65_000, controlKey: "paymentInstances", value: 24 },
+        { atMs: 65_000, controlKey: "retries", value: 5 },
+      ],
+      66_000 + 3 * 60_000 + 60_000,
+    );
+
+    expect(afterAdvance.status).toBe("completed");
+    expect(afterAdvance.outcome).toBe("failed");
+    expect(afterAdvance.score).not.toBeNull();
+    expect(afterAdvance.completionDeclaredAt).toBeNull();
+    expect(afterAdvance.completionNote).toBeNull();
+  });
+
+  it("Phase 6.1: submitAction rejects further actions after Finish has completed the attempt", async () => {
+    const { owner, org } = await createOrgWithOwner(TEST_ORG_SLUG);
+    const candidate = await createCandidateUser(TEST_AUTH_CANDIDATE, "Candidate");
+    const { assessment, candidate: candidateRow } = await createClaimedCandidateAssessment(
+      org.id,
+      owner.id,
+      builtinScenarioId,
+      builtinScenarioVersion,
+      candidate.id,
+    );
+    const attempt = await startAttempt(
+      candidate.id,
+      builtinScenarioId,
+      builtinScenarioVersion,
+      assessment.id,
+      candidateRow.id,
+    );
     await resumeRuntimeClock(attempt.id);
 
     let owned = await loadOwnedAssessmentAttempt(attempt.id, candidate.id);
     if (!owned.ok) throw new Error("expected ownership to resolve");
-
-    // Advance well past the provider-degradation timed event before
-    // applying the known-good mitigation (retries→1, backoff→exponential,
-    // circuitBreaker→on), mirroring the pre-5.1 manual verification
-    // sequence used in Phase 4/4.1's own completion reports.
     await testDb
       .update(attempts)
       .set({ runtimeAnchoredAt: new Date(Date.now() - 70_000) })
@@ -820,20 +930,17 @@ describe("Payment Retry Storm regression through the server runtime", () => {
 
     owned = await loadOwnedAssessmentAttempt(attempt.id, candidate.id);
     if (!owned.ok) throw new Error("expected ownership to resolve");
-    const mitigationResult = await submitAction(
+    await submitAction(
       owned.attempt,
-      "req-regression-mitigation",
+      "req-pre-finish-mitigation",
       [
         { controlKey: "retries", value: 1 },
         { controlKey: "backoff", value: "exponential" },
         { controlKey: "circuitBreaker", value: "on" },
       ],
-      "Known-good mitigation sequence.",
+      null,
     );
-    expect(mitigationResult.ok).toBe(true);
 
-    // Advance far enough for the success condition's sustained window to
-    // elapse and resolve the incident.
     owned = await loadOwnedAssessmentAttempt(attempt.id, candidate.id);
     if (!owned.ok) throw new Error("expected ownership to resolve");
     await testDb
@@ -842,21 +949,32 @@ describe("Payment Retry Storm regression through the server runtime", () => {
       .where(eq(attempts.id, attempt.id));
     owned = await loadOwnedAssessmentAttempt(attempt.id, candidate.id);
     if (!owned.ok) throw new Error("expected ownership to resolve");
-    const finalAdvance = await advanceRuntime(attempt.id, owned.attempt);
-    expect(finalAdvance.ok).toBe(true);
+    await advanceRuntime(attempt.id, owned.attempt);
 
-    const finalAttempt = await testDb.query.attempts.findFirst({
+    const beforeFinish = await testDb.query.attempts.findFirst({
       where: eq(attempts.id, attempt.id),
+      with: { scenario: true },
     });
-    // The attempt should have transitioned to a terminal state with a
-    // persisted score once the success/failure condition's sustain window
-    // elapsed — asserting score persistence here, not a specific number,
-    // since the exact tick count to resolution depends on tickMs timing
-    // details already covered by packages/scoring's own exact-score tests.
-    if (finalAttempt?.status === "resolved" || finalAttempt?.status === "failed") {
-      expect(finalAttempt.score).not.toBeNull();
-      expect(typeof finalAttempt.score).toBe("number");
-    }
+    if (!beforeFinish) throw new Error("attempt disappeared");
+    const finishResult = await finishAttempt(beforeFinish, "req-lockout-finish", null);
+    expect(finishResult.ok).toBe(true);
+
+    owned = await loadOwnedAssessmentAttempt(attempt.id, candidate.id);
+    if (!owned.ok) throw new Error("expected ownership to resolve");
+    const rejectedAction = await submitAction(
+      owned.attempt,
+      "req-after-finish",
+      [{ controlKey: "retries", value: 0 }],
+      null,
+    );
+    expect(rejectedAction.ok).toBe(false);
+    if (rejectedAction.ok) return;
+    expect(rejectedAction.reason).toBe("terminal");
+
+    const rejectedAdvance = await advanceRuntime(attempt.id, owned.attempt);
+    expect(rejectedAdvance.ok).toBe(false);
+    if (rejectedAdvance.ok) return;
+    expect(rejectedAdvance.reason).toBe("terminal");
   });
 });
 
@@ -981,7 +1099,7 @@ function runReplayOracle(
 }
 
 describe("score equality: local simulator path vs. server-authoritative runtime", () => {
-  it("Payment Retry Storm: identical final status, state, scoring inputs, total score, and all six dimensions", async () => {
+  it("Payment Retry Storm (candidate_declared): sustained success never auto-resolves the assessment runtime; Finish produces a result identical to the local oracle's Finish-equivalent evaluation", async () => {
     const { owner, org } = await createOrgWithOwner(TEST_ORG_SLUG);
     const candidate = await createCandidateUser(TEST_AUTH_CANDIDATE, "Candidate");
     const { assessment, candidate: candidateRow } = await createClaimedCandidateAssessment(
@@ -1003,9 +1121,9 @@ describe("score equality: local simulator path vs. server-authoritative runtime"
     // The exact known-good mitigation sequence/timing already proven
     // (by packages/scoring/src/resume-equality.test.ts) to produce
     // identical scores between an uninterrupted run and a replayed one —
-    // reused here as the third leg of that equality: the real server
+    // reused here as a third leg of that equality: the real server
     // runtime, driven through advanceRuntime/submitAction, must agree
-    // with both.
+    // with the oracle once Finish is invoked.
     const timedActions: TimedAction[] = [
       { atMs: 65_000, controlKey: "retries", value: 1 },
       { atMs: 90_000, controlKey: "backoff", value: "exponential" },
@@ -1020,13 +1138,28 @@ describe("score equality: local simulator path vs. server-authoritative runtime"
       timedActions,
       untilMs,
     );
+
+    // Phase 6.1 binding invariant: this scenario is candidate_declared, so
+    // reaching sustained success through advanceRuntime/submitAction must
+    // NEVER auto-resolve the assessment attempt — the engine only tracks
+    // eligibility; a candidate's explicit Finish decides the outcome. If
+    // this ever fails, it means the assessment runtime's gate
+    // (assessment-runtime.ts's isLocallyTerminal usage) regressed.
+    expect(serverFinalAttempt.status).toBe("in_progress");
+    expect(serverFinalAttempt.outcome).toBeNull();
+
     const serverElapsedMs = serverFinalAttempt.lastSimulationTimeMs ?? untilMs;
 
-    // Replay the oracle to the server's own final elapsed time, not an
-    // independently chosen value — see runReplayOracle's doc comment for
-    // why these can legitimately differ from `untilMs` once terminal.
+    // The local oracle's replayed state at the exact same elapsed time,
+    // and its Finish-equivalent evaluation via the same shared
+    // evaluateCandidateDeclaredFinish core finishAttempt uses — never a
+    // second, independently-written completion-decision implementation.
     const localFinalState = runReplayOracle(paymentRetryStormSimulation, timedActions, serverElapsedMs);
-    const localInputs = extractScoringInputs(paymentRetryStormSimulation, localFinalState);
+    const localFinishResult = evaluateCandidateDeclaredFinish(
+      paymentRetryStormSimulation,
+      localFinalState,
+    );
+    const localInputs = extractFinishScoringInputs(paymentRetryStormSimulation, localFinishResult);
     const localScore = await scoreAttempt(
       {
         scenarioId: builtinScenarioId,
@@ -1036,33 +1169,42 @@ describe("score equality: local simulator path vs. server-authoritative runtime"
       localInputs,
     );
 
-    // Final incident status.
-    expect(serverFinalAttempt.status).toBe(
-      localFinalState.status === "resolved" ? "resolved" : localFinalState.status === "failed" ? "failed" : "in_progress",
-    );
+    // Now the candidate declares Finish through the real server path —
+    // the same finishAttempt the practice Finish endpoint calls, proving
+    // assessment attempts share the identical completion-decision
+    // implementation rather than a parallel one.
+    const finishableAttempt = await testDb.query.attempts.findFirst({
+      where: eq(attempts.id, attempt.id),
+      with: { scenario: true },
+    });
+    if (!finishableAttempt) throw new Error("attempt disappeared before finish");
+    const finishOutcome = await finishAttempt(finishableAttempt, "assessment-equality-finish", null);
+    expect(finishOutcome.ok).toBe(true);
+    if (!finishOutcome.ok) return;
+
+    expect(finishOutcome.result.outcome).toBe(localFinishResult.outcome);
+    expect(finishOutcome.result.completionTier).toBe(localFinishResult.completionTier);
+
+    const persistedAttempt = await testDb.query.attempts.findFirst({ where: eq(attempts.id, attempt.id) });
+    if (!persistedAttempt) throw new Error("attempt disappeared after finish");
+
+    expect(persistedAttempt.status).toBe("completed");
+    expect(persistedAttempt.outcome).toBe(localFinishResult.outcome);
 
     // Final simulation state — the attempt's persisted finalStateJson is
-    // exactly the SimulationState the server computed at the moment it
-    // detected the terminal transition, which must equal the local
-    // oracle's final state (modulo field ordering, hence toEqual).
-    expect(serverFinalAttempt.finalStateJson).toEqual(localFinalState);
-
-    // Scoring inputs — reconstruct them from the server's persisted
-    // final state exactly as persistTerminalResult does internally.
-    const serverInputs = extractScoringInputs(
-      paymentRetryStormSimulation,
-      serverFinalAttempt.finalStateJson as SimulationState,
-    );
-    expect(serverInputs).toEqual(localInputs);
+    // exactly the SimulationState the server computed when Finish
+    // replayed it, which must equal the local oracle's final state
+    // (modulo field ordering, hence toEqual).
+    expect(persistedAttempt.finalStateJson).toEqual(localFinalState);
 
     // Total score and all six dimensions.
-    expect(serverFinalAttempt.score).toBe(localScore.total);
-    expect(serverFinalAttempt.recoveryScore).toBe(localScore.breakdown.recovery);
-    expect(serverFinalAttempt.customerImpactScore).toBe(localScore.breakdown.customerImpact);
-    expect(serverFinalAttempt.dataIntegrityScore).toBe(localScore.breakdown.dataIntegrity);
-    expect(serverFinalAttempt.reliabilityScore).toBe(localScore.breakdown.reliability);
-    expect(serverFinalAttempt.costEfficiencyScore).toBe(localScore.breakdown.costEfficiency);
-    expect(serverFinalAttempt.operationalEfficiencyScore).toBe(localScore.breakdown.operationalEfficiency);
+    expect(persistedAttempt.score).toBe(localScore.total);
+    expect(persistedAttempt.recoveryScore).toBe(localScore.breakdown.recovery);
+    expect(persistedAttempt.customerImpactScore).toBe(localScore.breakdown.customerImpact);
+    expect(persistedAttempt.dataIntegrityScore).toBe(localScore.breakdown.dataIntegrity);
+    expect(persistedAttempt.reliabilityScore).toBe(localScore.breakdown.reliability);
+    expect(persistedAttempt.costEfficiencyScore).toBe(localScore.breakdown.costEfficiency);
+    expect(persistedAttempt.operationalEfficiencyScore).toBe(localScore.breakdown.operationalEfficiency);
   });
 
   it("organization-authored scenario: identical final status, state, scoring inputs, total score, and all six dimensions", async () => {
@@ -1124,9 +1266,13 @@ describe("score equality: local simulator path vs. server-authoritative runtime"
       localInputs,
     );
 
-    expect(serverFinalAttempt.status).toBe(
-      localFinalState.status === "resolved" ? "resolved" : localFinalState.status === "failed" ? "failed" : "in_progress",
-    );
+    if (localFinalState.status === "resolved" || localFinalState.status === "failed") {
+      expect(serverFinalAttempt.status).toBe("completed");
+      expect(serverFinalAttempt.outcome).toBe(localFinalState.status);
+    } else {
+      expect(serverFinalAttempt.status).toBe("in_progress");
+      expect(serverFinalAttempt.outcome).toBeNull();
+    }
     expect(serverFinalAttempt.finalStateJson).toEqual(localFinalState);
 
     const serverInputs = extractScoringInputs(

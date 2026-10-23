@@ -13,11 +13,45 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-export const attemptStatusEnum = pgEnum("attempt_status", [
+// Phase 6.1: attempt lifecycle, separated from incident outcome (below).
+// `status` answers only "is this attempt still active" — never "how did it
+// end." A `completed` attempt always has a non-null `outcome`; `completed`
+// is not a synonym for "succeeded" (e.g. completed + declared_unstable is
+// a normal, expected combination). See attemptOutcomeEnum and
+// apps/web/src/lib/server/attempt-lifecycle.ts's isAttemptActive/
+// isAttemptTerminal/isIncidentResolved predicates, which every call site
+// should use instead of comparing this enum directly.
+export const attemptStatusEnum = pgEnum("attempt_status_v2", [
   "in_progress",
+  "completed",
+  "abandoned",
+]);
+
+// Phase 6.1: how an incident ended, independent of attempt lifecycle.
+// Null while `status = "in_progress"` or `status = "abandoned"`; always
+// non-null when `status = "completed"`. `declared_unstable` is a candidate
+// explicitly declaring completion (Finish Incident) while the system was
+// not in an acceptable/stabilized state — distinct from `failed` (an
+// automatic, authored failure condition was met) so hiring review can tell
+// "the system catastrophically failed" apart from "the candidate chose to
+// stop too early." `timed_out` is reserved for an optional future
+// maxDurationMs scenario field; no scenario currently uses it.
+export const attemptOutcomeEnum = pgEnum("attempt_outcome", [
   "resolved",
   "failed",
-  "abandoned",
+  "declared_unstable",
+  "timed_out",
+]);
+
+// Phase 6.1: which completion tier a resolved candidate-declared attempt
+// achieved — "optimal" (the scenario's successCondition was sustained) or
+// "acceptable" (a looser, scenario-authored acceptableCondition was
+// sustained: a deliberate, safe-but-imperfect handback state). Null for
+// every non-resolved outcome and for automatic-completion scenarios, which
+// have no acceptableCondition concept at all.
+export const attemptCompletionTierEnum = pgEnum("attempt_completion_tier", [
+  "optimal",
+  "acceptable",
 ]);
 
 export const attemptTypeEnum = pgEnum("attempt_type", [
@@ -344,11 +378,37 @@ export const attempts = pgTable("attempts", {
   }),
 
   status: attemptStatusEnum("status").notNull().default("in_progress"),
+  // Null while status is "in_progress" or "abandoned"; always set once
+  // status becomes "completed". See attemptOutcomeEnum above.
+  outcome: attemptOutcomeEnum("outcome"),
   startedAt: timestamp("started_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
   incidentStartedAt: timestamp("incident_started_at", { withTimezone: true }),
   completedAt: timestamp("completed_at", { withTimezone: true }),
+
+  // Phase 6.1: the candidate-declared "Finish Incident" completion
+  // declaration, persisted directly on the attempt row rather than a
+  // separate table — Finish is irreversible, so there is at most one
+  // declaration per attempt ever (see docs/implementation_plan/
+  // phase6.1.md). All four columns below are null for: automatic
+  // completion, an automatic failure, abandonment, or an attempt still in
+  // progress. They are deliberately independent of `outcome` — never
+  // inferred from one another. completionSimulationTimeMs is the
+  // authoritative simulation-elapsed-time at the moment of declaration
+  // (not wall-clock); completionTier is set only when outcome="resolved"
+  // for a candidate_declared scenario, distinguishing a full
+  // successCondition match ("optimal") from a looser authored
+  // acceptableCondition match ("acceptable").
+  completionNote: text("completion_note"),
+  completionDeclaredAt: timestamp("completion_declared_at", { withTimezone: true }),
+  completionSimulationTimeMs: integer("completion_simulation_time_ms"),
+  completionTier: attemptCompletionTierEnum("completion_tier"),
+  // Client-generated idempotency key for POST /api/attempts/[attemptId]/
+  // finish, mirroring attemptActionGroups.clientRequestId's existing
+  // pattern. A retried Finish request carrying the same key returns the
+  // already-computed terminal result rather than re-evaluating/re-scoring.
+  finishRequestId: text("finish_request_id"),
 
   score: integer("score"),
   recoveryScore: integer("recovery_score"),
@@ -414,6 +474,12 @@ export const attempts = pgTable("attempts", {
     table.userId,
     table.scenarioId,
     table.status,
+  ),
+  // Finish idempotency: a retried request carrying the same key must
+  // resolve to the exact same already-persisted row, never a second one.
+  uniqueIndex("attempts_finish_request_idx").on(
+    table.id,
+    table.finishRequestId,
   ),
 ]);
 

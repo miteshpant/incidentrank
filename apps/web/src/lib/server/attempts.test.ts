@@ -57,7 +57,8 @@ describe("attempt lifecycle", () => {
         userId: user.id,
         scenarioId,
         scenarioVersion,
-        status: "resolved",
+        status: "completed",
+        outcome: "resolved",
         score: 980,
       })
       .returning();
@@ -68,7 +69,8 @@ describe("attempt lifecycle", () => {
         userId: user.id,
         scenarioId,
         scenarioVersion,
-        status: "failed",
+        status: "completed",
+        outcome: "failed",
         score: 435,
       })
       .returning();
@@ -84,6 +86,7 @@ describe("attempt lifecycle", () => {
       where: eq(attempts.id, first!.id),
     });
     expect(refetchedFirst?.score).toBe(980);
-    expect(refetchedFirst?.status).toBe("resolved");
+    expect(refetchedFirst?.status).toBe("completed");
+    expect(refetchedFirst?.outcome).toBe("resolved");
   });
 });

@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { attempts, type Attempt, type Scenario } from "@incidentrank/db";
 import { db } from "./db";
 import { getOrCreateCurrentUser } from "./current-user";
+import { isIncidentResolved } from "../attempt-lifecycle";
 
 export interface ScenarioPracticeProgress {
   attemptCount: number;
@@ -44,7 +45,7 @@ export async function getPracticeProgressBySlug(): Promise<PracticeProgressBySlu
     progress[slug] = {
       attemptCount: scenarioAttempts.length,
       bestScore,
-      completed: scenarioAttempts.some((a) => a.status === "resolved"),
+      completed: scenarioAttempts.some(isIncidentResolved),
     };
   }
   return progress;

@@ -112,6 +112,24 @@ export function compileAuthoredScenario(raw: unknown): CompileAuthoredScenarioRe
     authored.actionClassifications ?? []
   ).map(compileActionClassification);
 
+  // Phase 6.1: omitting `completion` entirely compiles to no `completion`
+  // field at all on the simulation definition, which the engine itself
+  // defaults to { mode: "automatic" } (see tick.ts) — identical behavior
+  // to every scenario compiled before this addition.
+  const completion: ScenarioSimulationDefinition["completion"] = authored.completion
+    ? {
+        mode: authored.completion.mode,
+        acceptableCondition: authored.completion.acceptableCondition
+          ? {
+              conditions: authored.completion.acceptableCondition.conditions.map(
+                compileStateCondition,
+              ),
+              sustainedSeconds: authored.completion.acceptableCondition.sustainedSeconds,
+            }
+          : undefined,
+      }
+    : undefined;
+
   const simulation: ScenarioSimulationDefinition = {
     tickMs: DEFAULT_TICK_MS,
     architecture,
@@ -127,6 +145,7 @@ export function compileAuthoredScenario(raw: unknown): CompileAuthoredScenarioRe
     successCondition,
     failureCondition,
     actionClassifications,
+    completion,
   };
 
   const definition: ScenarioDefinition = {
@@ -220,6 +239,7 @@ function compileActionClassification(
   rule: AuthoredActionClassification,
 ): ActionClassificationRule {
   return {
+    ...(rule.id !== undefined ? { id: rule.id } : {}),
     controlKey: rule.controlKey,
     ...(rule.valueAtMost !== undefined ? { valueAtMost: rule.valueAtMost as number } : {}),
     ...(rule.valueAtLeast !== undefined ? { valueAtLeast: rule.valueAtLeast as number } : {}),
@@ -228,5 +248,6 @@ function compileActionClassification(
       : {}),
     ...(rule.whenTriggerEquals ? { whenTriggerEquals: rule.whenTriggerEquals } : {}),
     outcome: rule.outcome,
+    ...(rule.feedback ? { feedback: rule.feedback } : {}),
   };
 }

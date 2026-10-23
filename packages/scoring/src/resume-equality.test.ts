@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { extractScoringInputs, replayAttempt } from "@incidentrank/simulator";
+import {
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  replayAttempt,
+} from "@incidentrank/simulator";
 import { paymentRetryStormSimulation } from "@incidentrank/scenarios";
 import { scorePaymentRetryStormAttempt } from "./payment-retry-storm";
 import { runScenarioForScoring } from "./test-helpers";
@@ -12,6 +16,15 @@ const UNTIL_MS = PROVIDER_RECOVERY_END_MS + 60_000;
  * (reconstructed via replayAttempt from persisted action groups) and an
  * uninterrupted attempt with identical actions/timing produce exactly the
  * same IncidentRank score, dimension breakdown, and scoring inputs.
+ *
+ * Payment Retry Storm is candidate_declared (Phase 6.1): the engine
+ * itself never writes state.resolvedAtMs, so proving parity here means
+ * proving the same shared evaluateCandidateDeclaredFinish core (used by
+ * both practice and assessment Finish) produces an identical synthetic
+ * resolvedAtMs whether reached via one continuous simulate() run or via
+ * replayAttempt from persisted action groups — the same
+ * client-simulation-vs-server-replay parity guarantee this scenario's
+ * conversion was required to preserve.
  */
 describe("resumed vs. uninterrupted score equality", () => {
   it("produces an identical score for the strong mitigation sequence", () => {
@@ -30,7 +43,10 @@ describe("resumed vs. uninterrupted score equality", () => {
         { elapsedMs: 120_000, changes: [{ controlKey: "circuitBreaker", value: "on" }] },
       ],
     });
-    const replayedInputs = extractScoringInputs(paymentRetryStormSimulation, replayed.state);
+    const replayedInputs = extractFinishScoringInputs(
+      paymentRetryStormSimulation,
+      evaluateCandidateDeclaredFinish(paymentRetryStormSimulation, replayed.state),
+    );
 
     expect(replayedInputs).toEqual(uninterruptedInputs);
 
@@ -65,7 +81,10 @@ describe("resumed vs. uninterrupted score equality", () => {
         { elapsedMs: 140_000, changes: [{ controlKey: "circuitBreaker", value: "on" }] },
       ],
     });
-    const replayedInputs = extractScoringInputs(paymentRetryStormSimulation, replayed.state);
+    const replayedInputs = extractFinishScoringInputs(
+      paymentRetryStormSimulation,
+      evaluateCandidateDeclaredFinish(paymentRetryStormSimulation, replayed.state),
+    );
 
     expect(replayedInputs).toEqual(uninterruptedInputs);
     expect(scorePaymentRetryStormAttempt(replayedInputs)).toEqual(

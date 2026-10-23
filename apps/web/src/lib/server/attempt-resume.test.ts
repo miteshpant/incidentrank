@@ -14,10 +14,14 @@ import {
   type Db,
 } from "@incidentrank/db";
 import { createDb } from "@incidentrank/db";
-import { paymentRetryStorm } from "@incidentrank/scenarios";
+import { paymentRetryStorm, paymentRetryStormSimulation } from "@incidentrank/scenarios";
 import type { AuthoredScenario } from "@incidentrank/scenarios/authoring";
 import { scorePaymentRetryStormAttempt } from "@incidentrank/scoring";
-import { extractScoringInputs } from "@incidentrank/simulator";
+import {
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+} from "@incidentrank/simulator";
 import { loadResumeData } from "./attempt-resume";
 import { generateInviteToken, hashInviteToken, normalizeEmail, INVITE_EXPIRY_MS } from "./invite-token";
 import { createOrgScenario, publishScenarioDraft } from "./scenario-authoring";
@@ -308,7 +312,7 @@ describe("complete after resume", () => {
 
     await testDb
       .update(attempts)
-      .set({ status: "resolved", score: score.total, completedAt: new Date() })
+      .set({ status: "completed", outcome: "resolved", score: score.total, completedAt: new Date() })
       .where(eq(attempts.id, attempt.id));
     await testDb
       .update(assessmentCandidates)
@@ -322,7 +326,8 @@ describe("complete after resume", () => {
       where: eq(assessmentCandidates.id, candidate.id),
     });
 
-    expect(finalAttempt?.status).toBe("resolved");
+    expect(finalAttempt?.status).toBe("completed");
+    expect(finalAttempt?.outcome).toBe("resolved");
     expect(finalAttempt?.score).toBe(score.total);
     expect(finalCandidate?.status).toBe("completed");
   });
@@ -338,7 +343,7 @@ describe("complete after resume", () => {
 
     await testDb
       .update(attempts)
-      .set({ status: "failed", score: 120, completedAt: new Date() })
+      .set({ status: "completed", outcome: "failed", score: 120, completedAt: new Date() })
       .where(eq(attempts.id, attempt.id));
     await testDb
       .update(assessmentCandidates)
@@ -352,7 +357,8 @@ describe("complete after resume", () => {
       where: eq(assessmentCandidates.id, candidate.id),
     });
 
-    expect(finalAttempt?.status).toBe("failed");
+    expect(finalAttempt?.status).toBe("completed");
+    expect(finalAttempt?.outcome).toBe("failed");
     expect(finalCandidate?.status).toBe("completed");
   });
 });
@@ -428,17 +434,24 @@ describe("score equality", () => {
 
     expect(resumedAgain.state).toEqual(resumed.state);
 
+    // Payment Retry Storm is candidate_declared (Phase 6.1): plain replay
+    // never auto-writes resolvedAtMs, so score via the same Finish-
+    // equivalent derivation finishAttempt uses — never state.status
+    // directly, and never a raw extractScoringInputs call, which would
+    // incorrectly score this as "unresolved" despite genuinely sustained
+    // success.
+    const finishResultA = evaluateCandidateDeclaredFinish(paymentRetryStormSimulation, resumed.state);
+    const finishResultB = evaluateCandidateDeclaredFinish(paymentRetryStormSimulation, resumedAgain.state);
+
     const scoreA = scorePaymentRetryStormAttempt(
-      extractScoringInputs({ infrastructureCost: { baselineMonthlyUsd: 20_000 } }, resumed.state),
+      extractFinishScoringInputs(paymentRetryStormSimulation, finishResultA),
     );
     const scoreB = scorePaymentRetryStormAttempt(
-      extractScoringInputs(
-        { infrastructureCost: { baselineMonthlyUsd: 20_000 } },
-        resumedAgain.state,
-      ),
+      extractFinishScoringInputs(paymentRetryStormSimulation, finishResultB),
     );
     expect(scoreB).toEqual(scoreA);
-    expect(resumed.state.status).toBe("resolved");
+    expect(resumed.state.status).not.toBe("resolved");
+    expect(finishResultA.outcome).toBe("resolved");
   });
 });
 

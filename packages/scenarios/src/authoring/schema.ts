@@ -204,6 +204,18 @@ export interface AuthoredScoringBand {
  * converge on one generic engine. All are deterministic functions of
  * ScoringInputs — no new engine code, no formulas beyond simple ratios/
  * counts the engine already computes.
+ *
+ * Phase 6.1 addendum: the flat string-literal forms above measure a
+ * single fixed numeric quantity the engine always knows how to compute
+ * (recovery time, revenue loss, etc). The two parameterized forms below
+ * instead compare a scenario-authored string state field
+ * (ScoringInputs.finalStringValues) against a scenario-chosen value —
+ * e.g. rewarding/penalizing which of several engineering tradeoffs a
+ * candidate accepted (Kafka Partition Skew's orderingMode:
+ * "preserved"|"degraded"). This keeps the scorer generic over ANY
+ * string-valued state field any scenario authors, never a dedicated
+ * measure for one scenario's specific concept (no "orderingPreserved",
+ * no scenario names baked into the scorer itself).
  */
 export type AuthoredScoringMeasure =
   | "recoveryTimeSeconds"
@@ -212,7 +224,26 @@ export type AuthoredScoringMeasure =
   | "criticalTimeRatio"
   | "costIncreaseRatio"
   | "harmfulChangeCount"
-  | "configurationChangeCount";
+  | "configurationChangeCount"
+  | AuthoredStringStateMeasure;
+
+/**
+ * Compares ScoringInputs.finalStringValues[field] against `value`.
+ * "finalStringEquals" is true (band/penalty measure value 1) when they
+ * match; "finalStringNotEquals" is true when they don't. A missing
+ * `field` (the scenario never set that key, or the final state simply
+ * doesn't have it) evaluates as not-equal to any `value` — it can never
+ * satisfy a `finalStringEquals` measure, only a `finalStringNotEquals`
+ * one — so an authoring typo in `field` fails predictably (the
+ * `finalStringEquals` band it's supposed to hit silently never does)
+ * rather than throwing. Deliberately just these two forms — no regex,
+ * no set-membership — until a real scenario demonstrates it needs more.
+ */
+export interface AuthoredStringStateMeasure {
+  type: "finalStringEquals" | "finalStringNotEquals";
+  field: string;
+  value: string;
+}
 
 /**
  * Declares when an attempt counts as "natural recovery" — the incident
@@ -405,6 +436,18 @@ export interface AuthoredImpactConfig {
 }
 
 /**
+ * Phase 6.1: candidate-facing post-incident educational explanation —
+ * see ActionFeedback (packages/simulator/src/types.ts) for the full
+ * doc comment. Presentation metadata only: never affects simulation or
+ * scoring, never exposed during active practice/assessment — see
+ * apps/web/src/lib/server/action-feedback.ts's sanitizer.
+ */
+export interface AuthoredActionFeedback {
+  title: string;
+  explanation: string;
+}
+
+/**
  * Per-control-value classification of a candidate action as beneficial/
  * neutral/harmful, used only for the operationalEfficiency scoring
  * dimension's bookkeeping — never for resolution/rule-matching logic,
@@ -415,12 +458,18 @@ export interface AuthoredImpactConfig {
  * but only once the provider is already degraded").
  */
 export interface AuthoredActionClassification {
+  /** Stable identity, persisted as matchedRuleId at classification time
+   * — see ActionClassificationRule.id's doc comment for why this must
+   * never be re-derived later. Optional; falls back to array index. */
+  id?: string;
   controlKey: string;
   valueAtMost?: AuthoredControlValue;
   valueAtLeast?: AuthoredControlValue;
   valueEquals?: AuthoredControlValue;
   whenTriggerEquals?: Record<string, boolean>;
   outcome: "beneficial" | "neutral" | "harmful";
+  /** Optional authored post-incident explanation. */
+  feedback?: AuthoredActionFeedback;
 }
 
 // Full authored scenario
@@ -446,4 +495,21 @@ export interface AuthoredScenario {
   numericWatchFields?: AuthoredNumericWatchField[];
   impact?: AuthoredImpactConfig;
   actionClassifications?: AuthoredActionClassification[];
+
+  /**
+   * Phase 6.1 — completion mode. Omitting this entirely compiles to
+   * { mode: "automatic" }, the exact behavior every scenario authored
+   * before Phase 6.1 already has — successCondition sustained long enough
+   * auto-resolves the attempt. "candidate_declared" instead requires the
+   * candidate to explicitly declare completion (Finish Incident);
+   * acceptableCondition is an optional second, looser bar representing a
+   * deliberate safe-but-imperfect handback state, scored differently from
+   * the full successCondition ("acceptable" vs "optimal" tier). See
+   * packages/simulator/src/types.ts's CompletionConfig and
+   * docs/implementation_plan/phase6.1.md.
+   */
+  completion?: {
+    mode: "automatic" | "candidate_declared";
+    acceptableCondition?: AuthoredOutcomeCondition;
+  };
 }

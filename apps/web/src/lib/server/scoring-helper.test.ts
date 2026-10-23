@@ -19,6 +19,7 @@ const SAMPLE_INPUTS: ScoringInputs = {
   peakMonthlyInfrastructureCostUsd: 200,
   finalNumericValues: {},
   peakNumericValues: {},
+  finalStringValues: {},
 };
 
 /**

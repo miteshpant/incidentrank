@@ -30,25 +30,45 @@ function applyChanges() {
   fireEvent.click(screen.getByRole("button", { name: /apply changes/i }));
 }
 
+function finishIncident() {
+  fireEvent.click(screen.getByRole("button", { name: /^finish incident$/i }));
+  const dialog = screen.getByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: /^finish incident$/i }));
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   // Default to signed-out. Guest attempts never hit /api/attempts
-  // (creation/persistence), but DO request a stateless score preview once
-  // resolved/failed (see use-incident-attempt.ts) — stub fetch so that
-  // request resolves instantly rather than hitting the real network,
-  // which is both wrong for a unit test and was intermittently hanging
-  // these fake-timer tests under full-suite parallel load. See
-  // persistence.test.tsx for assertions on the score-preview request/
-  // response itself.
+  // (creation/persistence), but DO request a stateless Finish-preview
+  // evaluation once the candidate declares Finish — Payment Retry Storm
+  // is candidate_declared (Phase 6.1), so it never auto-resolves/fails
+  // via local state alone the way automatic scenarios used to; only a
+  // confirmed Finish (or a true automatic failure) reaches a result view.
+  // Stub fetch so the finish-preview request resolves instantly rather
+  // than hitting the real network. Defaults to a "resolved"/"optimal"
+  // outcome; tests that need a different outcome override this per-test.
+  // See persistence.test.tsx for assertions on the finish-preview
+  // request/response itself.
   mockAuthState.isSignedIn = false;
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/finish-preview")) {
+        return new Response(
+          JSON.stringify({
+            outcome: "resolved",
+            completionTier: "optimal",
+            score: { total: 965, breakdown: {} },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
         JSON.stringify({ score: { total: 0, breakdown: {} } }),
         { status: 200 },
-      ),
-    ),
+      );
+    }),
   );
 });
 
@@ -317,7 +337,7 @@ describe("No answer feedback", () => {
 });
 
 describe("Resolution", () => {
-  it("reaches a resolved result view after a known good mitigation sequence", () => {
+  it("reaches a resolved result view only after Finish Incident is confirmed, following a known good mitigation sequence", async () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
@@ -335,13 +355,25 @@ describe("Resolution", () => {
 
     advanceSeconds(31);
 
+    // Payment Retry Storm is candidate_declared (Phase 6.1): the engine's
+    // success condition is now genuinely, continuously satisfied, but the
+    // console must NOT reach a result view on its own.
+    expect(
+      screen.queryByText(/incident resolved/i, { selector: "span" }),
+    ).not.toBeInTheDocument();
+
+    finishIncident();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     expect(
       screen.getByText(/incident resolved/i, { selector: "span" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
   });
 
-  it("keeps candidate reasoning visible on the result screen", () => {
+  it("keeps candidate reasoning visible on the result screen", async () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
@@ -358,6 +390,11 @@ describe("Resolution", () => {
     applyChanges();
 
     advanceSeconds(31);
+
+    finishIncident();
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(
       screen.getByText(/incident resolved/i, { selector: "span" }),
@@ -440,7 +477,7 @@ describe("Try Again", () => {
 });
 
 describe("Timer cleanup", () => {
-  it("stops ticking once the incident resolves", () => {
+  it("stops ticking once the incident resolves", async () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
@@ -454,6 +491,11 @@ describe("Timer cleanup", () => {
     selectControl("Circuit Breaker", "on");
     applyChanges();
     advanceSeconds(31);
+
+    finishIncident();
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(
       screen.getByText(/incident resolved/i, { selector: "span" }),

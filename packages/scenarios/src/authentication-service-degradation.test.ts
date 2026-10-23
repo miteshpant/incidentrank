@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { authenticationServiceDegradation } from "./authentication-service-degradation";
@@ -76,13 +82,17 @@ describe("Authentication Service Degradation", () => {
     expect(state.values.authServiceStatus).toBe("critical");
   });
 
-  it("recovers cleanly by scaling auth service capacity", () => {
+  it("reaches a sustained healthy state by scaling auth service capacity (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const state = runScenario(50_000, [
       { atMs: 31_000, controlKey: AUTH_SERVICE_INSTANCES_KEY, value: 16 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
+    expect(state.resolvedAtMs).toBeNull();
     expect(state.values.authFailureRate).toBe(0.2);
+    expect(state.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      authenticationServiceDegradationSimulation.successCondition.sustainedSeconds,
+    );
   });
 
   it("bypassing signature verification makes metrics look healthy while the incidentState reflects a security regression, never recovery", () => {
@@ -190,8 +200,18 @@ describe("Authentication Service Degradation", () => {
     // already used, since "the system now accepts unverified tokens" is
     // honestly a data-integrity regression, not merely an efficiency one
     // (scoring.ts).
+    // Phase 6.1: this scenario is candidate_declared, so the engine never
+    // auto-writes resolvedAtMs — score via the same Finish-equivalent
+    // derivation finishAttempt uses for a genuinely-resolved case (good,
+    // which the audit confirmed reaches sustained success within this
+    // window), never a raw extractScoringInputs call that would
+    // incorrectly score it as "unresolved."
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(authenticationServiceDegradationSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(authenticationServiceDegradationSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(authenticationServiceDegradationSimulation, finishResult)
+          : extractScoringInputs(authenticationServiceDegradationSimulation, state);
       return scoreAuthoredAttempt(AUTHENTICATION_SERVICE_DEGRADATION_SCORING, inputs);
     }
 
@@ -199,6 +219,10 @@ describe("Authentication Service Degradation", () => {
       const good = runScenario(60_000, [
         { atMs: 31_000, controlKey: AUTH_SERVICE_INSTANCES_KEY, value: 8 },
       ]);
+      expect(good.status).not.toBe("resolved");
+      expect(good.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+        authenticationServiceDegradationSimulation.successCondition.sustainedSeconds,
+      );
       const cacheTtlPartial = runScenario(5 * 60_000, [
         { atMs: 31_000, controlKey: TOKEN_CACHE_TTL_SECONDS_KEY, value: 300 },
       ]);

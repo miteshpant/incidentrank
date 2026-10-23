@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { rateLimitFailure } from "./rate-limit-failure";
@@ -75,14 +81,18 @@ describe("Rate-Limit Failure", () => {
     expect(state.values.rateLimitStatus).toBe("critical");
   });
 
-  it("recovers cleanly with client-side rate limiting and exponential-with-jitter backoff", () => {
+  it("reaches a sustained healthy state with client-side rate limiting and exponential-with-jitter backoff (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const state = runScenario(50_000, [
       { atMs: 31_000, controlKey: CLIENT_SIDE_RATE_LIMIT_ENABLED_KEY, value: true },
       { atMs: 31_000, controlKey: RETRY_BACKOFF_STRATEGY_KEY, value: "exponential-with-jitter" },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
+    expect(state.resolvedAtMs).toBeNull();
     expect(state.values.rateLimitViolationRate).toBe(0.3);
+    expect(state.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      rateLimitFailureSimulation.successCondition.sustainedSeconds,
+    );
   });
 
   it("raising request concurrency with no backoff is harmful, not helpful", () => {
@@ -168,8 +178,17 @@ describe("Rate-Limit Failure", () => {
     // because it ended sooner than a longer-running partial.
     const FULL_ATTEMPT_MS = 12 * 60_000; // scenario's own estimatedMinutes: 12
 
+    // Phase 6.1: this scenario is candidate_declared, so the engine never
+    // auto-writes resolvedAtMs — score "good" via the same Finish-
+    // equivalent derivation finishAttempt uses (it genuinely reaches
+    // sustained success in this window), never a raw extractScoringInputs
+    // call that would incorrectly score it as "unresolved."
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(rateLimitFailureSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(rateLimitFailureSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(rateLimitFailureSimulation, finishResult)
+          : extractScoringInputs(rateLimitFailureSimulation, state);
       return scoreAuthoredAttempt(RATE_LIMIT_FAILURE_SCORING, inputs);
     }
 
@@ -178,6 +197,10 @@ describe("Rate-Limit Failure", () => {
         { atMs: 31_000, controlKey: CLIENT_SIDE_RATE_LIMIT_ENABLED_KEY, value: true },
         { atMs: 31_000, controlKey: RETRY_BACKOFF_STRATEGY_KEY, value: "exponential-with-jitter" },
       ]);
+      expect(good.status).not.toBe("resolved");
+      expect(good.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+        rateLimitFailureSimulation.successCondition.sustainedSeconds,
+      );
 
       // Neither partial ever crosses the failure condition's threshold
       // (40) or satisfies the success condition, so both run the full

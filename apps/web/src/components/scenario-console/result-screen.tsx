@@ -1,11 +1,16 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SignInButton } from "@clerk/nextjs";
 import type { SimulationState } from "@incidentrank/simulator";
 import type { CandidateUIDescriptor } from "@incidentrank/scenarios";
 import type { CandidateActionGroup } from "@/lib/use-incident-attempt";
-import type { ServerScoreResult } from "@/lib/attempt-persistence";
+import {
+  requestActionFeedback,
+  type ActionFeedbackGroup,
+  type ServerScoreResult,
+} from "@/lib/attempt-persistence";
 import { formatElapsed, formatNumber, formatUsd } from "@/lib/format";
 
 const SEVERITY_RANK_LABEL = ["Normal", "Warning", "Critical"];
@@ -33,8 +38,28 @@ interface GenericResultScreenProps {
   actionGroups: CandidateActionGroup[];
   descriptor: CandidateUIDescriptor;
   serverScore: ServerScoreResult | null;
+  /** True if the server-side scoring request failed and serverScore will
+   * never arrive without a retry — see use-incident-attempt.ts's
+   * scoringError/retryScoring. */
+  scoringError?: boolean;
+  retryScoring?: () => void;
+  /** The authoritative terminal outcome — see use-incident-attempt.ts's
+   * IncidentOutcome doc comment for why this, not state.status, is the
+   * field to render from (a candidate_declared scenario's engine never
+   * locally produces "resolved"; only a successful Finish does). */
+  outcome: "resolved" | "failed" | "declared_unstable" | null;
+  completionTier: "optimal" | "acceptable" | null;
   onTryAgain: () => void;
   showSignInNudge: boolean;
+  /** Phase 6.1 "Post-Incident Practice Explanation": the persisted
+   * attempt id, if one exists (signed-in practice only — see
+   * use-incident-attempt.ts's attemptId). When present, this component
+   * fetches authored per-action feedback once mounted (mounting this
+   * component already means the attempt reached a terminal phase,
+   * satisfying the review endpoint's terminal-only gate) and reveals it
+   * alongside each action group. Null for anonymous practice, which has
+   * no persisted attempt to review. */
+  attemptId?: string | null;
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
@@ -49,9 +74,17 @@ function StatRow({ label, value }: { label: string; value: string }) {
 function ActionGroupCard({
   group,
   descriptor,
+  feedbackGroup,
 }: {
   group: CandidateActionGroup;
   descriptor: CandidateUIDescriptor;
+  /** Phase 6.1: the matching reviewed group, if the post-incident review
+   * fetch has completed — matched by elapsedMs, which uniquely
+   * identifies a candidate's decision within one attempt. Undefined
+   * while loading/unavailable (e.g. anonymous practice); each change's
+   * `feedback` is independently nullable (a matched classification rule
+   * with no authored feedback). */
+  feedbackGroup?: ActionFeedbackGroup;
 }) {
   const controlLabel = (controlKey: string): string =>
     descriptor.controls.find((c) => c.key === controlKey)?.label ?? controlKey;
@@ -59,6 +92,8 @@ function ActionGroupCard({
     const control = descriptor.controls.find((c) => c.key === controlKey);
     return control?.valueLabels?.[String(value)] ?? String(value);
   };
+  const feedbackFor = (controlKey: string) =>
+    feedbackGroup?.changes.find((c) => c.controlKey === controlKey)?.feedback ?? null;
 
   return (
     <li className="rounded-md border border-border bg-surface p-4">
@@ -85,6 +120,19 @@ function ActionGroupCard({
           <span className="italic">&ldquo;{group.reasoning}&rdquo;</span>
         </p>
       )}
+      {group.changes.map((change) => {
+        const feedback = feedbackFor(change.controlKey);
+        if (!feedback) return null;
+        return (
+          <div key={`feedback-${change.controlKey}`} className="mt-3 border-t border-border pt-3">
+            <span className="font-mono text-[10px] uppercase tracking-wide text-muted">
+              What happened afterward
+            </span>
+            <p className="mt-1 text-sm font-medium">{feedback.title}</p>
+            <p className="mt-1 text-sm text-muted">{feedback.explanation}</p>
+          </div>
+        );
+      })}
     </li>
   );
 }
@@ -101,20 +149,63 @@ function ActionGroupCard({
  * flight, this renders a "Scoring…" placeholder rather than a locally
  * computed number — the browser never owns scoring, even temporarily.
  */
+const OUTCOME_LABEL: Record<"resolved" | "failed" | "declared_unstable", string> = {
+  resolved: "Incident Resolved",
+  failed: "Incident Failed",
+  declared_unstable: "Incident Not Fully Stabilized",
+};
+
 export function GenericResultScreen({
   state,
   actionGroups,
   descriptor,
   serverScore,
+  scoringError,
+  retryScoring,
+  outcome,
+  completionTier,
   onTryAgain,
   showSignInNudge,
+  attemptId,
 }: GenericResultScreenProps) {
-  const resolved = state.status === "resolved";
+  // Fall back to state.status for an automatic scenario or any legacy
+  // caller that doesn't yet pass outcome explicitly — but the outcome
+  // prop is authoritative whenever present, since it's the only field
+  // that correctly represents a candidate_declared scenario's
+  // declared_unstable result (state.status alone cannot).
+  const effectiveOutcome = outcome ?? (state.status === "resolved" || state.status === "failed"
+    ? state.status
+    : "declared_unstable");
+  const resolved = effectiveOutcome === "resolved";
+
+  // Phase 6.1 "Post-Incident Practice Explanation": fetched only once
+  // this component is mounted (i.e. the attempt has already reached a
+  // terminal phase) and only when a persisted attemptId exists
+  // (signed-in practice). The server independently re-enforces
+  // practice-only + terminal-only regardless of when this fires.
+  const [feedbackGroups, setFeedbackGroups] = useState<ActionFeedbackGroup[] | null>(null);
+  useEffect(() => {
+    if (!attemptId) return;
+    let cancelled = false;
+    void requestActionFeedback(attemptId).then((result) => {
+      if (cancelled) return;
+      if (!("error" in result)) setFeedbackGroups(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [attemptId]);
+  const feedbackGroupByElapsedMs = new Map(
+    (feedbackGroups ?? []).map((group) => [group.elapsedMs, group]),
+  );
+
   const recoveryTimeMs =
     state.incidentStartedAtMs !== null &&
     (state.resolvedAtMs !== null || state.failedAtMs !== null)
       ? (state.resolvedAtMs ?? state.failedAtMs ?? 0) - state.incidentStartedAtMs
-      : 0;
+      : state.incidentStartedAtMs !== null
+        ? state.simulationTimeMs - state.incidentStartedAtMs
+        : 0;
 
   const peakNumericEntries = Object.entries(state.peaks.peakValues).filter(
     ([key]) => key in state.values,
@@ -128,8 +219,22 @@ export function GenericResultScreen({
             resolved ? "text-accent" : "text-[#dc2626]"
           }`}
         >
-          {resolved ? "Incident Resolved" : "Incident Failed"}
+          {OUTCOME_LABEL[effectiveOutcome]}
         </span>
+
+        {effectiveOutcome === "declared_unstable" && (
+          <p className="mt-2 text-sm text-muted">
+            You ended the incident while important reliability conditions were
+            still degraded.
+          </p>
+        )}
+
+        {resolved && completionTier === "acceptable" && (
+          <p className="mt-2 text-sm text-muted">
+            The system reached a stable, acceptable handback state — some
+            metrics remained imperfect by design.
+          </p>
+        )}
 
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">
           Incident Result
@@ -158,6 +263,21 @@ export function GenericResultScreen({
                 ))}
               </dl>
             </>
+          ) : scoringError ? (
+            <div className="mt-1">
+              <p className="text-sm text-[#dc2626]">
+                We couldn&apos;t load your score. Your attempt was saved.
+              </p>
+              {retryScoring && (
+                <button
+                  type="button"
+                  onClick={retryScoring}
+                  className="mt-2 rounded-md border border-border px-3 py-1.5 font-mono text-xs transition-colors hover:border-foreground/40"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
           ) : (
             <p className="mt-1 text-sm text-muted">Scoring…</p>
           )}
@@ -165,7 +285,13 @@ export function GenericResultScreen({
 
         <div className="mt-6 rounded-lg border border-border bg-surface p-6">
           <StatRow
-            label={resolved ? "Recovery Time" : "Time to Failure"}
+            label={
+              effectiveOutcome === "resolved"
+                ? "Recovery Time"
+                : effectiveOutcome === "failed"
+                  ? "Time to Failure"
+                  : "Time to Declaration"
+            }
             value={formatElapsed(recoveryTimeMs)}
           />
           <StatRow
@@ -211,7 +337,12 @@ export function GenericResultScreen({
             </h2>
             <ol className="mt-3 flex flex-col gap-3">
               {actionGroups.map((group) => (
-                <ActionGroupCard key={group.id} group={group} descriptor={descriptor} />
+                <ActionGroupCard
+                  key={group.id}
+                  group={group}
+                  descriptor={descriptor}
+                  feedbackGroup={feedbackGroupByElapsedMs.get(group.elapsedMs)}
+                />
               ))}
             </ol>
           </div>

@@ -1,6 +1,7 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { scoreAuthoredAttempt } from "./authoring/score";
 import { slowQueryRegression } from "./slow-query-regression";
 import {
   CONNECTION_POOL_SIZE_KEY,
@@ -8,6 +9,7 @@ import {
   QUERY_TIMEOUT_MS_KEY,
   slowQueryRegressionSimulation,
 } from "./slow-query-regression/definition";
+import { SLOW_QUERY_REGRESSION_SCORING } from "./slow-query-regression/scoring";
 
 interface TimedAction {
   atMs: number;
@@ -142,5 +144,85 @@ describe("Slow Query Regression", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  describe("scoring path", () => {
+    // Plain automatic completion (no `completion` field on definition.ts),
+    // so the engine auto-writes resolvedAtMs/failedAtMs itself and a raw
+    // extractScoringInputs(simulation, state) call is correct — no
+    // evaluateCandidateDeclaredFinish/extractFinishScoringInputs needed.
+    //
+    // Trigger fires at 30_000ms (see "regresses critically..." above).
+    // failureCondition needs 60s sustained cpuUtilization>=90, which first
+    // becomes true once the critical/harmful rule values apply, so the
+    // earliest a sustained-failure completes is ~91_000ms. 85_000ms keeps
+    // every non-resolving sequence in the "unresolved" bucket (not
+    // "failed") for a fair, apples-to-apples comparison against each
+    // other, while the good sequence is independently resolved by then.
+    const UNTIL_MS = 85_000;
+
+    function scoreFor(actions: TimedAction[]) {
+      const state = runScenario(UNTIL_MS, actions);
+      const inputs = extractScoringInputs(slowQueryRegressionSimulation, state);
+      return scoreAuthoredAttempt(SLOW_QUERY_REGRESSION_SCORING, inputs).total;
+    }
+
+    it("scores the full index-hint recovery as a perfect run", () => {
+      const state = runScenario(UNTIL_MS, [
+        { atMs: 31_000, controlKey: FORCE_INDEX_HINT_ENABLED_KEY, value: true },
+      ]);
+      expect(state.status).toBe("resolved");
+
+      const inputs = extractScoringInputs(slowQueryRegressionSimulation, state);
+      const result = scoreAuthoredAttempt(SLOW_QUERY_REGRESSION_SCORING, inputs);
+      expect(result.total).toBe(1000);
+    });
+
+    it("ranks good recovery above doing nothing, doing nothing above the masking timeout, and the masking timeout above the harmful pool-scaling trap", () => {
+      // good: forcing the index hint resolves the regression outright
+      // (rules.ts "index-hint-recovery") well before UNTIL_MS.
+      const goodScore = scoreFor([
+        { atMs: 31_000, controlKey: FORCE_INDEX_HINT_ENABLED_KEY, value: true },
+      ]);
+
+      // baseline: no action at all — "regression-critical-default"
+      // (cpuUtilization 95), still unresolved at UNTIL_MS.
+      const baselineScore = scoreFor([]);
+
+      // harmful: scaling the connection pool to >=100 while the index
+      // hint stays off hits "pool-scaled-without-index-hint-harmful"
+      // (cpuUtilization 98, queryStatus critical) — explicitly classified
+      // "harmful" in action-classifications.ts, and also the costliest
+      // infrastructure change of the three (pool 100 raises monthly cost,
+      // crushing costEfficiency on top of the operationalEfficiency
+      // harmfulChangeCount penalty).
+      const harmfulScore = scoreFor([
+        { atMs: 31_000, controlKey: CONNECTION_POOL_SIZE_KEY, value: 100 },
+      ]);
+
+      // masking partial: an aggressive queryTimeoutMs<=1000 hits
+      // "aggressive-timeout-masks-symptom" (cpuUtilization 70,
+      // queryStatus "warning") — queued queries stay low so the
+      // dashboard looks contained, but the regression itself is never
+      // fixed. This action is also classified "harmful" in
+      // action-classifications.ts (it carries its own
+      // harmfulChangeCount penalty), but unlike pool-scaling it carries
+      // no infrastructure cost increase, and its resulting cpuUtilization
+      // (70) never approaches the failureCondition threshold (90).
+      const maskedPartialScore = scoreFor([
+        { atMs: 31_000, controlKey: QUERY_TIMEOUT_MS_KEY, value: 1_000 },
+      ]);
+
+      // Real, verified ordering (not an assumed universal pattern): the
+      // masking partial scores BELOW doing nothing, because it is itself
+      // an authored-harmful action (operationalEfficiency penalty) even
+      // though its surface metrics look calmer than the untouched
+      // baseline. And it still beats the pool-scaling trap because that
+      // trap additionally wrecks costEfficiency via a real infrastructure
+      // cost increase.
+      expect(goodScore).toBeGreaterThan(baselineScore);
+      expect(baselineScore).toBeGreaterThan(maskedPartialScore);
+      expect(maskedPartialScore).toBeGreaterThan(harmfulScore);
+    });
   });
 });

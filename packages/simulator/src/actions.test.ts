@@ -27,12 +27,18 @@ describe("isValidControlValue", () => {
 
 const classifications: ActionClassificationRule[] = [
   {
+    id: "retries-low-beneficial",
     controlKey: "retries",
     valueAtMost: 1,
     whenTriggerEquals: { providerDegraded: true },
     outcome: "beneficial",
+    feedback: {
+      title: "Reduced retry amplification",
+      explanation: "Lowering retries reduced pressure on the degraded provider.",
+    },
   },
   {
+    // No authored id — must fall back to its array index (1).
     controlKey: "retries",
     valueAtLeast: 5,
     whenTriggerEquals: { providerDegraded: true },
@@ -41,27 +47,27 @@ const classifications: ActionClassificationRule[] = [
 ];
 
 describe("classifyAction", () => {
-  it("classifies a beneficial action from authored metadata", () => {
+  it("classifies a beneficial action from authored metadata, returning the matched rule's id", () => {
     expect(
       classifyAction(classifications, "retries", 1, { providerDegraded: true }),
-    ).toBe("beneficial");
+    ).toEqual({ outcome: "beneficial", matchedRuleId: "retries-low-beneficial" });
   });
 
-  it("classifies a harmful action from authored metadata", () => {
+  it("classifies a harmful action from authored metadata, falling back to array index when the rule has no id", () => {
     expect(
       classifyAction(classifications, "retries", 5, { providerDegraded: true }),
-    ).toBe("harmful");
+    ).toEqual({ outcome: "harmful", matchedRuleId: "1" });
   });
 
-  it("defaults to neutral when no classification matches", () => {
+  it("defaults to neutral with a null matchedRuleId when no classification matches", () => {
     expect(
       classifyAction(classifications, "retries", 3, { providerDegraded: true }),
-    ).toBe("neutral");
+    ).toEqual({ outcome: "neutral", matchedRuleId: null });
   });
 
   it("does not match a classification authored for a different trigger state", () => {
     expect(
       classifyAction(classifications, "retries", 1, { providerDegraded: false }),
-    ).toBe("neutral");
+    ).toEqual({ outcome: "neutral", matchedRuleId: null });
   });
 });

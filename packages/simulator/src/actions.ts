@@ -15,6 +15,16 @@ export function isValidControlValue(
   return control.allowedValues.includes(value);
 }
 
+export interface ActionClassificationResult {
+  outcome: ActionOutcome;
+  /** Identity of the matched rule (rule.id, falling back to its array
+   * index when the rule has no authored id), or null when no rule
+   * matched (outcome defaulted to "neutral"). Persisted at classification
+   * time — see ActionFeedback's doc comment for why this must never be
+   * re-derived later by re-running classification against final state. */
+  matchedRuleId: string | null;
+}
+
 /**
  * Classifies an accepted action as beneficial/neutral/harmful using
  * authored scenario metadata. Never inferred from a performance model.
@@ -24,8 +34,9 @@ export function classifyAction(
   controlKey: string,
   value: ControlValue,
   triggers: Record<string, boolean>,
-): ActionOutcome {
-  for (const rule of classifications) {
+): ActionClassificationResult {
+  for (let index = 0; index < classifications.length; index += 1) {
+    const rule = classifications[index]!;
     if (rule.controlKey !== controlKey) continue;
 
     if (rule.whenTriggerEquals) {
@@ -55,8 +66,8 @@ export function classifyAction(
       continue;
     }
 
-    return rule.outcome;
+    return { outcome: rule.outcome, matchedRuleId: rule.id ?? String(index) };
   }
 
-  return "neutral";
+  return { outcome: "neutral", matchedRuleId: null };
 }

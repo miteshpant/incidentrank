@@ -17,6 +17,21 @@ const STATUS_LABEL: Record<string, string> = {
   abandoned: "Abandoned",
 };
 
+// Mirrors GenericResultScreen's OUTCOME_LABEL (scenario-console/result-screen.tsx)
+// so the org-facing label for a given outcome always matches what the
+// candidate themselves saw.
+const OUTCOME_LABEL: Record<string, string> = {
+  resolved: "Resolved",
+  failed: "Failed",
+  declared_unstable: "Not Fully Stabilized",
+  timed_out: "Timed Out",
+};
+
+const COMPLETION_TIER_LABEL: Record<string, string> = {
+  optimal: "Optimal",
+  acceptable: "Acceptable",
+};
+
 const SCORE_DIMENSION_LABELS: Array<{
   key: keyof typeof SCORE_MAX;
   field: keyof typeof attempts.$inferSelect;
@@ -141,6 +156,39 @@ export async function CandidateResult({
               </div>
             ))}
           </dl>
+        </div>
+      )}
+
+      {attempt.outcome !== null && (
+        <div className="mt-6 rounded-lg border border-border bg-surface p-6">
+          <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+            Completion Declaration
+          </p>
+          <div className="mt-2 flex justify-between text-sm">
+            <span className="text-muted">Outcome</span>
+            <span className="font-mono">
+              {OUTCOME_LABEL[attempt.outcome] ?? attempt.outcome}
+            </span>
+          </div>
+          {attempt.completionTier !== null && (
+            <div className="mt-2 flex justify-between text-sm">
+              <span className="text-muted">Completion Tier</span>
+              <span className="font-mono">
+                {COMPLETION_TIER_LABEL[attempt.completionTier] ?? attempt.completionTier}
+              </span>
+            </div>
+          )}
+          {attempt.completionNote && (
+            <p className="mt-3 text-sm text-muted">
+              <span className="font-mono text-[10px] uppercase tracking-wide">
+                Candidate&rsquo;s Note
+              </span>
+              <br />
+              <span className="italic">
+                &ldquo;{attempt.completionNote}&rdquo;
+              </span>
+            </p>
+          )}
         </div>
       )}
 

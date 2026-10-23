@@ -1,4 +1,10 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  evaluateCompletionEligibility,
+  extractFinishScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { kafkaPartitionSkew } from "./kafka-partition-skew";
@@ -8,6 +14,8 @@ import {
   PARTITION_COUNT_KEY,
   PARTITION_KEY_STRATEGY_KEY,
 } from "./kafka-partition-skew/definition";
+import { KAFKA_PARTITION_SKEW_SCORING } from "./kafka-partition-skew/scoring";
+import { scoreAuthoredAttempt } from "./authoring/score";
 
 interface TimedAction {
   atMs: number;
@@ -64,6 +72,7 @@ describe("Kafka Partition Skew", () => {
     expect(state.status).toBe("healthy");
     expect(state.values.hotPartitionLagMessages).toBe(150);
     expect(state.values.partitionStatus).toBe("normal");
+    expect(state.values.orderingMode).toBe("preserved");
   });
 
   it("the hot partition becomes critical while aggregate utilization still looks moderate", () => {
@@ -90,15 +99,20 @@ describe("Kafka Partition Skew", () => {
     expect(scaledButStillSkewed.values.idleConsumerCount).toBeGreaterThan(0);
   });
 
-  it("recovers cleanly when the hot key is salted and enough partitions exist", () => {
+  it("reaches a sustained healthy state when the hot key is salted and enough partitions exist (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const state = runScenario(50_000, [
       { atMs: 31_000, controlKey: PARTITION_KEY_STRATEGY_KEY, value: "tenant-id-salted" },
       { atMs: 31_000, controlKey: PARTITION_COUNT_KEY, value: 8 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
+    expect(state.resolvedAtMs).toBeNull();
     expect(state.values.hotPartitionLagMessages).toBe(80);
     expect(state.values.idleConsumerCount).toBe(0);
+    expect(state.values.orderingMode).toBe("preserved");
+    expect(state.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      kafkaPartitionSkewSimulation.successCondition.sustainedSeconds,
+    );
   });
 
   it("round-robin keying also drains the hot-partition lag but carries an ordering tradeoff", () => {
@@ -108,7 +122,75 @@ describe("Kafka Partition Skew", () => {
 
     expect(state.values.hotPartitionLagMessages).toBe(120);
     expect(state.values.partitionStatus).toBe("warning");
+    expect(state.values.orderingMode).toBe("degraded");
     expect(state.status).not.toBe("critical");
+  });
+
+  describe("Phase 6.1: two-tier completion — salted-key (optimal) vs round-robin (acceptable, ordering tradeoff)", () => {
+    it("salted key with enough partitions, sustained, is eligible for an OPTIMAL-tier Finish", () => {
+      const state = runScenario(50_000, [
+        { atMs: 31_000, controlKey: PARTITION_KEY_STRATEGY_KEY, value: "tenant-id-salted" },
+        { atMs: 31_000, controlKey: PARTITION_COUNT_KEY, value: 8 },
+      ]);
+
+      expect(state.status).not.toBe("resolved");
+      const eligibility = evaluateCompletionEligibility(kafkaPartitionSkewSimulation, state);
+      expect(eligibility).toEqual({ eligible: true, tier: "optimal" });
+    });
+
+    it("round-robin, sustained, is eligible for an ACCEPTABLE-tier Finish — a legitimate resolution, not a trap", () => {
+      const state = runScenario(50_000, [
+        { atMs: 31_000, controlKey: PARTITION_KEY_STRATEGY_KEY, value: "round-robin" },
+      ]);
+
+      expect(state.status).not.toBe("resolved");
+      const eligibility = evaluateCompletionEligibility(kafkaPartitionSkewSimulation, state);
+      expect(eligibility).toEqual({ eligible: true, tier: "acceptable" });
+    });
+
+    it("more-partitions-still-skewed (unsalted) remains ineligible for any Finish tier — throughput never actually recovers", () => {
+      const state = runScenario(50_000, [
+        { atMs: 31_000, controlKey: PARTITION_COUNT_KEY, value: 16 },
+      ]);
+
+      expect(state.status).not.toBe("resolved");
+      expect(state.values.hotPartitionLagMessages).toBe(6_000);
+      const eligibility = evaluateCompletionEligibility(kafkaPartitionSkewSimulation, state);
+      expect(eligibility).toEqual({ eligible: false });
+    });
+
+    it("both salted-key and round-robin remain resolved via Finish, but salted-key scores higher on dataIntegrity (the intended dimension)", () => {
+      const saltedKey = runScenario(50_000, [
+        { atMs: 31_000, controlKey: PARTITION_KEY_STRATEGY_KEY, value: "tenant-id-salted" },
+        { atMs: 31_000, controlKey: PARTITION_COUNT_KEY, value: 8 },
+      ]);
+      const roundRobin = runScenario(50_000, [
+        { atMs: 31_000, controlKey: PARTITION_KEY_STRATEGY_KEY, value: "round-robin" },
+      ]);
+
+      const saltedKeyFinish = evaluateCandidateDeclaredFinish(kafkaPartitionSkewSimulation, saltedKey);
+      const roundRobinFinish = evaluateCandidateDeclaredFinish(kafkaPartitionSkewSimulation, roundRobin);
+
+      // Both are genuinely resolved — round-robin is a legitimate
+      // accepted tradeoff, never a trap that silently fails Finish.
+      expect(saltedKeyFinish.outcome).toBe("resolved");
+      expect(saltedKeyFinish.completionTier).toBe("optimal");
+      expect(roundRobinFinish.outcome).toBe("resolved");
+      expect(roundRobinFinish.completionTier).toBe("acceptable");
+
+      const saltedKeyScore = scoreAuthoredAttempt(
+        KAFKA_PARTITION_SKEW_SCORING,
+        extractFinishScoringInputs(kafkaPartitionSkewSimulation, saltedKeyFinish),
+      );
+      const roundRobinScore = scoreAuthoredAttempt(
+        KAFKA_PARTITION_SKEW_SCORING,
+        extractFinishScoringInputs(kafkaPartitionSkewSimulation, roundRobinFinish),
+      );
+
+      expect(saltedKeyScore.breakdown.dataIntegrity).toBeGreaterThan(
+        roundRobinScore.breakdown.dataIntegrity,
+      );
+    });
   });
 
   it("salting the key without enough partitions is only a partial improvement", () => {

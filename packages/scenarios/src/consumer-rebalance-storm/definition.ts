@@ -5,6 +5,7 @@ import { controls } from "./controls";
 import { initialValues } from "./metrics";
 import { rebalanceRules } from "./rules";
 import {
+  acceptableCondition,
   failureCondition,
   infrastructureCost,
   revenueLossRatePerMinute,
@@ -61,4 +62,12 @@ export const consumerRebalanceStormSimulation: ScenarioSimulationDefinition = {
   successCondition,
   failureCondition,
   actionClassifications,
+  // Phase 6.1: candidate-declared completion WITH an acceptable tier.
+  // Per the state audit, blue-green-deploy-strategy-only is a genuine,
+  // bounded, non-trap tradeoff (see acceptableCondition's doc comment in
+  // revenue-and-cost.ts) — this scenario's candidate-declared value is
+  // exactly the two-tier judgment Phase 6.1's acceptableCondition model
+  // exists for: the system can be operationally healthy while accepting
+  // a known, named risk, not merely "fixed or not fixed."
+  completion: { mode: "candidate_declared", acceptableCondition },
 };

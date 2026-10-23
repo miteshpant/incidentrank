@@ -33,6 +33,28 @@ export const successCondition: SuccessCondition = {
   conditions: [
     { key: "hotPartitionLagMessages", operator: "less_than_or_equal", comparedTo: 300 },
     { key: "partitionStatus", operator: "not_equals", comparedTo: "critical" },
+    // Phase 6.1: the optimal tier is specifically the salted-key fix,
+    // which preserves per-tenant ordering. Round-robin fully clears the
+    // throughput/lag bars too but sacrifices ordering — that's the
+    // acceptableCondition tier below, not optimal.
+    { key: "orderingMode", operator: "equals", comparedTo: "preserved" },
+  ],
+  sustainedSeconds: 15,
+};
+
+/**
+ * Phase 6.1 candidate_declared acceptable tier: round-robin keying is a
+ * genuine, bounded engineering tradeoff — it fully clears the same
+ * throughput/lag/status bars as the optimal salted-key fix, but sets
+ * orderingMode="degraded" (per-tenant ordering is no longer guaranteed).
+ * This is a real accepted risk, not a disguised unsafe state — see
+ * rules.ts's round-robin-recovers-with-ordering-tradeoff.
+ */
+export const acceptableCondition: SuccessCondition = {
+  conditions: [
+    { key: "hotPartitionLagMessages", operator: "less_than_or_equal", comparedTo: 300 },
+    { key: "partitionStatus", operator: "not_equals", comparedTo: "critical" },
+    { key: "orderingMode", operator: "equals", comparedTo: "degraded" },
   ],
   sustainedSeconds: 15,
 };

@@ -105,8 +105,37 @@ export const saturationRules: Rule[] = [
     componentHealth: criticalHealth,
   },
 
+  // ── Partial improvement, with a visible precursor: pool scaled, but
+  // reads still compete with writes on the primary (no replica offload),
+  // AND background batch demand is already visibly accumulating
+  // (queuedConnections climbing from 40 to 165, candidate-visible on the
+  // metrics panel) — the honest signal that this pool-only mitigation is
+  // not yet durable, before the batch job fully engages. Ordered before
+  // the plain scaled-pool-only rule below (more specific: additionally
+  // requires batchPressureRising) and after batch-job-overwhelms-pool-only
+  // (which wins once the batch job fully engages).
+  {
+    id: "batch-pressure-rising-pool-only",
+    when: {
+      triggerEquals: { saturating: true, batchPressureRising: true },
+      controlAtLeast: { [POOL_SIZE_KEY]: 100 },
+      controlEquals: { [READ_REPLICA_ENABLED_KEY]: false },
+    },
+    incidentState: "degraded-batch-pressure-rising",
+    values: {
+      connectionUsage: 84,
+      requestLatencyMs: 1_350,
+      errorRate: 4.5,
+      queuedConnections: 165,
+      dbStatus: "warning",
+    },
+    componentHealth: degradedHealth,
+  },
+
   // ── Partial improvement: pool scaled, but reads still compete with
-  // writes on the primary (no replica offload).
+  // writes on the primary (no replica offload). Only reachable before
+  // batchPressureRising fires (t<3min) — after that, the rising-pressure
+  // tier above or the full batch-job-overwhelms-pool-only tier applies.
   {
     id: "scaled-pool-only",
     when: {

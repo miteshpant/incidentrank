@@ -1,6 +1,7 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { scoreAuthoredAttempt } from "./authoring/score";
 import { databaseLockContention } from "./database-lock-contention";
 import {
   BATCH_JOB_CHUNK_SIZE_KEY,
@@ -8,6 +9,7 @@ import {
   databaseLockContentionSimulation,
   LOCK_TIMEOUT_MS_KEY,
 } from "./database-lock-contention/definition";
+import { DATABASE_LOCK_CONTENTION_SCORING } from "./database-lock-contention/scoring";
 
 interface TimedAction {
   atMs: number;
@@ -160,5 +162,137 @@ describe("Database Lock Contention", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  describe("scoring orders good > {baseline, partial} > harmful", () => {
+    // Database Lock Contention is plain "automatic" completion mode
+    // (definition.ts sets no `completion` field at all, so tick.ts's
+    // `scenario.completion?.mode ?? "automatic"` default applies) — the
+    // engine auto-writes resolvedAtMs once successCondition has been
+    // sustained for successCondition.sustainedSeconds (15s), so a direct
+    // extractScoringInputs(simulation, state) call is correct; no
+    // evaluateCandidateDeclaredFinish/extractFinishScoringInputs dance is
+    // needed here.
+
+    // Good: small-chunks-low-concurrency-recovery (rules.ts) —
+    // chunk size <= 100 AND concurrency <= 2 while the batch job is
+    // running drops blockedTransactions to 2 and lockStatus to "normal",
+    // satisfying successCondition (blockedTransactions <= 5,
+    // timedOutTransactions == 0, lockStatus != "critical") once sustained
+    // for 15s, so the engine auto-resolves.
+    const goodActions: TimedAction[] = [
+      { atMs: 31_000, controlKey: BATCH_JOB_CHUNK_SIZE_KEY, value: 100 },
+      { atMs: 31_000, controlKey: BATCH_JOB_CONCURRENCY_KEY, value: 2 },
+    ];
+
+    // Partial: smaller-chunks-only (rules.ts) — chunk size reduced to
+    // <= 1_000 but concurrency left at its initial value of 4. Less lock
+    // time per transaction, but still many concurrent lock holders, so
+    // blockedTransactions settles at 55 (above the successCondition's
+    // <= 5 bar, but below failureCondition's >= 150 bar) and lockStatus
+    // stays "warning" — a genuine, distinct partial-improvement rule
+    // state that never reaches resolved *or* failed; it idles in
+    // "degraded" for the run.
+    const partialActions: TimedAction[] = [
+      { atMs: 31_000, controlKey: BATCH_JOB_CHUNK_SIZE_KEY, value: 1_000 },
+    ];
+
+    // Harmful: oversized-chunks-harmful (rules.ts) and the matching
+    // action-classifications.ts entry (chunkSize >= 50_000 while
+    // batchJobRunning is "harmful") — a much larger chunk size holds
+    // each row lock far longer, worsening blocking to 340 blocked
+    // transactions versus the unmitigated baseline's 180.
+    const harmfulActions: TimedAction[] = [
+      { atMs: 31_000, controlKey: BATCH_JOB_CHUNK_SIZE_KEY, value: 50_000 },
+    ];
+
+    // Baseline: no candidate actions at all. contention-critical-default
+    // (rules.ts) holds blockedTransactions at 180, which is >= 150 and
+    // once sustained 60s (failureCondition.sustainedSeconds) drives the
+    // incident to failed.
+    const FAIL_WINDOW_MS = 30_000 + 61_000;
+
+    const goodState = runScenario(50_000, goodActions);
+    const partialState = runScenario(FAIL_WINDOW_MS, partialActions);
+    const harmfulState = runScenario(FAIL_WINDOW_MS, harmfulActions);
+    const baselineState = runScenario(FAIL_WINDOW_MS);
+
+    it("reaches the expected terminal/incident states for each sequence", () => {
+      expect(goodState.status).toBe("resolved");
+      // 55 blocked transactions clears successCondition's unresolved bar
+      // but never crosses failureCondition's >= 150 bar either, so the
+      // partial sequence genuinely idles mid-incident rather than ever
+      // terminating.
+      expect(partialState.status).toBe("degraded");
+      expect(harmfulState.status).toBe("failed");
+      expect(baselineState.status).toBe("failed");
+    });
+
+    const goodScore = scoreAuthoredAttempt(
+      DATABASE_LOCK_CONTENTION_SCORING,
+      extractScoringInputs(databaseLockContentionSimulation, goodState),
+    );
+    const partialScore = scoreAuthoredAttempt(
+      DATABASE_LOCK_CONTENTION_SCORING,
+      extractScoringInputs(databaseLockContentionSimulation, partialState),
+    );
+    const harmfulScore = scoreAuthoredAttempt(
+      DATABASE_LOCK_CONTENTION_SCORING,
+      extractScoringInputs(databaseLockContentionSimulation, harmfulState),
+    );
+    const baselineScore = scoreAuthoredAttempt(
+      DATABASE_LOCK_CONTENTION_SCORING,
+      extractScoringInputs(databaseLockContentionSimulation, baselineState),
+    );
+
+    it("scores the clean recovery (good) above the partial-improvement trap state", () => {
+      // good = 965 (resolved: full recovery/reliability credit, since
+      // recoveryTimeSeconds/criticalTimeRatio only zero out via
+      // terminalOverrides on failed/unresolved); partial = 515
+      // (unresolved, so terminalOverrides zero out recovery and
+      // reliability entirely).
+      expect(goodScore.total).toBeGreaterThan(partialScore.total);
+    });
+
+    it("scores the never-resolving partial sequence the same as doing nothing", () => {
+      // Both land on recovery=0 and reliability=0 via `unresolved`/
+      // `failed` terminalOverrides respectively, and both land in
+      // customerImpact's top `atMost: 5_000` band (revenueLossUsd ~102
+      // for partial vs. ~362 for baseline over this short window — a
+      // real difference the bands are simply too coarse to reflect).
+      // operationalEfficiency is identical too: neither sequence trips
+      // any harmfulChangeCount/configurationChangeCount penalty, so both
+      // keep its full 50 points. There is no distinct "partial beats
+      // baseline" tier for this scenario — reducing only the chunk size
+      // measurably shrinks blockedTransactions (55 vs. 180) but never
+      // earns more scoring credit than taking no action at all, because
+      // it never crosses into a scored-differently terminal state.
+      expect(partialScore.total).toBe(baselineScore.total);
+    });
+
+    it("scores the oversized-chunk harmful trap below the unmitigated baseline failure", () => {
+      // Both harmful and baseline fail (recovery=0, reliability=0 via
+      // the `failed` terminalOverrides), and customerImpact is tied at
+      // 200 for both (561.67 and 361.66 revenueLossUsd both land inside
+      // the same top `atMost: 5_000` band — again too coarse to show the
+      // real difference from "severe-contention" at 550/min vs.
+      // "contending" at 350/min in revenue-and-cost.ts). The one axis
+      // that *does* differ is operationalEfficiency: the harmful chunk
+      // size >= 50_000 action matches action-classifications.ts's
+      // "harmful" outcome, tripping scoring.ts's
+      // `harmfulChangeCount atLeast: 1 -> subtractPoints: 15` penalty
+      // (harmful = 35 vs. baseline's untouched 50), which is exactly
+      // scoring.ts's intent ("a plausible-but-harmful mitigation must
+      // score worse than inaction").
+      expect(harmfulScore.total).toBeLessThan(baselineScore.total);
+      expect(harmfulScore.breakdown.operationalEfficiency).toBeLessThan(
+        baselineScore.breakdown.operationalEfficiency,
+      );
+    });
+
+    it("scores the clean recovery (good) above every other sequence", () => {
+      expect(goodScore.total).toBeGreaterThan(baselineScore.total);
+      expect(goodScore.total).toBeGreaterThan(harmfulScore.total);
+    });
   });
 });

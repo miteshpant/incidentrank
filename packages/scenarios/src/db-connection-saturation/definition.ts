@@ -64,4 +64,13 @@ export const dbConnectionSaturationSimulation: ScenarioSimulationDefinition = {
   successCondition,
   failureCondition,
   actionClassifications,
+  // Phase 6.1: candidate-declared completion — no acceptableCondition,
+  // since neither partial-improvement tier (scaled-pool-only,
+  // replica-only-small-pool) is a genuine safe-but-imperfect handback
+  // state; both were confirmed unsafe/incomplete by the Phase 6.1 state
+  // audit (scaled-pool-only in particular is a disguised trap that a
+  // visible batch-pressure signal now warns against — see
+  // timed-events.ts). Only the full scaled-pool-with-replica recovery is
+  // Finish-eligible.
+  completion: { mode: "candidate_declared" },
 };

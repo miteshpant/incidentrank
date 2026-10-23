@@ -38,16 +38,21 @@ export const KAFKA_PARTITION_SKEW_SCORING: AuthoredScoringConfig = {
       ],
     },
     {
-      // No modeling of out-of-order delivery as a measurable signal yet
-      // (the round-robin tradeoff path is reflected narratively via
-      // incidentState, not a dedicated measure) — same documented
-      // limitation as every other built-in scenario: full marks via a
-      // single catch-all band rather than fabricating a measure outside
-      // the closed AuthoredScoringMeasure set.
+      // Phase 6.1: the round-robin tradeoff's ordering risk is now a
+      // real, candidate-visible state field (orderingMode, set by
+      // rules.ts) rather than narrative-only — "the system now accepts
+      // out-of-order delivery for a hot tenant's messages" is honestly a
+      // data-integrity-adjacent tradeoff, not a hard violation, so it's
+      // penalized rather than zeroed. Uses the generic
+      // finalStringEquals measure (packages/scenarios/src/authoring/
+      // score.ts) — no Kafka-specific code in the shared scorer.
       dimension: "dataIntegrity",
       maxPoints: 200,
-      measure: "dataIntegrity",
-      bands: [{ points: 200 }],
+      measure: { type: "finalStringEquals", field: "orderingMode", value: "degraded" },
+      bands: [
+        { atMost: 0, points: 200 },
+        { points: 140 },
+      ],
     },
     {
       dimension: "reliability",

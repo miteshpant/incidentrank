@@ -12,6 +12,7 @@ import {
 import {
   createInitialState,
   extractScoringInputs,
+  isLocallyTerminal,
   isValidControlValue,
   replayAttempt,
   simulate,
@@ -42,6 +43,28 @@ const MAX_ADVANCE_MS_PER_REQUEST = 30_000;
 const MAX_ADVANCE_RETRIES = 2;
 
 export type AssessmentRuntimeAttempt = Attempt & { scenario: Scenario };
+
+/**
+ * The client-facing combined status shape — "in_progress" while active,
+ * otherwise the terminal outcome, or "abandoned". This is distinct from
+ * the DB's own status/outcome split (see apps/web/src/lib/
+ * attempt-lifecycle.ts): the client only ever needs one flat value to
+ * decide what to render, never the lifecycle/outcome distinction itself.
+ */
+export type ClientAttemptStatus =
+  | "in_progress"
+  | "resolved"
+  | "failed"
+  | "declared_unstable"
+  | "timed_out"
+  | "abandoned";
+
+export function toClientAttemptStatus(attempt: Pick<Attempt, "status" | "outcome">): ClientAttemptStatus {
+  if (attempt.status === "in_progress") return "in_progress";
+  if (attempt.status === "abandoned") return "abandoned";
+  // status === "completed": outcome is always set per the schema invariant.
+  return attempt.outcome!;
+}
 
 export type LoadOwnedAssessmentAttemptResult =
   | { ok: true; attempt: AssessmentRuntimeAttempt }
@@ -158,7 +181,7 @@ async function reconstructState(
 export type BootstrapRuntimeResult =
   | {
       ok: true;
-      attemptStatus: Attempt["status"];
+      attemptStatus: ClientAttemptStatus;
       isPaused: boolean;
       view: RuntimeView;
       actionGroups: RuntimeActionGroup[];
@@ -189,7 +212,7 @@ export async function bootstrapRuntime(
 
   return {
     ok: true,
-    attemptStatus: attempt.status,
+    attemptStatus: toClientAttemptStatus(attempt),
     isPaused: attempt.runtimeAnchoredAt === null,
     view: toRuntimeView(scenario, state, events),
     actionGroups,
@@ -214,7 +237,8 @@ async function persistTerminalResult(
   await db
     .update(attempts)
     .set({
-      status: state.status as "resolved" | "failed",
+      status: "completed",
+      outcome: state.status as "resolved" | "failed",
       completedAt: new Date(),
       incidentStartedAt: inputs.incidentStartedAtMs
         ? new Date(attempt.startedAt.getTime() + inputs.incidentStartedAtMs)
@@ -290,7 +314,7 @@ async function rereadAttempt(attemptId: string): Promise<AssessmentRuntimeAttemp
 export type AdvanceRuntimeResult =
   | {
       ok: true;
-      attemptStatus: Attempt["status"];
+      attemptStatus: ClientAttemptStatus;
       isPaused: boolean;
       view: RuntimeView;
     }
@@ -341,7 +365,7 @@ export async function advanceRuntime(
   const { state, events } = await reconstructState(scenario, attemptId, elapsedMs);
   return {
     ok: true,
-    attemptStatus: current.status,
+    attemptStatus: toClientAttemptStatus(current),
     isPaused: current.runtimeAnchoredAt === null,
     view: toRuntimeView(scenario, state, events),
   };
@@ -371,7 +395,7 @@ async function tryAdvanceOnce(
       outcome: "done",
       value: {
         ok: true,
-        attemptStatus: attempt.status,
+        attemptStatus: toClientAttemptStatus(attempt),
         isPaused: true,
         view: toRuntimeView(scenario, state, events),
       },
@@ -386,7 +410,14 @@ async function tryAdvanceOnce(
   const targetElapsedMs = previousElapsedMs + deltaMs;
 
   const { state, events } = await reconstructState(scenario, attemptId, targetElapsedMs);
-  const isTerminal = state.status === "resolved" || state.status === "failed";
+  // Phase 6.1: a candidate_declared scenario's sustained success never
+  // auto-terminates the assessment runtime either — only an explicit
+  // Finish declaration (POST .../finish, same completion-decision core as
+  // practice) can produce a resolved outcome. The engine keeps tracking
+  // sustain state every tick regardless (tick.ts's own gate); only the
+  // auto-resolve WRITE this function would otherwise persist is gated.
+  const completionMode = scenario.completion?.mode ?? "automatic";
+  const isTerminal = isLocallyTerminal(state, completionMode);
 
   const [updated] = await db
     .update(attempts)
@@ -413,7 +444,7 @@ async function tryAdvanceOnce(
     outcome: "done",
     value: {
       ok: true,
-      attemptStatus: updated.status,
+      attemptStatus: toClientAttemptStatus(updated),
       isPaused: updated.runtimeAnchoredAt === null,
       view: toRuntimeView(scenario, state, events),
     },
@@ -441,7 +472,7 @@ export type SubmitActionChange = { controlKey: string; value: ControlValue };
 export type SubmitActionResult =
   | {
       ok: true;
-      attemptStatus: Attempt["status"];
+      attemptStatus: ClientAttemptStatus;
       isPaused: boolean;
       view: RuntimeView;
       actionGroups: RuntimeActionGroup[];
@@ -606,7 +637,11 @@ export async function submitAction(
         .onConflictDoNothing();
     }
 
-    const isTerminal = workingState.status === "resolved" || workingState.status === "failed";
+    // Phase 6.1: same candidate_declared gate as tryAdvanceOnce above —
+    // an applied action may make the success/acceptable condition
+    // sustained-true, but only an explicit Finish declaration may
+    // persist a resolved outcome.
+    const isTerminal = isLocallyTerminal(workingState, scenario.completion?.mode ?? "automatic");
 
     await tx
       .update(attempts)
@@ -637,7 +672,7 @@ export async function submitAction(
     ]);
     return {
       ok: true,
-      attemptStatus: outcome.lockedAttempt.status,
+      attemptStatus: toClientAttemptStatus(outcome.lockedAttempt),
       isPaused: outcome.lockedAttempt.runtimeAnchoredAt === null,
       view: toRuntimeView(scenario, state, events),
       actionGroups,
@@ -648,7 +683,7 @@ export async function submitAction(
     const actionGroups = await loadActionGroupHistory(attempt.id);
     return {
       ok: true,
-      attemptStatus: attempt.status,
+      attemptStatus: toClientAttemptStatus(attempt),
       isPaused: attempt.runtimeAnchoredAt === null,
       view: toRuntimeView(scenario, outcome.state, []),
       actionGroups,
@@ -664,10 +699,8 @@ export async function submitAction(
   return {
     ok: true,
     attemptStatus: outcome.isTerminal
-      ? outcome.state.status === "resolved"
-        ? "resolved"
-        : "failed"
-      : attempt.status,
+      ? (outcome.state.status === "resolved" ? "resolved" : "failed")
+      : toClientAttemptStatus(attempt),
     isPaused: outcome.isTerminal ? true : outcome.lockedAttempt.runtimeAnchoredAt === null,
     view: toRuntimeView(scenario, outcome.state, outcome.events),
     actionGroups,

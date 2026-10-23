@@ -13,6 +13,7 @@ import { GenericComponentPanel } from "./component-panel";
 import { GenericTimelinePanel } from "./timeline-panel";
 import { GenericBriefingScreen } from "./briefing-screen";
 import { GenericResultScreen } from "./result-screen";
+import { FinishIncidentDialog } from "./finish-incident-dialog";
 
 function usePreviousValues(
   values: Record<string, StateValue>,
@@ -59,6 +60,7 @@ export function GenericIncidentConsole({
   const [selectedComponentId, setSelectedComponentId] = useState(
     candidateUI.components[0]?.id ?? "",
   );
+  const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const previousValues = usePreviousValues(attempt.state.values);
 
   if (attempt.phase === "briefing") {
@@ -79,13 +81,31 @@ export function GenericIncidentConsole({
         actionGroups={attempt.actionGroups}
         descriptor={candidateUI}
         serverScore={attempt.serverScore}
+        scoringError={attempt.scoringError}
+        retryScoring={attempt.retryScoring}
+        outcome={attempt.outcome}
+        completionTier={attempt.completionTier}
         onTryAgain={attempt.resetAttempt}
         showSignInNudge={isLoaded && !isSignedIn}
+        attemptId={attempt.attemptId}
       />
     );
   }
 
+  // The only local engine transition that can end an "active" phase is
+  // state.status==="failed" for candidate_declared scenarios (success
+  // never auto-writes in that mode — see use-incident-attempt.ts's
+  // isLocallyTerminal) — attempt.phase itself already reflects this
+  // correctly, so checking status alone here (as before) remains
+  // accurate for disabling controls; the phase-vs-status distinction
+  // only matters for *how the attempt became terminal*, not whether it
+  // currently is.
   const isTerminal = attempt.state.status === "resolved" || attempt.state.status === "failed";
+  const canFinish =
+    attempt.completionMode === "candidate_declared" &&
+    attempt.phase === "active" &&
+    attempt.incidentStarted &&
+    !isTerminal;
 
   return (
     <main className="flex flex-1 flex-col">
@@ -139,6 +159,31 @@ export function GenericIncidentConsole({
             onChangePendingValue={attempt.setPendingValue}
             onApplyChanges={attempt.applyChanges}
           />
+
+          {attempt.completionMode === "candidate_declared" && (
+            <div className="mt-6 border-t border-border pt-6">
+              <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                Candidate Judgment
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                When you believe the system is sufficiently stabilized, declare
+                the incident finished.
+              </p>
+              <button
+                type="button"
+                onClick={() => setFinishDialogOpen(true)}
+                disabled={!canFinish}
+                className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Finish Incident
+              </button>
+              {attempt.finishError && !finishDialogOpen && (
+                <p className="mt-2 text-sm text-[#dc2626]" role="alert">
+                  {attempt.finishError}
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="bg-background p-6">
@@ -149,6 +194,22 @@ export function GenericIncidentConsole({
           />
         </section>
       </div>
+
+      {attempt.completionMode === "candidate_declared" && (
+        <FinishIncidentDialog
+          open={finishDialogOpen}
+          finishing={attempt.finishing}
+          finishError={attempt.finishError}
+          onCancel={() => setFinishDialogOpen(false)}
+          onConfirm={(note) => {
+            // Stays open on failure so the candidate sees finishError and
+            // can retry or cancel — only closes once the attempt actually
+            // reaches a terminal phase (the console then unmounts this
+            // dialog entirely by rendering the result screen instead).
+            void attempt.finishIncident(note);
+          }}
+        />
+      )}
     </main>
   );
 }

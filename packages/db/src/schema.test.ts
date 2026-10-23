@@ -199,7 +199,8 @@ describe("attempts and immutable history", () => {
         // is authoritative for built-in scenarios; the DB row carries no
         // version column (see schema.ts comment on `scenarios`).
         scenarioVersion: 1,
-        status: "resolved",
+        status: "completed",
+        outcome: "resolved",
         score: 980,
       })
       .returning();

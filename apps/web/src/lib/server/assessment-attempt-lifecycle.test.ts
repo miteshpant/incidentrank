@@ -268,7 +268,7 @@ describe("assessment completion", () => {
 
     await testDb
       .update(attempts)
-      .set({ status: "resolved", score: 912, completedAt: new Date() })
+      .set({ status: "completed", outcome: "resolved", score: 912, completedAt: new Date() })
       .where(eq(attempts.id, attempt.id));
 
     await testDb
@@ -285,7 +285,8 @@ describe("assessment completion", () => {
     const finalAttempt = await testDb.query.attempts.findFirst({
       where: eq(attempts.id, attempt.id),
     });
-    expect(finalAttempt?.status).toBe("resolved");
+    expect(finalAttempt?.status).toBe("completed");
+    expect(finalAttempt?.outcome).toBe("resolved");
     expect(finalAttempt?.score).toBe(912);
   });
 });

@@ -91,6 +91,16 @@ export function tickOnce(
   );
 
   // ── Success / failure sustain tracking ────────────────────────────────
+  // This sustain-window bookkeeping runs identically regardless of
+  // completion mode — the ONLY thing completion mode changes is whether
+  // reaching a sustained successCondition auto-writes status="resolved"
+  // below. A candidate_declared scenario still accumulates
+  // consecutiveSuccessSeconds/consecutiveAcceptableSeconds every tick;
+  // finishAttempt (server-side) reads this exact same tracked state
+  // rather than re-implementing success evaluation a second time.
+  const completionMode = scenario.completion?.mode ?? "automatic";
+  const acceptableCondition = scenario.completion?.acceptableCondition;
+
   const meetsSuccess =
     incidentStartedAtMs !== null &&
     evaluateStateConditions(scenario.successCondition.conditions, values, triggers);
@@ -99,11 +109,19 @@ export function tickOnce(
     incidentStartedAtMs !== null &&
     evaluateStateConditions(scenario.failureCondition.conditions, values, triggers);
 
+  const meetsAcceptable =
+    incidentStartedAtMs !== null &&
+    acceptableCondition !== undefined &&
+    evaluateStateConditions(acceptableCondition.conditions, values, triggers);
+
   const consecutiveSuccessSeconds = meetsSuccess
     ? state.transitions.consecutiveSuccessSeconds + scenario.tickMs / 1000
     : 0;
   const consecutiveFailureSeconds = meetsFailure
     ? state.transitions.consecutiveFailureSeconds + scenario.tickMs / 1000
+    : 0;
+  const consecutiveAcceptableSeconds = meetsAcceptable
+    ? state.transitions.consecutiveAcceptableSeconds + scenario.tickMs / 1000
     : 0;
 
   let status = state.status;
@@ -115,6 +133,10 @@ export function tickOnce(
       incidentStartedAtMs !== null &&
       consecutiveFailureSeconds >= scenario.failureCondition.sustainedSeconds
     ) {
+      // Failure is always automatic, in every completion mode — a
+      // candidate cannot stay in an attempt past a true failure condition
+      // merely by not having clicked Finish (docs/implementation_plan/
+      // phase6.1.md's "Failure Remains Automatic").
       status = "failed";
       failedAtMs = nextTimeMs;
       events.push({
@@ -124,6 +146,7 @@ export function tickOnce(
         message: "Incident failed: failure condition remained true.",
       });
     } else if (
+      completionMode === "automatic" &&
       incidentStartedAtMs !== null &&
       consecutiveSuccessSeconds >= scenario.successCondition.sustainedSeconds
     ) {
@@ -239,6 +262,7 @@ export function tickOnce(
         incidentState,
         consecutiveSuccessSeconds,
         consecutiveFailureSeconds,
+        consecutiveAcceptableSeconds,
         severityAnnounced,
         thresholdAnnounced,
         nextTimedEventIndex,

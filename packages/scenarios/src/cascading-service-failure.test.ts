@@ -1,6 +1,7 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { scoreAuthoredAttempt } from "./authoring/score";
 import { cascadingServiceFailure } from "./cascading-service-failure";
 import {
   cascadingServiceFailureSimulation,
@@ -8,6 +9,7 @@ import {
   ROOT_SERVICE_CIRCUIT_BREAKER_ENABLED_KEY,
   UPSTREAM_SERVICE_RESTART_ENABLED_KEY,
 } from "./cascading-service-failure/definition";
+import { CASCADING_SERVICE_FAILURE_SCORING } from "./cascading-service-failure/scoring";
 
 interface TimedAction {
   atMs: number;
@@ -153,5 +155,110 @@ describe("Cascading Service Failure", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  describe("scoring", () => {
+    // Automatic completion mode (definition.ts has no `completion` field,
+    // so the engine's tick.ts default of "automatic" applies) — a genuine
+    // sustained-success run auto-writes resolvedAtMs via the
+    // successCondition's 15s sustain window, so a plain extractScoringInputs
+    // call is correct here; no evaluateCandidateDeclaredFinish/
+    // extractFinishScoringInputs dance is needed.
+    function scoreFor(actions: TimedAction[], untilMs: number) {
+      const state = runScenario(untilMs, actions);
+      const inputs = extractScoringInputs(cascadingServiceFailureSimulation, state);
+      return { state, score: scoreAuthoredAttempt(CASCADING_SERVICE_FAILURE_SCORING, inputs) };
+    }
+
+    it("scores the correctly-scoped circuit-breaker isolation as a genuine resolved recovery", () => {
+      // root-isolated-recovery: breaker on, queue limit at its default
+      // (1_000, satisfying controlAtMost 1_000) -> checkoutSuccessRate 99.5,
+      // cascadeDepth 1, chainStatus "warning" -> successCondition satisfied,
+      // sustained for the full 15s -> status "resolved" at 46_000ms (31_000
+      // action + 15_000 sustain).
+      const { state, score } = scoreFor(
+        [{ atMs: 31_000, controlKey: ROOT_SERVICE_CIRCUIT_BREAKER_ENABLED_KEY, value: true }],
+        55_000,
+      );
+
+      expect(state.status).toBe("resolved");
+      expect(score.total).toBe(985);
+    });
+
+    it("scores an unmitigated run to failure the same total as a tight-queue-limit-only partial, both strictly above the harmful restart trap", () => {
+      // Baseline: no action at all -> cascade-critical-default then the
+      // 60s sustained failureCondition trips -> status "failed" at 89_000ms.
+      // recovery and reliability both carry terminalOverrides.failed: 0, and
+      // the modest revenueLossUsd/criticalTimeRatio accrued before failure
+      // stay inside every band's full-marks ceiling, so customerImpact and
+      // costEfficiency both still award full points -> total 535.
+      const baseline = scoreFor([], 30_000 + 61_000);
+      expect(baseline.state.status).toBe("failed");
+
+      // Partial: queue-limit-only rule (breaker OFF, queue limit <= 200) ->
+      // checkoutSuccessRate 65, stays "critical"/unresolved the whole run
+      // (never reaches successCondition, never reaches the 60s failure
+      // sustain window either). recovery/reliability carry
+      // terminalOverrides.unresolved: 0 (same zero as failed), and nothing
+      // about this action trips operationalEfficiency's harmfulChangeCount
+      // penalty, so this ties the baseline's total exactly.
+      const partialQueueOnly = scoreFor(
+        [{ atMs: 31_000, controlKey: REQUEST_QUEUE_DEPTH_LIMIT_KEY, value: 200 }],
+        45_000,
+      );
+      expect(partialQueueOnly.state.status).not.toBe("resolved");
+      expect(partialQueueOnly.state.status).not.toBe("failed");
+      expect(partialQueueOnly.score.total).toBe(baseline.score.total);
+      expect(partialQueueOnly.score.total).toBe(535);
+
+      // Harmful: upstream-service-restart while the breaker stays off is
+      // the scenario's authored trap (action-classifications.ts marks it
+      // "harmful" outright; rules.ts's restart-symptoms-harmful entry also
+      // leaves rootServiceErrorRate untouched and briefly widens the visible
+      // cascade). It scores strictly lower than both the baseline and the
+      // queue-limit-only partial: recovery/reliability are already zeroed
+      // out identically by the same unresolved terminalOverrides as above,
+      // but operationalEfficiency's harmfulChangeCount>=1 penalty
+      // (-25 points) is the one dimension that fires only for this action,
+      // dropping its total to 510.
+      const harmful = scoreFor(
+        [{ atMs: 31_000, controlKey: UPSTREAM_SERVICE_RESTART_ENABLED_KEY, value: true }],
+        45_000,
+      );
+      expect(harmful.state.status).not.toBe("resolved");
+      expect(harmful.score.total).toBe(510);
+      expect(harmful.score.total).toBeLessThan(baseline.score.total);
+      expect(harmful.score.total).toBeLessThan(partialQueueOnly.score.total);
+    });
+
+    it("scores the slower, noisier high-queue-limit recovery path below the clean isolation, and no higher than the harmful trap", () => {
+      // root-isolated-high-queue-limit: breaker ON but queue limit raised to
+      // 5_000 (controlAtLeast 5_000) -> checkoutSuccessRate only 82, stays
+      // "degraded"/unresolved for the whole run (82 < the successCondition's
+      // 95 threshold, so it never resolves even though it is a real,
+      // authored, distinct partial-recovery rule state). Its total (510)
+      // ties the harmful trap's total exactly: both get zeroed
+      // recovery/reliability via terminalOverrides.unresolved, and here it
+      // is costEfficiency (not operationalEfficiency) that takes the hit --
+      // the 5_000 queue-limit tier costs $150/mo more than baseline,
+      // crossing the costIncreaseRatio 0.5 band -> 85 down to 60 points,
+      // the same net -25 that the harmful path takes from a different
+      // dimension.
+      const highQueueLimit = scoreFor(
+        [
+          { atMs: 31_000, controlKey: ROOT_SERVICE_CIRCUIT_BREAKER_ENABLED_KEY, value: true },
+          { atMs: 31_000, controlKey: REQUEST_QUEUE_DEPTH_LIMIT_KEY, value: 5_000 },
+        ],
+        80_000,
+      );
+      const cleanIsolation = scoreFor(
+        [{ atMs: 31_000, controlKey: ROOT_SERVICE_CIRCUIT_BREAKER_ENABLED_KEY, value: true }],
+        55_000,
+      );
+
+      expect(highQueueLimit.state.status).not.toBe("resolved");
+      expect(highQueueLimit.score.total).toBe(510);
+      expect(highQueueLimit.score.total).toBeLessThan(cleanIsolation.score.total);
+    });
   });
 });

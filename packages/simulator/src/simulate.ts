@@ -53,6 +53,7 @@ export function createInitialState(
       incidentState: "healthy",
       consecutiveSuccessSeconds: 0,
       consecutiveFailureSeconds: 0,
+      consecutiveAcceptableSeconds: 0,
       severityAnnounced,
       thresholdAnnounced,
       nextTimedEventIndex: 0,
@@ -95,7 +96,16 @@ function applyAction(
   }
 
   const previousValue = state.controlValues[action.controlKey];
-  const outcome = classifyAction(
+  // Phase 6.1: classifyAction's richer {outcome, matchedRuleId} result is
+  // used by the server-only post-completion review pass (which calls
+  // classifyAction directly, independently of this event stream) — never
+  // threaded into CONFIG_CHANGED's metadata. This function runs
+  // client-side during live practice ticks (apps/web/src/lib/
+  // use-incident-attempt.ts calls simulate() directly in the browser), so
+  // anything placed in event metadata here becomes part of the browser's
+  // own local state/bundle — matchedRuleId (and feedback, which
+  // classifyAction never even returns) must never reach that boundary.
+  const { outcome } = classifyAction(
     scenario.actionClassifications,
     action.controlKey,
     action.value,

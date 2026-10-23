@@ -34,6 +34,27 @@ export const successCondition: SuccessCondition = {
   sustainedSeconds: 15,
 };
 
+/**
+ * Phase 6.1 candidate_declared acceptable tier: the blue-green deploy
+ * strategy's genuine engineering tradeoff — throughput and lag already
+ * fully healthy (effectiveThroughput 3,200 >= 3,000, groupStatus
+ * "warning" not "critical"), but groupStableTimeRatio (85) falls short
+ * of the optimal bar (90) because blue-green briefly runs two consumer
+ * groups side by side during the swap, a real and bounded tradeoff, not
+ * a disguised unsafe state. Deliberately omits the groupStableTimeRatio
+ * clause rather than lowering the global successCondition bar — see
+ * docs/implementation_plan/phase6.1.md's "the threshold must reflect
+ * safe handback, not desired score spacing." Correctly excludes the
+ * weaker rolling-batched tradeoff (effectiveThroughput 2,600 < 3,000).
+ */
+export const acceptableCondition: SuccessCondition = {
+  conditions: [
+    { key: "effectiveThroughput", operator: "greater_than_or_equal", comparedTo: 3_000 },
+    { key: "groupStatus", operator: "not_equals", comparedTo: "critical" },
+  ],
+  sustainedSeconds: 15,
+};
+
 export const failureCondition: FailureCondition = {
   conditions: [{ key: "effectiveThroughput", operator: "less_than_or_equal", comparedTo: 1_000 }],
   sustainedSeconds: 60,

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
@@ -25,6 +25,12 @@ function applyChanges() {
   fireEvent.click(screen.getByRole("button", { name: /apply changes/i }));
 }
 
+function finishIncident() {
+  fireEvent.click(screen.getByRole("button", { name: /^finish incident$/i }));
+  const dialog = screen.getByRole("dialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: /^finish incident$/i }));
+}
+
 const FAKE_ATTEMPT_ID = "11111111-1111-1111-1111-111111111111";
 
 beforeEach(() => {
@@ -46,6 +52,33 @@ beforeEach(() => {
       if (url === "/api/attempts/score-preview" || url.endsWith("/complete")) {
         return new Response(
           JSON.stringify({
+            score: {
+              total: 742,
+              breakdown: {
+                recovery: 200,
+                customerImpact: 150,
+                dataIntegrity: 200,
+                reliability: 100,
+                costEfficiency: 72,
+                operationalEfficiency: 20,
+              },
+            },
+          }),
+          { status: 200 },
+        );
+      }
+
+      // Payment Retry Storm is candidate_declared (Phase 6.1): a
+      // confirmed Finish Incident requests the real completion
+      // decision — /finish for a persisted (signed-in) attempt,
+      // /finish-preview for an anonymous one. Both share the same
+      // response shape as /complete above, just reached via Finish
+      // rather than automatic engine detection.
+      if (url.endsWith("/finish") || url === "/api/attempts/finish-preview") {
+        return new Response(
+          JSON.stringify({
+            outcome: "resolved",
+            completionTier: "optimal",
             score: {
               total: 742,
               breakdown: {
@@ -112,7 +145,7 @@ describe("Attempt persistence (signed in)", () => {
     );
   });
 
-  it("persists the terminal result when the incident resolves", async () => {
+  it("persists the terminal result through Finish Incident when the candidate declares the incident resolved", async () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
     await act(async () => {
@@ -145,9 +178,22 @@ describe("Attempt persistence (signed in)", () => {
       await Promise.resolve();
     });
 
+    // Payment Retry Storm is candidate_declared (Phase 6.1): the success
+    // condition is now genuinely, continuously satisfied, but persistence
+    // only happens once the candidate explicitly confirms Finish — never
+    // automatically via /complete.
+    finishIncident();
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     expect(fetch).toHaveBeenCalledWith(
-      `/api/attempts/${FAKE_ATTEMPT_ID}/complete`,
+      `/api/attempts/${FAKE_ATTEMPT_ID}/finish`,
       expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetch).not.toHaveBeenCalledWith(
+      `/api/attempts/${FAKE_ATTEMPT_ID}/complete`,
+      expect.anything(),
     );
   });
 });
@@ -165,7 +211,7 @@ describe("Guest play (signed out)", () => {
     expect(fetch).not.toHaveBeenCalled();
   });
 
-  it("requests a stateless score preview (never /api/attempts) once the incident resolves", async () => {
+  it("requests a stateless finish-preview evaluation (never /api/attempts) once Finish Incident is confirmed", async () => {
     mockAuthState.isSignedIn = false;
     render(<IncidentConsole />);
     acknowledgeIncident();
@@ -198,12 +244,20 @@ describe("Guest play (signed out)", () => {
     await act(async () => {
       await Promise.resolve();
     });
+
+    // Payment Retry Storm is candidate_declared (Phase 6.1): a guest's
+    // automatic-resolve path never fires; only a confirmed Finish
+    // requests the real (stateless) completion evaluation.
+    finishIncident();
+    await act(async () => {
+      await Promise.resolve();
+    });
     await act(async () => {
       await Promise.resolve();
     });
 
     expect(fetch).toHaveBeenCalledWith(
-      "/api/attempts/score-preview",
+      "/api/attempts/finish-preview",
       expect.objectContaining({
         method: "POST",
         body: expect.stringContaining('"scenarioSlug":"payment-retry-storm"'),

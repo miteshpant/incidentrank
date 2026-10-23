@@ -61,4 +61,17 @@ export const poisonMessageLoopSimulation: ScenarioSimulationDefinition = {
   successCondition,
   failureCondition,
   actionClassifications,
+  // Phase 6.1: candidate-declared completion — deliberately no
+  // acceptableCondition. Per the state audit, every reachable stable
+  // state is binary: it either fully meets successCondition (bounded
+  // retries + DLQ, whether the "recovering" or slower "recovering-slow"
+  // variant — both are full eventual recoveries, differing only in
+  // latency, not safety) or is actively broken (backlog/depth far over
+  // the threshold, several already at/above the failure threshold).
+  // There is no genuinely safe-but-imperfect middle tier to name. This
+  // scenario's candidate-declared value is the fast-vs-slow recovery
+  // tradeoff (tight retry bound = fast; high bound = slow and costly but
+  // eventually clean) plus the harmful-scaling trap — real judgment
+  // calls that don't require a second completion tier.
+  completion: { mode: "candidate_declared" },
 };

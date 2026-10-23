@@ -4,6 +4,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import {
   createInitialState,
   extractScoringInputs,
+  isLocallyTerminal,
   simulate,
   type CandidateAction,
   type ControlValue,
@@ -17,9 +18,24 @@ import {
   persistActionGroup,
   persistCheckpoint,
   persistEvents,
+  requestFinish,
+  requestFinishPreview,
   requestScorePreview,
   type ServerScoreResult,
 } from "./attempt-persistence";
+
+/**
+ * Phase 6.1: the candidate-declared completion outcome, once known. Null
+ * until a terminal state is reached. For automatic scenarios this mirrors
+ * state.status 1:1 (resolved/failed); for candidate_declared scenarios
+ * this is set ONLY from the server's Finish response (or an automatic
+ * failure, which still fires client-side identically to today) — never
+ * derived from the client's local SimulationState.status, since the
+ * engine itself never auto-writes "resolved" for candidate_declared
+ * scenarios. See apps/web/src/lib/server/finish-attempt.ts.
+ */
+export type IncidentOutcome = "resolved" | "failed" | "declared_unstable";
+export type CompletionTier = "optimal" | "acceptable";
 
 /** How often the elapsed-time checkpoint is persisted while active. */
 const CHECKPOINT_INTERVAL_MS = 12_000;
@@ -79,6 +95,15 @@ interface AttemptState {
   /** Events not yet handed to persistEvents(), with their global sequence. */
   unsyncedEvents: Array<{ sequence: number; entry: TimelineEntry }>;
   nextEventSeq: number;
+  /** Set once a terminal outcome is known — see IncidentOutcome's doc
+   * comment for why this is never derived from engineState.status alone
+   * for candidate_declared scenarios. */
+  outcome: IncidentOutcome | null;
+  completionTier: CompletionTier | null;
+  /** True while an in-flight Finish request is awaiting the server's
+   * answer — disables the Finish button and suppresses a double-submit. */
+  finishing: boolean;
+  finishError: string | null;
 }
 
 type AttemptReducerAction =
@@ -90,11 +115,14 @@ type AttemptReducerAction =
   | { type: "events-synced"; throughSequence: number }
   | { type: "resume-from-seed"; seed: ResumeSeed }
   | { type: "resume-clock" }
+  | { type: "finish-requested" }
+  | {
+      type: "finish-resolved";
+      outcome: IncidentOutcome;
+      completionTier: CompletionTier | null;
+    }
+  | { type: "finish-failed"; error: string }
   | { type: "reset" };
-
-function isTerminal(state: SimulationState): boolean {
-  return state.status === "resolved" || state.status === "failed";
-}
 
 /** Has the scenario's first timed event (incident start) fired yet? */
 export function hasIncidentStarted(state: SimulationState): boolean {
@@ -130,6 +158,10 @@ function createAttemptState(scenario: ScenarioSimulationDefinition): AttemptStat
     attemptId: null,
     unsyncedEvents: [],
     nextEventSeq: 0,
+    outcome: null,
+    completionTier: null,
+    finishing: false,
+    finishError: null,
   };
 }
 
@@ -149,6 +181,8 @@ function queueUnsyncedEvents(
 }
 
 function createReducer(scenario: ScenarioSimulationDefinition) {
+  const completionMode = scenario.completion?.mode ?? "automatic";
+
   return function reduce(
     state: AttemptState,
     action: AttemptReducerAction,
@@ -177,7 +211,7 @@ function createReducer(scenario: ScenarioSimulationDefinition) {
       case "apply-changes": {
         if (
           state.phase !== "active" ||
-          isTerminal(state.engineState) ||
+          isLocallyTerminal(state.engineState, completionMode) ||
           !hasIncidentStarted(state.engineState)
         ) {
           return state;
@@ -237,17 +271,24 @@ function createReducer(scenario: ScenarioSimulationDefinition) {
       }
 
       case "tick": {
-        if (state.phase !== "active" || isTerminal(state.engineState)) {
+        if (state.phase !== "active" || isLocallyTerminal(state.engineState, completionMode)) {
           return state;
         }
 
         const result = simulate(scenario, state.engineState, null, scenario.tickMs);
-        const nextPhase: AttemptPhase = isTerminal(result.state)
-          ? "result"
-          : state.phase;
+        const reachedLocalTerminal = isLocallyTerminal(result.state, completionMode);
+        const nextPhase: AttemptPhase = reachedLocalTerminal ? "result" : state.phase;
+        // Only ever set from local tick results for "resolved" (automatic
+        // scenarios) or "failed" (every scenario, every mode) — a
+        // candidate_declared scenario's "resolved" outcome is set
+        // exclusively by the finish-resolved case below, never here,
+        // since the engine itself never produces it locally in that mode.
+        const nextOutcome = reachedLocalTerminal
+          ? (result.state.status as "resolved" | "failed")
+          : state.outcome;
 
         if (result.events.length === 0) {
-          return { ...state, engineState: result.state, phase: nextPhase };
+          return { ...state, engineState: result.state, phase: nextPhase, outcome: nextOutcome };
         }
 
         const newTimelineEntries = toTimelineEntries(result.events);
@@ -256,6 +297,7 @@ function createReducer(scenario: ScenarioSimulationDefinition) {
           ...state,
           engineState: result.state,
           phase: nextPhase,
+          outcome: nextOutcome,
           timeline: [...state.timeline, ...newTimelineEntries],
           ...queueUnsyncedEvents(state, newTimelineEntries),
         };
@@ -286,12 +328,38 @@ function createReducer(scenario: ScenarioSimulationDefinition) {
           attemptId: seed.attemptId,
           unsyncedEvents: [],
           nextEventSeq: seed.nextEventSeq,
+          outcome: null,
+          completionTier: null,
+          finishing: false,
+          finishError: null,
         };
       }
 
       case "resume-clock": {
         if (state.phase !== "paused") return state;
         return { ...state, phase: "active" };
+      }
+
+      case "finish-requested": {
+        if (state.phase !== "active" || state.finishing) return state;
+        return { ...state, finishing: true, finishError: null };
+      }
+
+      case "finish-resolved": {
+        if (!state.finishing) return state;
+        return {
+          ...state,
+          phase: "result",
+          finishing: false,
+          finishError: null,
+          outcome: action.outcome,
+          completionTier: action.completionTier,
+        };
+      }
+
+      case "finish-failed": {
+        if (!state.finishing) return state;
+        return { ...state, finishing: false, finishError: action.error };
       }
 
       case "reset": {
@@ -306,6 +374,11 @@ function createReducer(scenario: ScenarioSimulationDefinition) {
 
 export interface IncidentAttempt {
   phase: AttemptPhase;
+  /** The persisted attempt id once one exists (signed-in practice),
+   * null for anonymous practice (never persisted at all). Phase 6.1's
+   * post-incident review endpoint needs this — see
+   * requestActionFeedback in attempt-persistence.ts. */
+  attemptId: string | null;
   state: SimulationState;
   timeline: TimelineEntry[];
   actionGroups: CandidateActionGroup[];
@@ -316,12 +389,38 @@ export interface IncidentAttempt {
   /** Server-computed score for a terminal attempt, once the completion
    * request returns. Null until then — never a client-computed fallback. */
   serverScore: ServerScoreResult | null;
+  /** True if the automatic terminal-scoring request failed (network error,
+   * or a response with no score). serverScore stays null until a retry
+   * succeeds — call retryScoring() to try again. */
+  scoringError: boolean;
+  /** Retries the automatic terminal-scoring request after scoringError. */
+  retryScoring: () => void;
+  /** The terminal outcome, once known — see IncidentOutcome's doc comment
+   * for why this is the authoritative field to render from, never
+   * `state.status === "resolved"` directly (which a candidate_declared
+   * scenario's engine never locally produces). */
+  outcome: IncidentOutcome | null;
+  /** Which completion tier was achieved, for a resolved candidate_declared
+   * attempt. Always null for automatic scenarios and for non-resolved
+   * outcomes. */
+  completionTier: CompletionTier | null;
+  completionMode: "automatic" | "candidate_declared";
+  /** True while a Finish request is in flight. */
+  finishing: boolean;
+  /** Set if the most recent Finish request failed — cleared on retry. */
+  finishError: string | null;
   acknowledge: () => void;
   setPendingValue: (controlKey: string, value: ControlValue) => void;
   applyChanges: (reasoning: string) => void;
   resetAttempt: () => void;
   /** Transitions out of "paused" (resume) into "active", restarting the clock. */
   resumeClock: () => void;
+  /** Candidate-declared completion (Phase 6.1) — only meaningful when
+   * completionMode === "candidate_declared"; a no-op call for automatic
+   * scenarios would be rejected server-side ("not_candidate_declared")
+   * rather than silently succeeding. UI should only ever render/enable
+   * the Finish control when completionMode is candidate_declared. */
+  finishIncident: (note: string | null) => Promise<void>;
 }
 
 /**
@@ -367,6 +466,14 @@ export function useIncidentAttempt(
   // the browser. Remains null if the attempt is still in flight, or if
   // the completion request failed (best-effort — see completeAttemptRecord).
   const [serverScore, setServerScore] = useState<ServerScoreResult | null>(null);
+  // Set when the automatic-completion score request fails (network error,
+  // non-2xx, or a 2xx with no score payload) so the UI can show a retry
+  // affordance instead of an indefinite "Scoring…" with no feedback —
+  // the bug class this guards against: completionSent latching true
+  // before the request resolves meant a failed request previously left
+  // serverScore null forever with nothing visibly wrong.
+  const [scoringError, setScoringError] = useState(false);
+  const [scoringRetryToken, setScoringRetryToken] = useState(0);
 
   // Guards so each persistence side effect fires exactly once per attempt,
   // even under React 19/StrictMode's double-invoke of effects in dev.
@@ -376,7 +483,14 @@ export function useIncidentAttempt(
   const resumeSeedApplied = useRef(false);
 
   useEffect(() => {
-    if (state.phase !== "active" || isTerminal(state.engineState)) {
+    // phase is only ever "active" while isLocallyTerminal(engineState,
+    // completionMode) is false — the reducer's "tick" case transitions to
+    // "result" itself the instant that stops being true (see
+    // isLocallyTerminal's doc comment: for candidate_declared scenarios
+    // this means an automatic failure, never a sustained success, which
+    // only ever ends the attempt via an explicit Finish). Checking phase
+    // alone is therefore both necessary and sufficient here.
+    if (state.phase !== "active") {
       return undefined;
     }
 
@@ -385,11 +499,7 @@ export function useIncidentAttempt(
     }, 1000);
 
     return () => clearInterval(intervalId);
-    // Intentionally depends only on status, not the whole engineState object:
-    // engineState changes every tick, which would tear down and recreate the
-    // interval every second instead of running it continuously.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.phase, state.engineState.status]);
+  }, [state.phase]);
 
   // Adopt a resumed seed (if provided) exactly once; otherwise, if an
   // assessment attempt was already created before this hook mounts,
@@ -421,7 +531,7 @@ export function useIncidentAttempt(
   // exists even if the candidate refreshes before the first interval
   // tick (otherwise lastSimulationTimeMs could stay null indefinitely).
   useEffect(() => {
-    if (!state.attemptId || state.phase !== "active" || isTerminal(state.engineState)) {
+    if (!state.attemptId || state.phase !== "active") {
       return undefined;
     }
     const attemptId = state.attemptId;
@@ -432,12 +542,9 @@ export function useIncidentAttempt(
     }, CHECKPOINT_INTERVAL_MS);
 
     return () => clearInterval(intervalId);
-    // Intentionally depends only on status, not the whole engineState
-    // object (same reasoning as the tick-interval effect above): the
-    // latest elapsed time is always read fresh via latestElapsedMs.current
-    // at interval-fire time, not captured here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.attemptId, state.phase, state.engineState.status]);
+    // The latest elapsed time is always read fresh via
+    // latestElapsedMs.current at interval-fire time, not captured here.
+  }, [state.attemptId, state.phase]);
 
   // Checkpoint immediately whenever the tab is hidden (backgrounded,
   // switched away from, or about to close) — best-effort, not relied on
@@ -521,9 +628,17 @@ export function useIncidentAttempt(
       scoringInputs,
       state.engineState,
     ).then((score) => {
-      if (score) setServerScore(score);
+      if (score) {
+        setServerScore(score);
+      } else {
+        // Null means the request failed outright, or returned 2xx with
+        // no score payload — either way, retry must be possible rather
+        // than silently stalling on "Scoring…" forever.
+        completionSent.current = false;
+        setScoringError(true);
+      }
     });
-  }, [state.attemptId, state.engineState, scenario]);
+  }, [state.attemptId, state.engineState, scenario, scoringRetryToken]);
 
   // Anonymous counterpart: no attemptId exists (anonymous attempts are
   // never persisted), so request a stateless score preview instead —
@@ -539,9 +654,19 @@ export function useIncidentAttempt(
 
     const scoringInputs = extractScoringInputs(scenario, state.engineState);
     void requestScorePreview(scenarioSlug, scoringInputs).then((score) => {
-      if (score) setServerScore(score);
+      if (score) {
+        setServerScore(score);
+      } else {
+        completionSent.current = false;
+        setScoringError(true);
+      }
     });
-  }, [state.attemptId, isSignedIn, state.engineState, scenario, scenarioSlug]);
+  }, [state.attemptId, isSignedIn, state.engineState, scenario, scenarioSlug, scoringRetryToken]);
+
+  const retryScoring = useCallback(() => {
+    setScoringError(false);
+    setScoringRetryToken((token) => token + 1);
+  }, []);
 
   const acknowledge = useCallback(() => dispatch({ type: "acknowledge" }), []);
 
@@ -561,10 +686,58 @@ export function useIncidentAttempt(
     persistedGroupCount.current = 0;
     completionSent.current = false;
     setServerScore(null);
+    setScoringError(false);
     dispatch({ type: "reset" });
   }, []);
 
   const resumeClock = useCallback(() => dispatch({ type: "resume-clock" }), []);
+
+  // Phase 6.1: candidate-declared completion. Sends ONLY an idempotency
+  // key, an optional note, and (for anonymous practice, which has no
+  // persisted attemptId) the replayable public action history — never a
+  // claimed status, outcome, or final state. The server independently
+  // replays and decides; this hook adopts the server's answer directly
+  // via "finish-resolved", never deriving the outcome from local
+  // engineState.status (see IncidentOutcome's doc comment above).
+  const finishIncident = useCallback(
+    async (note: string | null) => {
+      if (state.phase !== "active" || state.finishing) return;
+      dispatch({ type: "finish-requested" });
+
+      const requestId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `finish-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      const response = state.attemptId
+        ? await requestFinish(state.attemptId, requestId, note)
+        : await requestFinishPreview(
+            scenarioSlug,
+            latestElapsedMs.current,
+            state.actionGroups.map((group) => ({
+              elapsedMs: group.elapsedMs,
+              changes: group.changes.map((change) => ({
+                controlKey: change.controlKey,
+                value: change.newValue,
+              })),
+            })),
+            note,
+          );
+
+      if ("error" in response) {
+        dispatch({ type: "finish-failed", error: response.error });
+        return;
+      }
+
+      dispatch({
+        type: "finish-resolved",
+        outcome: response.outcome,
+        completionTier: response.completionTier,
+      });
+      if (response.score) setServerScore(response.score);
+    },
+    [state.phase, state.finishing, state.attemptId, state.actionGroups, scenarioSlug],
+  );
 
   const hasPendingChanges = scenario.controls.some(
     (control) =>
@@ -573,8 +746,11 @@ export function useIncidentAttempt(
         state.engineState.controlValues[control.key],
   );
 
+  const completionMode = scenario.completion?.mode ?? "automatic";
+
   return {
     phase: state.phase,
+    attemptId: state.attemptId,
     state: state.engineState,
     timeline: state.timeline,
     actionGroups: state.actionGroups,
@@ -583,10 +759,18 @@ export function useIncidentAttempt(
     incidentStarted: hasIncidentStarted(state.engineState),
     incidentStartMs: incidentStartMs(scenario),
     serverScore,
+    scoringError,
+    retryScoring,
+    outcome: state.outcome,
+    completionTier: state.completionTier,
+    completionMode,
+    finishing: state.finishing,
+    finishError: state.finishError,
     acknowledge,
     setPendingValue,
     applyChanges,
     resetAttempt,
     resumeClock,
+    finishIncident,
   };
 }

@@ -61,4 +61,14 @@ export const rateLimitFailureSimulation: ScenarioSimulationDefinition = {
   successCondition,
   failureCondition,
   actionClassifications,
+  // Phase 6.1: candidate-declared completion — deliberately no
+  // acceptableCondition. Per the state audit, both partial-mitigation
+  // tiers (jitter alone: 14% of requests still 429ing; fixed-delay
+  // alone: 28%) leave the provider's rate limit actively violated —
+  // "less-bad," not "safe," structurally identical to Payment Retry
+  // Storm's already-rejected partial tier. Neither is a deliberate
+  // engineering tradeoff, just an incomplete fix. Only the full
+  // successCondition (client-side limiting + backoff jitter together)
+  // represents a genuinely safe handback state.
+  completion: { mode: "candidate_declared" },
 };

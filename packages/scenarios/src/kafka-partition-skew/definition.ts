@@ -5,6 +5,7 @@ import { controls } from "./controls";
 import { initialValues } from "./metrics";
 import { skewRules } from "./rules";
 import {
+  acceptableCondition,
   failureCondition,
   infrastructureCost,
   revenueLossRatePerMinute,
@@ -61,4 +62,13 @@ export const kafkaPartitionSkewSimulation: ScenarioSimulationDefinition = {
   successCondition,
   failureCondition,
   actionClassifications,
+  // Phase 6.1: candidate-declared completion WITH an acceptable tier.
+  // Per the user's binding decision, the completion model must express
+  // the real ordering tradeoff directly via orderingMode (set by rules,
+  // read by successCondition/acceptableCondition) — never inferred
+  // indirectly from "which strategy was selected" inside the scorer.
+  // salted-key -> optimal; round-robin -> acceptable. Both represent a
+  // genuinely operationally-healthy system; the tier distinguishes WHY,
+  // not whether it's safe to hand back.
+  completion: { mode: "candidate_declared", acceptableCondition },
 };

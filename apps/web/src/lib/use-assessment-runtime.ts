@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ControlValue, RuntimeView, SimulationEvent } from "@incidentrank/simulator";
+import type { CompletionMode, ControlValue, RuntimeView, SimulationEvent } from "@incidentrank/simulator";
 import type { CandidateActionGroup, TimelineEntry } from "./use-incident-attempt";
-import type { ServerScoreResult } from "./attempt-persistence";
+import { requestFinish, type ServerScoreResult } from "./attempt-persistence";
 
 /** How often the client asks the server to advance authoritative time while the console is actively visible. Not once per simulated second — request volume stays low while elapsed time still only ever moves forward at the server's discretion. */
 const ADVANCE_INTERVAL_MS = 4_000;
@@ -39,8 +39,16 @@ function toActionGroups(groups: RawActionGroup[]): CandidateActionGroup[] {
 
 type RuntimePhase = "loading" | "paused" | "active" | "result" | "error";
 
+type AssessmentClientAttemptStatus =
+  | "in_progress"
+  | "resolved"
+  | "failed"
+  | "declared_unstable"
+  | "timed_out"
+  | "abandoned";
+
 interface RuntimeApiShape {
-  attemptStatus: "in_progress" | "resolved" | "failed" | "abandoned";
+  attemptStatus: AssessmentClientAttemptStatus;
   isPaused: boolean;
   runtime: RuntimeView;
   actionGroups?: RawActionGroup[];
@@ -54,6 +62,8 @@ interface AssessmentRuntimeState {
   timeline: TimelineEntry[];
   actionGroups: CandidateActionGroup[];
   pendingControlValues: Record<string, ControlValue>;
+  outcome: AssessmentClientAttemptStatus | null;
+  completionTier: "optimal" | "acceptable" | null;
   errorMessage: string | null;
 }
 
@@ -83,10 +93,20 @@ export function useAssessmentRuntime(attemptId: string): {
   pendingControlValues: Record<string, ControlValue>;
   hasPendingChanges: boolean;
   serverScore: ServerScoreResult | null;
+  /** True if the automatic terminal-scoring fetch failed — serverScore
+   * stays null until a retry succeeds. Call retryScoring() to retry. */
+  scoringError: boolean;
+  retryScoring: () => void;
   errorMessage: string | null;
+  outcome: AssessmentClientAttemptStatus | null;
+  completionTier: "optimal" | "acceptable" | null;
+  completionMode: CompletionMode;
+  finishing: boolean;
+  finishError: string | null;
   setPendingValue: (controlKey: string, value: ControlValue) => void;
   applyChanges: (reasoning: string) => void;
   resumeClock: () => void;
+  finishIncident: (note: string | null) => void;
 } {
   const [state, setState] = useState<AssessmentRuntimeState>({
     phase: "loading",
@@ -94,9 +114,15 @@ export function useAssessmentRuntime(attemptId: string): {
     timeline: [],
     actionGroups: [],
     pendingControlValues: {},
+    outcome: null,
+    completionTier: null,
     errorMessage: null,
   });
   const [serverScore, setServerScore] = useState<ServerScoreResult | null>(null);
+  const [scoringError, setScoringError] = useState(false);
+  const [scoringRetryToken, setScoringRetryToken] = useState(0);
+  const [finishing, setFinishing] = useState(false);
+  const [finishError, setFinishError] = useState<string | null>(null);
   const isSubmitting = useRef(false);
 
   // `resetPendingValues`: true for a true state replacement (bootstrap, or
@@ -114,7 +140,16 @@ export function useAssessmentRuntime(attemptId: string): {
       setState((prev) => {
         const timeline = toTimelineEntries(data.runtime.events);
         const actionGroups = data.actionGroups ? toActionGroups(data.actionGroups) : prev.actionGroups;
-        const isTerminal = data.attemptStatus === "resolved" || data.attemptStatus === "failed";
+        // The server already applies the Phase 6.1 candidate_declared
+        // gate (assessment-runtime.ts's isLocallyTerminal) before ever
+        // reporting a terminal attemptStatus — resolved only ever arrives
+        // here via a real Finish declaration. This client-side check is
+        // purely about which phase to render, never a second decision.
+        const isTerminal =
+          data.attemptStatus === "resolved" ||
+          data.attemptStatus === "failed" ||
+          data.attemptStatus === "declared_unstable" ||
+          data.attemptStatus === "timed_out";
         const nextPhase: RuntimePhase = isTerminal ? "result" : data.isPaused ? "paused" : "active";
 
         return {
@@ -129,6 +164,8 @@ export function useAssessmentRuntime(attemptId: string): {
           pendingControlValues: resetPendingValues
             ? { ...data.runtime.state.controlValues }
             : prev.pendingControlValues,
+          outcome: isTerminal ? data.attemptStatus : prev.outcome,
+          completionTier: prev.completionTier,
           errorMessage: null,
         };
       });
@@ -205,7 +242,10 @@ export function useAssessmentRuntime(attemptId: string): {
 
     fetch(`/api/attempts/${attemptId}`)
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) {
+          setScoringError(true);
+          return;
+        }
         const data = (await response.json()) as {
           attempt?: {
             score?: number | null;
@@ -217,7 +257,14 @@ export function useAssessmentRuntime(attemptId: string): {
             operationalEfficiencyScore?: number | null;
           };
         };
-        if (data.attempt?.score == null) return;
+        if (data.attempt?.score == null) {
+          // Either malformed response, or a genuine race (the terminal
+          // persist hadn't landed yet when this fetched) — either way,
+          // retry must be possible rather than leaving serverScore null
+          // forever with no visible error.
+          setScoringError(true);
+          return;
+        }
         setServerScore({
           total: data.attempt.score,
           breakdown: {
@@ -230,8 +277,13 @@ export function useAssessmentRuntime(attemptId: string): {
           },
         });
       })
-      .catch(() => undefined);
-  }, [attemptId, state.phase, state.view, serverScore]);
+      .catch(() => setScoringError(true));
+  }, [attemptId, state.phase, state.view, serverScore, scoringRetryToken]);
+
+  const retryScoring = useCallback(() => {
+    setScoringError(false);
+    setScoringRetryToken((token) => token + 1);
+  }, []);
 
   const setPendingValue = useCallback((controlKey: string, value: ControlValue) => {
     setState((prev) => ({
@@ -286,6 +338,50 @@ export function useAssessmentRuntime(attemptId: string): {
       .catch(() => undefined);
   }, [attemptId, bootstrap]);
 
+  // The candidate's explicit "I'm done" declaration for a
+  // candidate_declared assessment scenario. Reuses requestFinish — the
+  // exact same server call signed-in practice uses — since finishAttempt
+  // (apps/web/src/lib/server/finish-attempt.ts) already authorizes and
+  // operates identically for assessment attempts: only persistence/auth
+  // context differs, never the completion decision itself (Phase 6.1's
+  // binding "same simulator, same completion evaluator, same scorer"
+  // decision). Sends only an idempotency key and the optional note —
+  // never a claimed outcome/state/score.
+  const finishIncident = useCallback(
+    (note: string | null) => {
+      if (finishing) return;
+      setFinishing(true);
+      setFinishError(null);
+
+      const requestId =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `finish-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+      requestFinish(attemptId, requestId, note)
+        .then((result) => {
+          if ("error" in result) {
+            setFinishError(result.error);
+            return;
+          }
+          setState((prev) => ({
+            ...prev,
+            phase: "result",
+            outcome: result.outcome,
+            completionTier: result.completionTier,
+          }));
+          if (result.score) setServerScore(result.score);
+        })
+        .catch(() => {
+          setFinishError("We couldn't finish that incident. Please try again.");
+        })
+        .finally(() => {
+          setFinishing(false);
+        });
+    },
+    [attemptId, finishing],
+  );
+
   const hasPendingChanges = state.view
     ? Object.entries(state.pendingControlValues).some(
         ([key, value]) => value !== state.view!.state.controlValues[key],
@@ -300,9 +396,17 @@ export function useAssessmentRuntime(attemptId: string): {
     pendingControlValues: state.pendingControlValues,
     hasPendingChanges,
     serverScore,
+    scoringError,
+    retryScoring,
     errorMessage: state.errorMessage,
+    outcome: state.outcome,
+    completionTier: state.completionTier,
+    completionMode: state.view?.completionMode ?? "automatic",
+    finishing,
+    finishError,
     setPendingValue,
     applyChanges,
     resumeClock,
+    finishIncident,
   };
 }

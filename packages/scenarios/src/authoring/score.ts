@@ -109,6 +109,18 @@ function matchesNaturalRecovery(
 }
 
 function measureDimension(measure: AuthoredScoringMeasure, inputs: ScoringInputs): number {
+  if (typeof measure === "object") {
+    // Generic string-state comparison (Phase 6.1): compares
+    // inputs.finalStringValues[measure.field] against measure.value. A
+    // missing field is never === value, so it can only ever satisfy
+    // "finalStringNotEquals" — an authoring typo in `field` fails
+    // predictably (the equals band it was meant to hit silently never
+    // matches) rather than throwing.
+    const actual = inputs.finalStringValues[measure.field];
+    const matches = actual === measure.value;
+    return measure.type === "finalStringEquals" ? (matches ? 1 : 0) : matches ? 0 : 1;
+  }
+
   switch (measure) {
     case "recoveryTimeSeconds": {
       if (inputs.resolvedAtMs === null || inputs.incidentStartedAtMs === null) {
@@ -162,13 +174,14 @@ function applyPenalties(
   // additively. This mirrors Payment Retry Storm's existing
   // scoreOperationalEfficiency exactly (if/else-if per measure, summed
   // across measures).
-  const tightestByMeasure = new Map<AuthoredScoringMeasure, AuthoredScoringPenalty>();
+  const tightestByMeasure = new Map<string, AuthoredScoringPenalty>();
   for (const penalty of penalties) {
     const measured = measureDimension(penalty.measure, inputs);
     if (measured < penalty.atLeast) continue;
-    const current = tightestByMeasure.get(penalty.measure);
+    const measureKey = measureIdentity(penalty.measure);
+    const current = tightestByMeasure.get(measureKey);
     if (!current || penalty.atLeast > current.atLeast) {
-      tightestByMeasure.set(penalty.measure, penalty);
+      tightestByMeasure.set(measureKey, penalty);
     }
   }
 
@@ -177,6 +190,11 @@ function applyPenalties(
     score -= penalty.subtractPoints;
   }
   return clamp(Math.max(0, score), 0, maxPoints);
+}
+
+/** A stable string key for an AuthoredScoringMeasure, since the string-state variant is an object and can't be used as a Map key by reference equality. */
+function measureIdentity(measure: AuthoredScoringMeasure): string {
+  return typeof measure === "object" ? `${measure.type}:${measure.field}:${measure.value}` : measure;
 }
 
 function clamp(value: number, min: number, max: number): number {

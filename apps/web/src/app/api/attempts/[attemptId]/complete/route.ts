@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
-import { assessmentCandidates, attempts } from "@incidentrank/db";
-import type { ScoringInputs } from "@incidentrank/simulator";
+import type { ScoringInputs, SimulationState } from "@incidentrank/simulator";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadOwnedAttempt } from "@/lib/server/load-owned-attempt";
-import { scoreAttempt } from "@/lib/server/scoring-helper";
+import { resolveSimulationDefinition } from "@/lib/server/scenario-registry";
+import { persistTerminalAttempt } from "@/lib/server/terminal-attempt";
+import { isAttemptActive } from "@/lib/attempt-lifecycle";
 
 interface CompleteAttemptBody {
   status?: unknown;
@@ -24,6 +24,35 @@ function isValidScoringInputs(value: unknown): value is ScoringInputs {
   );
 }
 
+function isValidSimulationState(value: unknown): value is SimulationState {
+  if (typeof value !== "object" || value === null) return false;
+  const state = value as Record<string, unknown>;
+  return (
+    typeof state.simulationTimeMs === "number" &&
+    typeof state.status === "string" &&
+    typeof state.values === "object" &&
+    state.values !== null
+  );
+}
+
+/**
+ * The AUTOMATIC completion path — the engine itself reached a terminal
+ * state (success for an automatic-mode scenario, or failure for any
+ * scenario, any completion mode) with no candidate decision involved.
+ * This is distinct from POST /api/attempts/[attemptId]/finish, which
+ * represents an explicit candidate "I'm done" declaration — see
+ * docs/implementation_plan/phase6.1.md's "Candidate completion is a
+ * final assessment decision, not a hint request" and
+ * apps/web/src/lib/server/finish-attempt.ts's docblock for the full
+ * distinction. Both converge on the shared persistTerminalAttempt
+ * primitive for the actual row mutation.
+ *
+ * Guard: a candidate_declared scenario's sustained success must NEVER be
+ * persisted as "resolved" through this route — only Finish may do that.
+ * This route may still persist an automatic failure for a
+ * candidate_declared scenario (failure remains unconditional in every
+ * mode), but never a client-claimed "resolved" for one.
+ */
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ attemptId: string }> },
@@ -42,9 +71,28 @@ export async function POST(
     );
   }
 
-  if (owned.attempt.status !== "in_progress") {
-    // Already completed — attempts are immutable once terminal.
-    return NextResponse.json({ attempt: owned.attempt });
+  if (!isAttemptActive(owned.attempt)) {
+    // Already completed — attempts are immutable once terminal. Still
+    // return the already-persisted score (not just a bare {attempt}): a
+    // legitimate retried/duplicate call (e.g. a double-mounted effect)
+    // must be able to recover the score it's waiting on, not be left
+    // looking identical to an outright failure.
+    return NextResponse.json({
+      score:
+        owned.attempt.score !== null
+          ? {
+              total: owned.attempt.score,
+              breakdown: {
+                recovery: owned.attempt.recoveryScore ?? 0,
+                customerImpact: owned.attempt.customerImpactScore ?? 0,
+                dataIntegrity: owned.attempt.dataIntegrityScore ?? 0,
+                reliability: owned.attempt.reliabilityScore ?? 0,
+                costEfficiency: owned.attempt.costEfficiencyScore ?? 0,
+                operationalEfficiency: owned.attempt.operationalEfficiencyScore ?? 0,
+              },
+            }
+          : null,
+    });
   }
 
   const body = (await request.json().catch(() => null)) as
@@ -53,7 +101,8 @@ export async function POST(
 
   if (
     (body?.status !== "resolved" && body?.status !== "failed") ||
-    !isValidScoringInputs(body.scoringInputs)
+    !isValidScoringInputs(body.scoringInputs) ||
+    !isValidSimulationState(body.finalState)
   ) {
     return NextResponse.json(
       { error: "Invalid completion payload" },
@@ -61,55 +110,38 @@ export async function POST(
     );
   }
 
-  const inputs = body.scoringInputs;
-  const result = await scoreAttempt(owned.attempt, inputs);
-
-  const recoveryTimeMs =
-    inputs.incidentStartedAtMs !== null &&
-    (inputs.resolvedAtMs !== null || inputs.failedAtMs !== null)
-      ? (inputs.resolvedAtMs ?? inputs.failedAtMs ?? 0) -
-        inputs.incidentStartedAtMs
-      : null;
-
-  const [updated] = await db
-    .update(attempts)
-    .set({
-      status: body.status,
-      completedAt: new Date(),
-      incidentStartedAt: inputs.incidentStartedAtMs
-        ? new Date(owned.attempt.startedAt.getTime() + inputs.incidentStartedAtMs)
-        : null,
-
-      score: result.total,
-      recoveryScore: result.breakdown.recovery,
-      customerImpactScore: result.breakdown.customerImpact,
-      dataIntegrityScore: result.breakdown.dataIntegrity,
-      reliabilityScore: result.breakdown.reliability,
-      costEfficiencyScore: result.breakdown.costEfficiency,
-      operationalEfficiencyScore: result.breakdown.operationalEfficiency,
-
-      recoveryTimeMs,
-      revenueLossUsd: inputs.revenueLossUsd,
-
-      peakSeverityRank: inputs.peakSeverityRank,
-      peakInfrastructureCostUsd: inputs.peakMonthlyInfrastructureCostUsd,
-      peakKafkaLagMessages: inputs.peakNumericValues.kafkaLagMessages ?? 0,
-
-      numberOfConfigurationChanges: inputs.numberOfConfigurationChanges,
-      numberOfBeneficialChanges: inputs.numberOfBeneficialChanges,
-      numberOfHarmfulChanges: inputs.numberOfHarmfulChanges,
-
-      finalStateJson: body.finalState ?? null,
-    })
-    .where(eq(attempts.id, attemptId))
-    .returning();
-
-  if (owned.attempt.attemptType === "assessment" && owned.attempt.assessmentId) {
-    await db
-      .update(assessmentCandidates)
-      .set({ status: "completed", completedAt: new Date() })
-      .where(eq(assessmentCandidates.attemptId, attemptId));
+  const scenario = await resolveSimulationDefinition(
+    owned.attempt.scenario,
+    owned.attempt.scenarioVersion,
+  );
+  if (!scenario) {
+    return NextResponse.json({ error: "Scenario version unresolvable" }, { status: 500 });
   }
 
-  return NextResponse.json({ attempt: updated, score: result });
+  const isCandidateDeclared = (scenario.completion?.mode ?? "automatic") === "candidate_declared";
+  if (isCandidateDeclared && body.status === "resolved") {
+    // A candidate_declared scenario's sustained success is never
+    // auto-converted into "resolved" by this route, regardless of what
+    // the client claims — only an explicit Finish declaration
+    // (POST .../finish) may do that. The client-local engine for such a
+    // scenario cannot even reach status==="resolved" on its own (see
+    // packages/simulator/src/tick.ts's completion-mode gate), so a
+    // request claiming otherwise is either a stale/buggy client or a
+    // direct API call attempting to bypass Finish.
+    return NextResponse.json(
+      {
+        error:
+          "This scenario requires an explicit Finish Incident declaration to resolve. Automatic completion cannot mark it resolved.",
+      },
+      { status: 400 },
+    );
+  }
+
+  const inputs = body.scoringInputs;
+
+  const result = await persistTerminalAttempt(db, owned.attempt, inputs, body.finalState, {
+    outcome: body.status,
+  });
+
+  return NextResponse.json({ score: result });
 }

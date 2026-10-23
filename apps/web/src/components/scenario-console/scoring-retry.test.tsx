@@ -1,0 +1,144 @@
+import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ScenarioSimulationDefinition } from "@incidentrank/simulator";
+import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import { GenericIncidentConsole } from "./generic-incident-console";
+
+vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
+
+import { mockAuthState } from "@/test/clerk-mock";
+
+/**
+ * Minimal automatic-mode fixture: the success condition is already
+ * satisfied the instant the incident starts (sustainedSeconds: 0), so
+ * the very first tick after acknowledging resolves it — no candidate
+ * action required. Exercises the AUTOMATIC-mode score-fetch path
+ * (completeAttemptRecord/requestScorePreview via
+ * use-incident-attempt.ts's terminal-completion effects), which is
+ * structurally distinct from the candidate_declared Finish flow (whose
+ * score always arrives directly in the Finish response).
+ */
+const simulation: ScenarioSimulationDefinition = {
+  tickMs: 1_000,
+  architecture: { nodes: [{ id: "svc", label: "Service" }], edges: [] },
+  controls: [],
+  initialValues: { errorRate: 0.1 },
+  initialComponentHealth: { svc: "healthy" },
+  severityFields: [],
+  numericWatchFields: [],
+  timedEvents: [
+    {
+      id: "start",
+      atMs: 0,
+      type: "TRIGGER_SET",
+      message: "Incident begins.",
+      setTriggers: { active: true },
+    },
+  ],
+  rules: [
+    {
+      id: "already-healthy",
+      when: { triggerEquals: { active: true } },
+      incidentState: "healthy",
+      values: { errorRate: 0.1 },
+      componentHealth: { svc: "healthy" },
+    },
+  ],
+  revenueLossRatePerMinute: { healthy: 0 },
+  infrastructureCost: { baselineMonthlyUsd: 100, perUnitMonthlyUsd: {} },
+  successCondition: {
+    conditions: [{ key: "errorRate", operator: "less_than", comparedTo: 1 }],
+    sustainedSeconds: 0,
+  },
+  failureCondition: {
+    conditions: [{ key: "errorRate", operator: "greater_than_or_equal", comparedTo: 50 }],
+    sustainedSeconds: 60,
+  },
+  actionClassifications: [],
+};
+
+const scenario: ScenarioDefinition = {
+  id: "fixture-scoring-retry",
+  slug: "fixture-scoring-retry",
+  version: 1,
+  name: "Scoring Retry Fixture",
+  description: "A minimal fixture scenario for the scoring-retry regression test.",
+  difficulty: "beginner",
+  estimatedMinutes: 1,
+  isFree: true,
+  simulation,
+};
+
+const candidateUI = { metrics: [], controls: [], components: [] };
+
+function acknowledgeIncident() {
+  fireEvent.click(screen.getByRole("button", { name: /acknowledge incident/i }));
+}
+
+function advanceSeconds(seconds: number) {
+  act(() => {
+    vi.advanceTimersByTime(seconds * 1000);
+  });
+}
+
+describe("Scoring retry after a failed score-preview request (automatic-mode terminal scoring)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockAuthState.isSignedIn = false;
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("shows a retry affordance instead of stalling forever when the score-preview request fails, and recovers on retry", async () => {
+    let callCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          // First request fails outright — the exact case that used to
+          // leave serverScore null forever with completionSent latched
+          // true and no visible error.
+          return new Response(null, { status: 500 });
+        }
+        return new Response(
+          JSON.stringify({ score: { total: 950, breakdown: {} } }),
+          { status: 200 },
+        );
+      }),
+    );
+
+    render(
+      <GenericIncidentConsole scenario={scenario} simulation={simulation} candidateUI={candidateUI} />,
+    );
+    acknowledgeIncident();
+
+    // One tick past the incident start is enough: the success condition
+    // is already satisfied with sustainedSeconds: 0.
+    advanceSeconds(2);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText(/couldn't load your score/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/^950$/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /retry/i }));
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/^950$/)).toBeInTheDocument();
+    expect(screen.queryByText(/couldn't load your score/i)).not.toBeInTheDocument();
+    expect(callCount).toBe(2);
+  });
+});

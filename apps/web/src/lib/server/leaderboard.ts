@@ -43,7 +43,8 @@ export async function getPaymentRetryStormLeaderboard(): Promise<
         and(
           eq(scenarios.slug, paymentRetryStorm.slug),
           eq(attempts.attemptType, "practice"),
-          eq(attempts.status, "resolved"),
+          eq(attempts.status, "completed"),
+          eq(attempts.outcome, "resolved"),
           isNotNull(attempts.score),
           isNotNull(attempts.completedAt),
         ),

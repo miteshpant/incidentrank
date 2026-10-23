@@ -7,11 +7,39 @@ import type {
   AuthoredScenario,
   AuthoredScoringBand,
   AuthoredScoringDimensionConfig,
+  AuthoredScoringMeasure,
   AuthoredScoringPenalty,
   AuthoredSeverityField,
   AuthoredStateCondition,
 } from "./schema";
 import type { AuthoredScenarioValidationError } from "./errors";
+
+const STRING_STATE_MEASURE_TYPES = new Set(["finalStringEquals", "finalStringNotEquals"]);
+
+/**
+ * True when `measure` is either a known flat-string measure, or a
+ * well-formed generic string-state comparison object (Phase 6.1) — a
+ * non-empty `field`/`value` of the right shape. Does not check whether
+ * `field` actually names a real scenario state key: a nonexistent field
+ * evaluates predictably at scoring time (never-equal, see score.ts's
+ * measureDimension) rather than throwing, so that's a scoring-content
+ * concern, not a hard validation error.
+ */
+function isKnownScoringMeasure(measure: AuthoredScoringMeasure): boolean {
+  if (typeof measure === "object") {
+    return (
+      STRING_STATE_MEASURE_TYPES.has(measure.type) &&
+      typeof measure.field === "string" &&
+      measure.field.length > 0 &&
+      typeof measure.value === "string"
+    );
+  }
+  return SCORING_MEASURES.has(measure);
+}
+
+function describeMeasure(measure: AuthoredScoringMeasure): string {
+  return typeof measure === "object" ? JSON.stringify(measure) : measure;
+}
 
 const SLUG_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const KEY_PATTERN = /^[a-zA-Z][a-zA-Z0-9_]*$/;
@@ -444,8 +472,8 @@ function validateScoringDimension(
     });
   }
 
-  if (config.measure !== undefined && !SCORING_MEASURES.has(config.measure)) {
-    errors.push({ path: `${path}.measure`, message: `Unknown scoring measure "${config.measure}".` });
+  if (config.measure !== undefined && !isKnownScoringMeasure(config.measure)) {
+    errors.push({ path: `${path}.measure`, message: `Unknown or malformed scoring measure "${describeMeasure(config.measure)}".` });
   }
 
   const hasBands = config.bands !== undefined;
@@ -528,10 +556,10 @@ function validateScoringPenalties(
   }
 
   penalties.forEach((penalty, i) => {
-    if (!SCORING_MEASURES.has(penalty.measure)) {
+    if (!isKnownScoringMeasure(penalty.measure)) {
       errors.push({
         path: `${path}[${i}].measure`,
-        message: `Unknown scoring measure "${penalty.measure}".`,
+        message: `Unknown or malformed scoring measure "${describeMeasure(penalty.measure)}".`,
       });
     }
     if (penalty.subtractPoints < 0 || penalty.subtractPoints > maxPoints) {

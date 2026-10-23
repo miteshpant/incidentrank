@@ -10,6 +10,7 @@ import { ArchitectureView } from "@/app/incidents/payment-retry-storm/architectu
 import { GenericMetricsPanel } from "@/components/scenario-console/metrics-panel";
 import { GenericComponentPanel } from "@/components/scenario-console/component-panel";
 import { GenericTimelinePanel } from "@/components/scenario-console/timeline-panel";
+import { FinishIncidentDialog } from "@/components/scenario-console/finish-incident-dialog";
 import { AssessmentResultScreen } from "./assessment-result-screen";
 import { ResumeScreen } from "./resume-screen";
 
@@ -53,6 +54,7 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
   const [selectedComponentId, setSelectedComponentId] = useState(
     candidateUI.components[0]?.id ?? "",
   );
+  const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const previousValues = usePreviousValues(runtime.view?.state.values);
 
   if (runtime.phase === "loading") {
@@ -86,11 +88,25 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
   if (!runtime.view) return null;
 
   if (runtime.phase === "result") {
-    return <AssessmentResultScreen state={runtime.view.state} serverScore={runtime.serverScore} />;
+    const outcome =
+      runtime.outcome === "resolved" || runtime.outcome === "failed" || runtime.outcome === "declared_unstable"
+        ? runtime.outcome
+        : null;
+    return (
+      <AssessmentResultScreen
+        state={runtime.view.state}
+        serverScore={runtime.serverScore}
+        scoringError={runtime.scoringError}
+        retryScoring={runtime.retryScoring}
+        outcome={outcome}
+        completionTier={runtime.completionTier}
+      />
+    );
   }
 
   const isTerminal = runtime.view.status === "resolved" || runtime.view.status === "failed";
   const incidentStarted = runtime.view.state.transitions.nextTimedEventIndex > 0;
+  const canFinish = runtime.completionMode === "candidate_declared" && incidentStarted && !isTerminal;
 
   return (
     <main className="flex flex-1 flex-col">
@@ -144,6 +160,31 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
             onChangePendingValue={runtime.setPendingValue}
             onApplyChanges={runtime.applyChanges}
           />
+
+          {runtime.completionMode === "candidate_declared" && (
+            <div className="mt-6 border-t border-border pt-6">
+              <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                Candidate Judgment
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                When you believe the system is sufficiently stabilized, declare
+                the incident finished.
+              </p>
+              <button
+                type="button"
+                onClick={() => setFinishDialogOpen(true)}
+                disabled={!canFinish}
+                className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Finish Incident
+              </button>
+              {runtime.finishError && !finishDialogOpen && (
+                <p className="mt-2 text-sm text-[#dc2626]" role="alert">
+                  {runtime.finishError}
+                </p>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="bg-background p-6">
@@ -154,6 +195,18 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
           />
         </section>
       </div>
+
+      {runtime.completionMode === "candidate_declared" && (
+        <FinishIncidentDialog
+          open={finishDialogOpen}
+          finishing={runtime.finishing}
+          finishError={runtime.finishError}
+          onCancel={() => setFinishDialogOpen(false)}
+          onConfirm={(note) => {
+            runtime.finishIncident(note);
+          }}
+        />
+      )}
     </main>
   );
 }

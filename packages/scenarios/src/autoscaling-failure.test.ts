@@ -1,6 +1,7 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { scoreAuthoredAttempt } from "./authoring/score";
 import { autoscalingFailure } from "./autoscaling-failure";
 import {
   autoscalingFailureSimulation,
@@ -8,6 +9,7 @@ import {
   SCALE_UP_COOLDOWN_SECONDS_KEY,
   SCALE_UP_THRESHOLD_PERCENT_KEY,
 } from "./autoscaling-failure/definition";
+import { AUTOSCALING_FAILURE_SCORING } from "./autoscaling-failure/scoring";
 
 interface TimedAction {
   atMs: number;
@@ -176,5 +178,142 @@ describe("Autoscaling Failure", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  describe("scoring-path regression", () => {
+    // Automatic completion mode (definition.ts has no `completion` field,
+    // so it defaults to "automatic" per runtime-view.ts/tick.ts) — the
+    // engine auto-writes resolvedAtMs on genuine sustained success, so a
+    // plain extractScoringInputs(simulation, state) call is correct.
+    function scoreOf(state: ReturnType<typeof runScenario>) {
+      const inputs = extractScoringInputs(autoscalingFailureSimulation, state);
+      return scoreAuthoredAttempt(AUTOSCALING_FAILURE_SCORING, inputs);
+    }
+
+    // Real action sequences grounded in rules.ts / action-classifications.ts:
+    //
+    //  - good: raises maxInstanceCount to 16 at 31s, matching the
+    //    "adequate-cap-recovery" rule (controlAtLeast 16). This is the only
+    //    path that reaches successCondition (cpu<=70, errorRate<1,
+    //    capacityStatus!=critical sustained 15s) and resolves.
+    //  - baseline: no actions at all — traffic spikes at 30s, hits the
+    //    "autoscaling-critical-default" rule (cpu 98%), which satisfies
+    //    failureCondition (cpu>=95 sustained 60s) if left unmitigated long
+    //    enough. Compared at 35s (still just "critical", pre-failure) so
+    //    it is duration-matched against harmful/partial below.
+    //  - harmful: explicitly reasserts maxInstanceCount at its low default
+    //    (4) alongside aggressive threshold/cooldown tuning, matching the
+    //    "aggressive-tuning-low-cap-harmful" rule. action-classifications.ts
+    //    marks maxInstanceCount<=4 (while trafficSpiking) "harmful" — the
+    //    scenario's documented trap: tuning reaction speed does nothing
+    //    while the cap itself is still the binding constraint.
+    //  - partial: raises maxInstanceCount to 8 only, matching
+    //    "moderate-cap-only" — a real, distinct partial-improvement state
+    //    (capacityStatus "warning", not "critical", but errorRate 4 and
+    //    cpu 75% still fail successCondition).
+    function good() {
+      return runScenario(50_000, [{ atMs: 31_000, controlKey: MAX_INSTANCE_COUNT_KEY, value: 16 }]);
+    }
+    function baseline() {
+      return runScenario(35_000);
+    }
+    function harmful() {
+      return runScenario(35_000, [
+        { atMs: 31_000, controlKey: MAX_INSTANCE_COUNT_KEY, value: 4 },
+        { atMs: 31_000, controlKey: SCALE_UP_THRESHOLD_PERCENT_KEY, value: 50 },
+        { atMs: 31_000, controlKey: SCALE_UP_COOLDOWN_SECONDS_KEY, value: 30 },
+      ]);
+    }
+    function partial() {
+      return runScenario(35_000, [{ atMs: 31_000, controlKey: MAX_INSTANCE_COUNT_KEY, value: 8 }]);
+    }
+
+    it("resolves and scores highest when the cap is raised to an adequate level", () => {
+      const state = good();
+      expect(state.status).toBe("resolved");
+
+      const score = scoreOf(state);
+      expect(score.total).toBe(960);
+      expect(score.breakdown.recovery).toBeGreaterThan(0);
+      expect(score.breakdown.reliability).toBeGreaterThan(0);
+    });
+
+    it("stays unresolved (critical) with no mitigation and scores below the resolved path", () => {
+      const state = baseline();
+      expect(state.status).toBe("critical");
+
+      const goodScore = scoreOf(good());
+      const baselineScore = scoreOf(state);
+      expect(baselineScore.total).toBeLessThan(goodScore.total);
+      // terminalOverrides zero out recovery/reliability for any unresolved
+      // attempt, regardless of action history.
+      expect(baselineScore.breakdown.recovery).toBe(0);
+      expect(baselineScore.breakdown.reliability).toBe(0);
+    });
+
+    it("penalizes the aggressive-tuning-with-low-cap trap via operationalEfficiency, scoring it below the equal-duration no-action baseline", () => {
+      const harmfulState = harmful();
+      const baselineState = baseline();
+
+      expect(harmfulState.status).toBe("critical");
+      expect(harmfulState.numberOfHarmfulChanges).toBe(1);
+
+      const harmfulScore = scoreOf(harmfulState);
+      const baselineScore = scoreOf(baselineState);
+
+      // Reaching for the plausible-but-ineffective tuning knobs while
+      // leaving maxInstanceCount at its harmful-classified default (<=4,
+      // per action-classifications.ts) earns a strictly worse score than
+      // doing nothing at all: operationalEfficiency absorbs a -15 penalty
+      // (harmfulChangeCount >= 1) that an untouched baseline never pays,
+      // while every other dimension ties (both unresolved at the same
+      // 35s mark, same zero cost increase, same sub-$5k revenue-loss
+      // band).
+      expect(harmfulScore.total).toBeLessThan(baselineScore.total);
+      expect(harmfulScore.breakdown.operationalEfficiency).toBeLessThan(
+        baselineScore.breakdown.operationalEfficiency,
+      );
+      expect(harmfulScore.breakdown.recovery).toBe(baselineScore.breakdown.recovery);
+      expect(harmfulScore.breakdown.customerImpact).toBe(baselineScore.breakdown.customerImpact);
+    });
+
+    it("a moderate cap raise alone is a genuine partial state, costing more than baseline for no operational-efficiency gain", () => {
+      const partialState = partial();
+      const baselineState = baseline();
+
+      expect(partialState.status).not.toBe("resolved");
+      expect(partialState.values.capacityStatus).toBe("warning");
+
+      const partialScore = scoreOf(partialState);
+      const baselineScore = scoreOf(baselineState);
+
+      // Raising the cap to 8 is a genuine (non-harmful, non-beneficial —
+      // it matches neither action-classifications.ts rule) config change
+      // that increases monthly infra cost (perUnitMonthlyUsd jumps from
+      // $0 at cap 4 to $150 at cap 8), so costEfficiency drops from 100 to
+      // 85 even though the attempt never resolves. Net effect: the same
+      // total as the harmful trap, via a different dimension.
+      expect(partialScore.breakdown.costEfficiency).toBeLessThan(baselineScore.breakdown.costEfficiency);
+      expect(partialScore.total).toBeLessThan(baselineScore.total);
+    });
+
+    it("the harmful trap and the partial cap-raise land at the same total score through different penalized dimensions", () => {
+      // Not a universal good>partial>baseline>harmful ladder: here
+      // baseline (550) beats both harmful (535, penalized via
+      // operationalEfficiency for the classified-harmful action) and
+      // partial (535, penalized via costEfficiency for a real but
+      // insufficient cost increase) by the same margin, through entirely
+      // different dimensions reaching the same total.
+      const harmfulScore = scoreOf(harmful());
+      const partialScore = scoreOf(partial());
+
+      expect(harmfulScore.total).toBe(partialScore.total);
+      expect(harmfulScore.breakdown.operationalEfficiency).toBeLessThan(
+        partialScore.breakdown.operationalEfficiency,
+      );
+      expect(partialScore.breakdown.costEfficiency).toBeLessThan(
+        harmfulScore.breakdown.costEfficiency,
+      );
+    });
   });
 });

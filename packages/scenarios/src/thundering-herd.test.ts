@@ -1,6 +1,7 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { scoreAuthoredAttempt } from "./authoring/score";
 import { thunderingHerd } from "./thundering-herd";
 import {
   API_GATEWAY_INSTANCES_KEY,
@@ -8,6 +9,7 @@ import {
   REQUEST_QUEUEING_ENABLED_KEY,
   thunderingHerdSimulation,
 } from "./thundering-herd/definition";
+import { THUNDERING_HERD_SCORING } from "./thundering-herd/scoring";
 
 interface TimedAction {
   atMs: number;
@@ -155,5 +157,108 @@ describe("Thundering Herd", () => {
     const runB = runScenario(45_000, actions);
 
     expect(runA).toEqual(runB);
+  });
+
+  // Thundering Herd uses automatic completion (definition.ts has no
+  // `completion` field, so `scenario.completion?.mode ?? "automatic"`
+  // resolves to "automatic"), so a plain extractScoringInputs(simulation,
+  // state) call is correct here — no evaluateCandidateDeclaredFinish /
+  // extractFinishScoringInputs dance is needed.
+  describe("scoring path", () => {
+    function score(state: ReturnType<typeof runScenario>) {
+      const inputs = extractScoringInputs(thunderingHerdSimulation, state);
+      return scoreAuthoredAttempt(THUNDERING_HERD_SCORING, inputs);
+    }
+
+    it("scores a clean jitter-enabled recovery at the maximum", () => {
+      // jitter-enabled-recovery (rules.ts) matches first once jitter=true,
+      // resolving the incident well inside the 15s sustained window.
+      const state = runScenario(46_000, [
+        { atMs: 31_000, controlKey: CLIENT_JITTER_ENABLED_KEY, value: true },
+      ]);
+      expect(state.status).toBe("resolved");
+
+      const result = score(state);
+      expect(result.total).toBe(1000);
+    });
+
+    it("scores doing nothing the same as the queueing-only trap, since neither resolves, costs extra, or triggers a harmful classification", () => {
+      // Baseline: no action at all -> herd-critical-default ("overwhelmed")
+      // until the failure condition (rejectedRequestCount >= 700 sustained
+      // 60s) trips automatic failure.
+      const baseline = score(runScenario(30_000 + 61_000));
+      expect(baseline.total).toBeLessThan(1000);
+
+      // queueing-only-partial (rules.ts) requires queueing=true AND
+      // jitter=false; action-classifications.ts marks queueing as
+      // "neutral", so it incurs no harmfulChangeCount penalty, and request
+      // queueing has no cost impact in revenue-and-cost.ts's
+      // infrastructureCost table, so costEfficiency is also untouched.
+      const queueingOnly = score(
+        runScenario(30_000 + 61_000, [
+          { atMs: 31_000, controlKey: REQUEST_QUEUEING_ENABLED_KEY, value: true },
+        ]),
+      );
+
+      // Both are terminal failures/non-resolutions, so recovery and
+      // reliability are both zeroed by their terminalOverrides
+      // (scoring.ts), and revenue loss stays under the $5,000
+      // customerImpact top band in both cases — the two sequences are
+      // genuinely scoring-equivalent, not just coincidentally close.
+      expect(queueingOnly.total).toBe(baseline.total);
+    });
+
+    it("scores brute-force scaling without jitter below doing nothing at all, despite looking like a fix", () => {
+      // scaled-without-jitter-masked (rules.ts) requires
+      // apiGatewayInstances >= 16 AND jitter=false. It visibly lowers
+      // gatewayErrorRate relative to the no-mitigation baseline (see the
+      // simulation-behavior test above), which is what makes it a
+      // plausible-looking but wrong fix — action-classifications.ts
+      // explicitly marks apiGatewayInstances >= 16 as "harmful".
+      const harmful = score(
+        runScenario(30_000 + 61_000, [
+          { atMs: 31_000, controlKey: API_GATEWAY_INSTANCES_KEY, value: 32 },
+        ]),
+      );
+      const baseline = score(runScenario(30_000 + 61_000));
+
+      // The harmful classification costs 15 points off operationalEfficiency
+      // (harmfulChangeCount >= 1, scoring.ts), and scaling to 32 instances
+      // raises monthly infra cost from $300 to $1,280 — a >=1.5x increase
+      // over baseline, which drops costEfficiency from 100 to 5 points
+      // (costIncreaseRatio band in scoring.ts). Both dimensions move in the
+      // same direction, so the harmful sequence scores strictly lower than
+      // doing nothing, even though it never resolves either.
+      expect(harmful.total).toBeLessThan(baseline.total);
+    });
+
+    it("scores partial gateway scaling to 8 instances between the harmful trap and the untouched baseline", () => {
+      // gateway-partially-scaled (rules.ts) matches apiGatewayInstances >= 8
+      // (and jitter=false, below the >=16 harmful threshold), its own
+      // distinct degraded rule state, with a real partial-improvement
+      // signature: incidentState "degraded" rather than "overwhelmed" or
+      // "masked-recurring".
+      const partial = score(
+        runScenario(30_000 + 61_000, [
+          { atMs: 31_000, controlKey: API_GATEWAY_INSTANCES_KEY, value: 8 },
+        ]),
+      );
+      const baseline = score(runScenario(30_000 + 61_000));
+      const harmful = score(
+        runScenario(30_000 + 61_000, [
+          { atMs: 31_000, controlKey: API_GATEWAY_INSTANCES_KEY, value: 32 },
+        ]),
+      );
+
+      // 8 instances is not classified harmful (only >=16 is, per
+      // action-classifications.ts), so operationalEfficiency stays at 50,
+      // but it still raises monthly cost from $300 to $450 — a 0.5x
+      // increase, landing costEfficiency in the 80-point band rather than
+      // baseline's untouched 100. That one dimension's 20-point gap is
+      // exactly why it sits strictly below the no-action baseline, while
+      // still clearing the heavier harmful-scaling penalty.
+      expect(partial.total).toBeLessThan(baseline.total);
+      expect(partial.total).toBeGreaterThan(harmful.total);
+    });
   });
 });

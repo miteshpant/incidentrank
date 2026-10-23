@@ -10,6 +10,10 @@ export const revenueLossRatePerMinute: RevenueLossRatePerMinute = {
   saturated: 500,
   "saturated-worsening": 900,
   degraded: 120,
+  // Slightly worse than plain "degraded" (errorRate 4.5 vs 3.5,
+  // queuedConnections 165 vs 40) — the visibly rising batch pressure
+  // reflects genuinely accumulating risk, not just a cosmetic UI change.
+  "degraded-batch-pressure-rising": 180,
   recovering: 0,
   healthy: 0,
 };

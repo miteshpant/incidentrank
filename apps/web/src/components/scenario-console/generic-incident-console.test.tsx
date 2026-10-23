@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
@@ -27,16 +27,30 @@ beforeEach(() => {
   vi.useFakeTimers();
   mockAuthState.isSignedIn = false;
   // Guest attempts request a stateless score preview once resolved/failed
-  // (see use-incident-attempt.ts) — stub fetch so that request resolves
-  // instantly rather than hitting the real network.
+  // (automatic scenarios) or a finish-preview result (candidate_declared
+  // scenarios, via Finish Incident) — stub fetch so these resolve
+  // instantly rather than hitting the real network. The finish-preview
+  // stub returns "resolved"/"optimal" unconditionally; tests that need a
+  // different outcome override this per-test.
   vi.stubGlobal(
     "fetch",
-    vi.fn(async () =>
-      new Response(
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/finish-preview")) {
+        return new Response(
+          JSON.stringify({
+            outcome: "resolved",
+            completionTier: "optimal",
+            score: { total: 965, breakdown: {} },
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(
         JSON.stringify({ score: { total: 0, breakdown: {} } }),
         { status: 200 },
-      ),
-    ),
+      );
+    }),
   );
 });
 
@@ -101,7 +115,7 @@ describe("GenericIncidentConsole", () => {
     expect(screen.getByText("Primary Database")).toBeInTheDocument();
   });
 
-  it("reaches a resolved result view after scaling the pool and enabling the read replica", () => {
+  it("Phase 6.1: reaches a resolved result view only after Finish Incident is confirmed, never automatically (candidate_declared scenario)", async () => {
     render(
       <GenericIncidentConsole
         scenario={entry.definition}
@@ -126,8 +140,68 @@ describe("GenericIncidentConsole", () => {
 
     advanceSeconds(16);
 
+    // The engine's own success condition is now genuinely, continuously
+    // satisfied — but this scenario is candidate_declared, so the
+    // console must NOT have reached a result view on its own.
+    expect(
+      screen.queryByText(/incident resolved/i, { selector: "span" }),
+    ).not.toBeInTheDocument();
+
+    const finishButton = screen.getByRole("button", { name: /^finish incident$/i });
+    expect(finishButton).toBeEnabled();
+    fireEvent.click(finishButton);
+
+    // Confirmation dialog appears — a casual single click must not
+    // immediately end the incident (docs/implementation_plan/
+    // phase6.1.md's "Do not use a casual single-click destructive
+    // action"). The dialog's own confirm button shares the trigger
+    // button's accessible name, so scope the query to within the dialog.
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toBeInTheDocument();
+    const { getByRole } = within(dialog);
+    fireEvent.click(getByRole("button", { name: /^finish incident$/i }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
     expect(
       screen.getByText(/incident resolved/i, { selector: "span" }),
+    ).toBeInTheDocument();
+  });
+
+  it("Phase 6.1: declaring Finish before stabilizing shows a declared_unstable result, not a resolved one", async () => {
+    vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/finish-preview")) {
+        return new Response(
+          JSON.stringify({ outcome: "declared_unstable", completionTier: null, score: { total: 410, breakdown: {} } }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ score: { total: 0, breakdown: {} } }), { status: 200 });
+    });
+
+    render(
+      <GenericIncidentConsole
+        scenario={entry.definition}
+        simulation={entry.definition.simulation}
+        candidateUI={entry.candidateUI}
+      />,
+    );
+    acknowledgeIncident();
+    advanceSeconds(31);
+
+    fireEvent.click(screen.getByRole("button", { name: /^finish incident$/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^finish incident$/i }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(
+      screen.getByText(/incident not fully stabilized/i, { selector: "span" }),
     ).toBeInTheDocument();
   });
 });

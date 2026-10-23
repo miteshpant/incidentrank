@@ -42,13 +42,25 @@ describe("Payment Retry Storm — 2. incident begins at 60 seconds", () => {
 });
 
 describe("Payment Retry Storm — 3. doing nothing", () => {
-  it("eventually recovers naturally with high revenue loss and long recovery time", () => {
+  it("eventually reaches a sustained success state naturally, with high revenue loss and long recovery time (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const { finalState } = runScenario(PROVIDER_RECOVERY_END_MS + 31_000);
 
+    // Payment Retry Storm is candidate_declared — the engine itself never
+    // auto-writes "resolved" (packages/simulator/src/tick.ts's
+    // completion-mode gate). The success condition is nonetheless
+    // genuinely, continuously satisfied once the provider fully recovers
+    // on its own schedule — this is precisely the scenario's own
+    // "durable fix vs. natural recovery" teaching point: a candidate who
+    // did nothing and merely waits this long still reaches a state that
+    // WOULD resolve via Finish, which is exactly what the scoring
+    // engine's naturalRecoveryOverride (packages/scenarios/src/
+    // payment-retry-storm/scoring.ts) is designed to catch and penalize.
     expect(finalState.triggers.providerDegraded).toBe(false);
-    expect(finalState.status).toBe("resolved");
-    expect(finalState.resolvedAtMs).not.toBeNull();
-    expect(finalState.resolvedAtMs!).toBeGreaterThan(PROVIDER_RECOVERY_END_MS);
+    expect(finalState.status).not.toBe("resolved");
+    expect(finalState.resolvedAtMs).toBeNull();
+    expect(finalState.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      paymentRetryStormSimulation.successCondition.sustainedSeconds,
+    );
     expect(finalState.customerImpact.revenueLossUsd).toBeGreaterThan(100_000);
   });
 });
@@ -171,21 +183,23 @@ describe("Payment Retry Storm — 12. timeout tradeoff", () => {
 });
 
 describe("Payment Retry Storm — 13. good recovery", () => {
-  it("resolves after a sensible mitigation sequence", () => {
+  it("reaches a sustained success state after a sensible mitigation sequence (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const { finalState } = runScenario(240_000, [
       { atMs: 65_000, controlKey: RETRIES_KEY, value: 1 },
       { atMs: 90_000, controlKey: BACKOFF_KEY, value: "exponential" },
       { atMs: 120_000, controlKey: CIRCUIT_BREAKER_KEY, value: "on" },
     ]);
 
-    expect(finalState.status).toBe("resolved");
-    expect(finalState.resolvedAtMs).not.toBeNull();
-    expect(finalState.resolvedAtMs!).toBeLessThan(PROVIDER_RECOVERY_END_MS);
+    expect(finalState.status).not.toBe("resolved");
+    expect(finalState.resolvedAtMs).toBeNull();
+    expect(finalState.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      paymentRetryStormSimulation.successCondition.sustainedSeconds,
+    );
   });
 });
 
 describe("Payment Retry Storm — 14. alternative recovery", () => {
-  it("resolves using a different sensible sequence", () => {
+  it("reaches a sustained success state using a different sensible sequence (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const { finalState } = runScenario(240_000, [
       { atMs: 65_000, controlKey: RETRIES_KEY, value: 1 },
       { atMs: 90_000, controlKey: TIMEOUT_SECONDS_KEY, value: 3 },
@@ -193,9 +207,11 @@ describe("Payment Retry Storm — 14. alternative recovery", () => {
       { atMs: 140_000, controlKey: CIRCUIT_BREAKER_KEY, value: "on" },
     ]);
 
-    expect(finalState.status).toBe("resolved");
-    expect(finalState.resolvedAtMs).not.toBeNull();
-    expect(finalState.resolvedAtMs!).toBeLessThan(PROVIDER_RECOVERY_END_MS);
+    expect(finalState.status).not.toBe("resolved");
+    expect(finalState.resolvedAtMs).toBeNull();
+    expect(finalState.transitions.consecutiveSuccessSeconds).toBeGreaterThanOrEqual(
+      paymentRetryStormSimulation.successCondition.sustainedSeconds,
+    );
   });
 });
 

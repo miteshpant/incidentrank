@@ -61,4 +61,17 @@ export const authenticationServiceDegradationSimulation: ScenarioSimulationDefin
   successCondition,
   failureCondition,
   actionClassifications,
+  // Phase 6.1: candidate-declared completion — deliberately no
+  // acceptableCondition. Per the state audit, there is exactly one
+  // genuinely safe state (full capacity scaling, meeting
+  // successCondition) and no legitimate safe-but-imperfect middle tier —
+  // both partial-mitigation states (partial scaling, cache-TTL-only) are
+  // still actively broken (4-6% ongoing auth failures), not a deliberate
+  // tradeoff. This scenario's candidate-declared value is instead the
+  // signature-verification-bypass trap: it drives authFailureRate low
+  // enough to look numerically healthy while authServiceStatus goes
+  // critical (a real security regression), testing whether the candidate
+  // recognizes the system is NOT actually safe to hand back — "is this
+  // actually safe," not a tier choice between multiple legitimate states.
+  completion: { mode: "candidate_declared" },
 };

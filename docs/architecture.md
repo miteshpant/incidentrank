@@ -1124,3 +1124,415 @@ library surface (search, filters, the catalog itself) — they were never
 part of `BUILT_IN_SCENARIO_CATALOG` to begin with, so there is no filter
 or query to bypass; privacy here is a type-level absence, not a runtime
 check.
+
+## Phase 6.1 scope
+
+Every scenario through Phase 6 ends an incident the moment the engine's
+own `successCondition` is sustained long enough — resolution is purely
+mechanical. Phase 6.1 adds a second completion mode where the candidate,
+not the engine, decides when to stop:
+
+### Completion Modes
+
+```text
+automatic           — the engine resolves the incident itself once
+                       successCondition is sustained; unchanged since
+                       Phase 1
+candidate_declared  — the engine only TRACKS whether successCondition
+                       (and, optionally, a named acceptableCondition) is
+                       currently sustained; it never writes "resolved"
+                       on its own. Only an explicit Finish declaration
+                       can end the incident as resolved.
+```
+
+A scenario opts in via `completion: { mode: "candidate_declared",
+acceptableCondition? }` on its `ScenarioSimulationDefinition`
+(`packages/simulator/src/types.ts`); omitting `completion` entirely
+defaults to `automatic`, so every scenario authored before Phase 6.1
+compiles and behaves identically with no changes.
+
+> **Candidate completion is a final assessment decision, not a hint
+> request.**
+
+If "Finish Incident" merely answered "not stable yet, keep going," a
+candidate could reverse-engineer the hidden success criteria by
+repeatedly probing it. Finish is irreversible per attempt — at most one
+declaration, ever (enforced by a unique `(attemptId, finishRequestId)`
+index, see Idempotency below) — and the dialog that triggers it
+deliberately never indicates whether the current state looks acceptable
+(`apps/web/src/components/scenario-console/finish-incident-dialog.tsx`).
+
+### Candidate-declared lifecycle
+
+```text
+Incident Starts
+     ↓
+Candidate Decisions           (control changes, same as automatic mode)
+     ↓
+System Evolves                (engine tracks sustain state every tick,
+     ↓                         never auto-resolves for this mode)
+Candidate Declares Finished   (POST .../finish or .../finish-preview)
+     ↓
+Server Evaluates Final State  (replay persisted actions, evaluate
+     ↓                         completion eligibility from tracked state)
+Resolved OR Declared Unstable
+```
+
+> **Failure conditions remain automatic even in candidate-declared
+> scenarios.**
+
+`failureCondition` is evaluated unconditionally every tick regardless of
+completion mode (`packages/simulator/src/tick.ts`) — a candidate_declared
+scenario that crosses its failure threshold completes automatically via
+`POST /api/attempts/:attemptId/complete`, with no Finish click involved.
+Finish can never override an already-authoritative failure: if the
+replayed state's `status` is `"failed"` when Finish is called, the
+outcome is `declared_unstable` at the attempt-outcome level, never
+silently converted to `resolved`.
+
+### One engine-tracked sustain state, one gated write
+
+`tick.ts`'s existing "condition true continuously since timestamp X"
+tracking (`TransitionTrackingState.consecutiveSuccessSeconds`,
+`consecutiveAcceptableSeconds`) runs **unconditionally for every
+scenario**, regardless of completion mode — it resets to `0` the instant
+the condition goes false, exactly as before Phase 6.1. The only change
+introduced by Phase 6.1 is that the final write which flips
+`state.status` to `"resolved"` is skipped when
+`completionMode === "candidate_declared"`. Finish reads this same
+already-tracked state (`evaluateCompletionEligibility`,
+`packages/simulator/src/completion.ts`) rather than re-implementing
+success-condition evaluation a second time — there is exactly one
+"is the system stable" evaluator in the codebase, shared by the engine's
+own tick loop and by Finish. This also means "was stable earlier,
+regressed, then Finish is clicked" requires no special-casing: the
+regression tick already reset the counter to `0` before Finish ever
+runs, so `evaluateCompletionEligibility` correctly reports ineligible —
+Finish asks whether the system is stable *now*, never whether it was
+stable at some earlier point.
+
+### Two-tier completion: optimal vs. acceptable
+
+A candidate_declared scenario may additionally define
+`acceptableCondition` — a second, explicitly authored, genuinely-safe
+bar distinct from the full `successCondition`. Finish resolves if
+*either* condition is currently sustained: `successCondition` sustained →
+`completionTier: "optimal"`; else `acceptableCondition` sustained →
+`completionTier: "acceptable"`; else `declared_unstable`.
+`acceptableCondition` is reserved for scenarios with a real engineering
+tradeoff — a state that is safe to hand back but deliberately imperfect
+(e.g. Consumer Rebalance Storm's blue-green deploy strategy, which clears
+the throughput/latency bars but settles for a lower stable-time ratio
+than the fully-optimal fix) — never a lowered version of the same bar
+chosen for score-spacing convenience. Of the 20 built-in scenarios, two
+define an `acceptableCondition`: Consumer Rebalance Storm and Kafka
+Partition Skew (see classification table below).
+
+Kafka Partition Skew's tiers additionally required a new engine-level
+capability: a candidate-visible `orderingMode: "preserved" | "degraded"`
+state field, set directly by whichever recovery rule matched (salted-key
+→ `"preserved"`; round-robin → `"degraded"`), so the completion
+conditions — and scoring — can tell apart two tradeoffs that previously
+collapsed into the same throughput/lag numbers. This is never inferred
+indirectly inside the scorer from "which control value was chosen"; the
+simulator state itself carries the authoritative signal.
+
+### Finish Incident API design
+
+Server-authoritative for every context — signed-in practice,
+assessment, and anonymous practice alike; only persistence/auth differs:
+
+```text
+Signed-in practice / Assessment   →  POST /api/attempts/:attemptId/finish
+                                      (persisted attempt; loads pinned
+                                      scenario version, replays action
+                                      history, evaluates, persists)
+
+Anonymous practice                →  POST /api/attempts/finish-preview
+                                      (stateless; client sends scenario
+                                      slug/version + replayable action
+                                      groups + elapsed time, never a
+                                      claimed final state/status/score)
+```
+
+The client never sends `{status: "resolved", score: 910}` for Finish —
+only an idempotency key, an optional completion note, and (for the
+stateless anonymous path) its own replayable public action history. The
+server independently replays through the exact same
+`packages/simulator` engine every other runtime uses and decides the
+outcome; `finishAttempt` and `finish-preview`'s route handler share one
+completion-decision core (`evaluateCandidateDeclaredFinish`,
+`packages/simulator/src/completion.ts`) rather than two independent
+implementations. The pre-6.1 `/complete` route is narrowed to represent
+only automatic terminal events (engine-detected success for automatic
+scenarios, or failure for any mode) — it explicitly rejects a
+candidate_declared scenario's `resolved` claim with a 400, since only
+Finish may produce that outcome for such a scenario.
+
+Both the assessment server runtime (`advanceRuntime`/`submitAction` in
+`apps/web/src/lib/server/assessment-runtime.ts`) and the practice client
+hook (`apps/web/src/lib/use-incident-attempt.ts`) share the same
+`isLocallyTerminal(state, completionMode)` predicate
+(`packages/simulator/src/completion.ts`) to decide whether a tick result
+counts as a terminal event without Finish — automatic mode: resolved or
+failed; candidate_declared mode: failed only. This is the one place
+"should this stop ticking without a Finish click" is decided, reused by
+every runtime rather than reimplemented per runtime.
+
+> **The key invariant: client simulation = UX / immediate feedback;
+> server replay at Finish = authority.** If client and server ever
+> disagree, the server wins.
+
+### Completion idempotency and concurrency
+
+`finishAttempt` mirrors `submitAction`'s transaction + row-lock pattern:
+a client-generated `finishRequestId` is checked against the
+freshly-row-locked attempt **inside** the transaction, before the
+terminal check — so a genuinely retried request (same key, the first
+attempt already succeeded) is recognized as idempotent even if the
+caller's local `attempt` snapshot is stale, and a concurrent request
+racing an already-authoritative automatic failure is rejected rather
+than silently overwriting it. Both `/complete` (automatic) and
+`finishAttempt` (candidate declaration) converge on one shared
+persistence primitive (`persistTerminalAttempt`,
+`apps/web/src/lib/server/terminal-attempt.ts`) scoped to
+`WHERE status = 'in_progress'`, so "completed, one outcome, score
+persisted exactly once" is enforced in exactly one place regardless of
+which trigger reached it first.
+
+### Attempt lifecycle split from incident outcome
+
+```ts
+type AttemptStatus  = "in_progress" | "completed" | "abandoned";
+type IncidentOutcome = "resolved" | "failed" | "declared_unstable"
+                      | "timed_out" | null;
+```
+
+`status` means only "has this attempt ended," never "did it succeed" —
+`completed + declared_unstable` is a normal, common state, not an edge
+case. Invariant: `in_progress → outcome=null`; `completed → outcome`
+required; `abandoned → outcome=null`. `apps/web/src/lib/
+attempt-lifecycle.ts` exports `isAttemptActive`/`isAttemptTerminal`/
+`isIncidentResolved` predicates used everywhere instead of raw
+status/outcome checks.
+
+### Completion-note persistence
+
+`completionNote` (nullable text), `completionDeclaredAt` (nullable
+timestamp), `completionSimulationTimeMs` (nullable integer), and
+`completionTier` live as columns on `attempts`, independent of
+`outcome` — never inferred from each other. All four are `null` for
+every non-Finish path (automatic resolution, automatic failure,
+abandonment, still-in-progress).
+
+> **Candidate completion notes are recorded but never scored.** The
+> note is persisted for hiring-manager/practice-result display only;
+> `scoreAuthoredAttempt` has no parameter through which note text could
+> reach it.
+
+### Scoring convergence for candidate-declared outcomes
+
+The generic scorer (`packages/scenarios/src/authoring/score.ts`) was
+built when every scenario resolved automatically and `resolvedAtMs` was
+always reliable — `terminalOverrides`, `recoveryTimeSeconds`, and
+`criticalTimeRatio` all key off it. Finish never mutates engine state, so
+`state.resolvedAtMs` stays `null` even for a genuinely resolved
+declaration. `extractScoringInputs` (`packages/simulator/src/scoring.ts`)
+gained an optional `resolvedAtMsOverride`: when Finish determines
+`outcome: "resolved"`, it derives a scoring-only timestamp from the
+**accepted tier's own sustained-since instant**
+(`state.simulationTimeMs − consecutiveSuccessSeconds × 1000` for
+`"optimal"`, or the `consecutiveAcceptableSeconds` counter for
+`"acceptable"`) — never the wall-clock moment the candidate happened to
+click Finish. `declared_unstable` outcomes get no synthetic timestamp at
+all and fall through to the existing `terminalOverrides.unresolved`
+bucket — the same bucket a plain "never resolved" automatic attempt
+already used, deliberately not a third `declaredUnstable` override key.
+
+A `declared_unstable` attempt still earns normal credit on any dimension
+with no `unresolved` override (customer impact, data integrity, cost
+efficiency, operational efficiency typically have none) — only
+recovery/reliability, which do define one, are zeroed.
+
+Rewarding Kafka Partition Skew's `orderingMode` tradeoff required a
+second, genuinely generic extension rather than a scenario-specific one:
+`ScoringInputs` gained `finalStringValues: Record<string, string>` (a
+sibling of the existing `finalNumericValues`, populated the same way),
+and `AuthoredScoringMeasure` gained two parameterized forms —
+`{ type: "finalStringEquals" | "finalStringNotEquals", field, value }` —
+so any scenario's string-valued state can drive a band or penalty
+declaratively. The shared scorer still has zero scenario-specific code;
+it understands generic typed state, never "Kafka," "ordering," or any
+other scenario concept by name.
+
+### Assessment parity
+
+The server-authoritative assessment runtime needed the identical
+candidate_declared gate practice already had: `advanceRuntime` and
+`submitAction` (`apps/web/src/lib/server/assessment-runtime.ts`) both
+call `isLocallyTerminal` before persisting a terminal result, so
+sustained success for a candidate_declared scenario leaves an assessment
+attempt `in_progress` exactly as it does in practice — only a real
+`POST .../finish` call (the same endpoint and the same `finishAttempt`
+function practice uses) can resolve it. `RuntimeView`
+(`packages/simulator/src/runtime-view.ts`) gained a `completionMode`
+field so the assessment console knows whether to render the Finish
+control — deliberately static scenario metadata, never a live
+eligibility signal; the underlying sustain-tracking state itself is
+never serialized to any client, assessment or practice.
+
+### Scenario classification: automatic vs. candidate-declared
+
+Every one of the 20 built-in scenarios was reviewed against its actual
+authored rules (not its title or difficulty) using one governing
+question: *does "when to stop" require genuine stabilization judgment,
+or is there an objectively clean recovery event?*
+
+```text
+candidate_declared (7)              automatic (13)
+───────────────────────             ──────────────────────────────
+Payment Retry Storm                 Kafka Consumer Lag
+Database Connection Saturation      Autoscaling Failure
+Poison Message Loop                 Cascading Service Failure
+Kafka Partition Skew                Database Lock Contention
+Consumer Rebalance Storm            Downstream Dependency Failure
+Authentication Service Degradation  Read Replica Lag
+Rate Limit Failure                  Slow Query Regression
+                                     Third-Party API Latency
+                                     Thundering Herd
+                                     Memory Leak
+                                     Bad Configuration Rollout
+                                     Deployment Regression
+                                     Cache Stampede
+```
+
+Rationale, by scenario:
+
+- **Payment Retry Storm** — candidate_declared, no acceptable tier. The
+  payment provider recovers on its own schedule regardless of candidate
+  action; Finish tests whether the candidate recognizes durable vs.
+  natural recovery before declaring done, not a tier choice. The two
+  partial-mitigation states (82–92% checkout success) still represent
+  8–18% of traffic actively failing — not a safe handback, so only the
+  full successCondition is Finish-eligible to `resolved`.
+- **Database Connection Saturation** — candidate_declared, no acceptable
+  tier. A pool-only mitigation looks stable but silently reverts under a
+  later batch-job escalation; the scenario was redesigned to expose a
+  genuinely observable precursor signal (rising `queuedConnections`)
+  before that escalation rather than relying on a hidden timer, per the
+  fairness principle below.
+- **Poison Message Loop** — candidate_declared, no acceptable tier.
+  Every reachable stable state is binary (fully recovered, slower-but-
+  fully-recovered, or still actively broken) — no genuine safe-but-
+  imperfect middle state exists.
+- **Kafka Partition Skew** — candidate_declared, **with** an acceptable
+  tier. Round-robin partitioning fully resolves throughput/lag but
+  sacrifices per-tenant ordering — a real, named, bounded tradeoff
+  (`orderingMode: "degraded"`), not a weaker fix.
+- **Consumer Rebalance Storm** — candidate_declared, **with** an
+  acceptable tier. The blue-green deploy strategy clears the
+  throughput/status bars but settles for an 85% stable-time ratio
+  against the optimal 90% bar — a genuine, bounded tradeoff, distinct
+  from the strictly weaker `rolling-batched` partial (2,600 throughput,
+  below even the acceptable bar).
+- **Authentication Service Degradation** — candidate_declared, no
+  acceptable tier. Only one genuinely safe state exists (full capacity
+  scaling); the scenario's real teaching point is a security-bypass trap
+  that looks numerically healthy while `authServiceStatus` goes
+  critical — "is this actually safe," not a tier choice.
+- **Rate Limit Failure** — candidate_declared, no acceptable tier. Both
+  partial-mitigation tiers (14% and 28% still violating the provider's
+  limit) are "less-bad," not "safe" — the same reasoning that rejected a
+  Payment Retry Storm acceptable tier.
+- All 13 **automatic** scenarios have an objectively clean recovery
+  event with no legitimate safe-but-imperfect middle state worth testing
+  stabilization judgment against — including **Kafka Consumer Lag**,
+  reclassified from an initial candidate_declared proposal back to
+  automatic after a state audit found its apparent "unsafe-commit
+  tradeoff" tier was simply unsafe on both of its own metrics, not a
+  real tradeoff.
+
+### Fairness: delayed escalations need an observable precursor
+
+A hidden timer with zero observable lead-up before it fires tests
+whether the candidate knows the scenario author's hidden script, not
+whether they can reason about a production system. Every
+candidate_declared scenario with a delayed/second-wave trigger was
+audited for this: Database Connection Saturation's pool-only mitigation
+previously looked indefinitely stable with no warning before silently
+reverting at a fixed hidden time, and was fixed by adding a genuinely
+rising, candidate-visible `queuedConnections` metric during the lead-up
+window — never an explicit named countdown. Every other candidate_
+declared scenario's delayed trigger was confirmed to be either narrative-
+only (never read by any rule) or structurally unreachable once a
+candidate has taken any real mitigating action.
+
+### Post-Incident Practice Explanation
+
+Candidates can see, per action, why it was classified beneficial/
+neutral/harmful and what the scenario author intended — but only after a
+signed-in practice attempt is terminal, and never during an assessment
+(even a completed one). This closes the product requirement to "explain
+what happened with each candidate action" after practice, without
+leaking the hidden evaluator into anything live.
+
+`ActionClassificationRule`/`AuthoredActionClassification` gained two
+optional fields: `id` (a stable identity for the rule — intentionally
+neutral, e.g. `acr_1`, never self-descriptive of the authored logic) and
+`feedback: { title, explanation }` (the educational text). Both are
+presentation metadata only: never read by `simulate()`/resolution logic,
+never affecting scoring.
+
+The leak boundary is enforced structurally, not by a client-side
+"don't render yet" gate:
+
+- `classifyAction()` itself never returns feedback text — only
+  `{ outcome, matchedRuleId }` — because it runs **client-side** during
+  live practice ticks (the practice console calls `simulate()` directly
+  in the browser). Anything this function returned would already be in
+  the browser's bundle/runtime state before any server boundary existed.
+- `matchedRuleId`/feedback are never written into `CONFIG_CHANGED`
+  event metadata, so they never reach persisted events or any live
+  client state at all.
+- A new pure function, `reviewAttempt()`, independently replays an
+  attempt's persisted action groups and re-runs classification at the
+  exact triggers/state present when each action was originally applied
+  — never by inferring from final state, since `whenTriggerEquals`-gated
+  rules can match differently at different points in time.
+- A server-only helper, `reviewPracticeAttemptFeedback()`, gates on
+  `attemptType === "practice"` and `isAttemptTerminal()` before calling
+  `reviewAttempt()`, then maps the result to a narrow DTO with no field
+  a hidden rule id could occupy.
+- `GET /api/attempts/:attemptId/review` is the only endpoint that ever
+  returns feedback text — fetched by the result screen only once
+  mounted (already terminal), and only for a persisted practice attempt.
+  Assessment screens were never wired to this endpoint at all.
+
+```text
+active practice (browser)     -> classification only, for existing
+                                  numberOfBeneficialChanges/
+                                  numberOfHarmfulChanges bookkeeping
+completed practice review     -> classification + authored title +
+  (server, terminal-only)        explanation, resolved via independent
+                                  server-side replay + reclassification
+assessments (any state)       -> never returns educational feedback
+hiring-manager view           -> unchanged: action history, reasoning,
+                                  outcome, score — no feedback text
+```
+
+Payment Retry Storm's `actionClassifications` carry real authored
+feedback for all five rules, matching the product spec's own example
+("Reduced retry amplification... lowering retries reduced pressure on
+the degraded payment provider") — a concrete, verifiable instance of the
+feature, not just an unused schema capability.
+
+### Important constraints carried forward
+
+Phase 6.1 deliberately does **not** introduce: LLM evaluation of
+completion notes, natural-language scoring, AI judgment of candidate
+reasoning, browser surveillance, webcam/microphone monitoring, arbitrary
+scripting, freeform infrastructure commands, shell access, collaborative
+incident response, billing, or scenarios 21–40. This phase is scoped to
+richer decision semantics and closing quality gaps in the existing 20
+scenarios — not an expansion of what candidates can do or what the
+platform observes.

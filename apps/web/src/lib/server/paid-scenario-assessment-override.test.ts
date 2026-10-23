@@ -148,7 +148,7 @@ describe("paid scenario assessment override", () => {
       .where(eq(assessmentCandidates.id, candidate.id));
     await testDb
       .update(attempts)
-      .set({ status: "resolved", score: 880, completedAt: new Date() })
+      .set({ status: "completed", outcome: "resolved", score: 880, completedAt: new Date() })
       .where(eq(attempts.id, attempt.id));
     await testDb
       .update(assessmentCandidates)
@@ -163,7 +163,8 @@ describe("paid scenario assessment override", () => {
     const finalAttempt = await testDb.query.attempts.findFirst({
       where: eq(attempts.id, attempt.id),
     });
-    expect(finalAttempt?.status).toBe("resolved");
+    expect(finalAttempt?.status).toBe("completed");
+    expect(finalAttempt?.outcome).toBe("resolved");
     expect(finalAttempt?.score).toBe(880);
 
     // Half 2 — independently, practice access for a paid scenario is

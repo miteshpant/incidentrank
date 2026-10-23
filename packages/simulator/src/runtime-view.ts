@@ -1,5 +1,6 @@
 import type {
   ArchitectureDefinition,
+  CompletionMode,
   ControlDefinition,
   IncidentStatus,
   ScenarioSimulationDefinition,
@@ -35,6 +36,16 @@ export interface RuntimeView {
    * trigger). This is the only timing fact ever lifted out of
    * `timedEvents` — no other timed event's time or effects are exposed. */
   incidentStartMs: number | null;
+  /**
+   * Static scenario metadata, never a live eligibility signal: whether
+   * this scenario requires an explicit Finish declaration to resolve.
+   * Safe to expose — it carries no information about whether the
+   * success/acceptable condition is CURRENTLY satisfied (that remains
+   * server-only, see evaluateCompletionEligibility's doc comment) — only
+   * which UI affordance (an automatic terminal view vs. a Finish button)
+   * the console should render.
+   */
+  completionMode: CompletionMode;
 }
 
 /**
@@ -58,5 +69,6 @@ export function toRuntimeView(
     events,
     status: state.status,
     incidentStartMs: scenario.timedEvents[0]?.atMs ?? null,
+    completionMode: scenario.completion?.mode ?? "automatic",
   };
 }
