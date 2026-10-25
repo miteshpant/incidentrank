@@ -279,12 +279,12 @@ export interface ActionFeedbackGroup {
  */
 export async function requestActionFeedback(
   attemptId: string,
-): Promise<ActionFeedbackGroup[] | { error: string }> {
+): Promise<ActionFeedbackGroup[] | { error: string; status?: number }> {
   try {
     const response = await fetch(`/api/attempts/${attemptId}/review`);
     const data = (await response.json()) as { actionGroups?: ActionFeedbackGroup[]; error?: string };
     if (!response.ok || !data.actionGroups) {
-      return { error: data.error ?? "We couldn't load the post-incident review." };
+      return { error: data.error ?? "We couldn't load the post-incident review.", status: response.status };
     }
     return data.actionGroups;
   } catch {

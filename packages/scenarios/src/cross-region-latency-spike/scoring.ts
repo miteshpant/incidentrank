@@ -17,24 +17,35 @@ import type { AuthoredScoringConfig } from "../authoring/schema";
  * scores full marks, and "relaxed-unsafe" (the one genuinely unsafe
  * move) scores the lower band. No scenario-specific scorer code.
  *
- * recovery/customerImpact/reliability legitimately TIE between the
+ * recovery/reliability/dataIntegrity legitimately TIE between the
  * OPTIMAL (fast, general traffic relaxed) and ACCEPTABLE (patient,
- * fully synchronous) paths when both are applied/declared on a similar
- * timescale — the same pre-existing, already-accepted
- * recoveryTimeSeconds/criticalTimeRatio tiny-denominator artifact
- * Missing Database Index's scoring.ts documents (section 17's
- * "suspicious tie" investigation), not something this scenario's
- * scoring redesigns. dataIntegrity also ties between them (both are
- * genuinely safe). The dimension that correctly, honestly
- * discriminates the two here is costEfficiency: running asynchronous
- * cross-region replication for the relaxed general-data path
- * (revenue-and-cost.ts's infrastructureCost) carries a real, ongoing
- * cost the fully-synchronous patient path never pays. This means the
- * "optimal" (latency-fastest, correctness-maximal) tier can legitimately
- * score at or slightly below the "acceptable" (patient) tier's total —
- * by design, per phase6b.md section 40: these are two different,
- * equally scoreable strategies with different dimension tradeoffs, not
- * a strictly-ordered better/worse pair.
+ * fully synchronous) paths — recovery/reliability score off
+ * deriveScoringResolvedAtMs's sustain-window-anchored timestamp (not
+ * wall-clock Finish time), and both paths are genuinely safe, so
+ * dataIntegrity ties too. costEfficiency correctly discriminates in the
+ * OPTIMAL path's favor being worse (running asynchronous cross-region
+ * replication for the relaxed general-data path carries a real, ongoing
+ * cost — infrastructureCost in revenue-and-cost.ts), but that dimension
+ * alone (100 points, coarse bands) used to be too small to overcome the
+ * tie everywhere else.
+ *
+ * Phase 6B.1 fix: customerImpact now carries the decisive, genuine
+ * separation. Raising acceptableCondition.sustainedSeconds to 45
+ * (revenue-and-cost.ts) means the patient path accrues real tracked
+ * revenueLossUsd for the full 45-second observation window before
+ * Finish is even eligible (~$323 at this scenario's authored
+ * "fully-synchronous-degraded" loss rate), while the fast path's own
+ * successCondition (sustainedSeconds: 15, unchanged) resolves against a
+ * much lower loss rate (~$20). The customerImpact bands below were
+ * tightened to this scenario's own actual dollar scale (its revenue-loss
+ * rates and incident duration can never approach the generic 6,000+
+ * bands used elsewhere in the catalog) so this real, already-modeled
+ * cost difference actually crosses a band boundary instead of both
+ * paths tying at the top band regardless of how long the candidate
+ * waited. Net result: OPTIMAL (980) now legitimately outscores
+ * ACCEPTABLE (970) — per phase6b.1.md section 8's "prefer optimal >
+ * acceptable" — while ACCEPTABLE still earns a strong score and both
+ * remain clearly, correctly ahead of every harmful/unsafe path.
  */
 export const CROSS_REGION_LATENCY_SPIKE_SCORING: AuthoredScoringConfig = {
   dimensions: [
@@ -53,14 +64,26 @@ export const CROSS_REGION_LATENCY_SPIKE_SCORING: AuthoredScoringConfig = {
       ],
     },
     {
+      // Phase 6B.1 fix: bands tightened to this scenario's own actual
+      // dollar scale. This scenario's revenue-loss rates (25-700/min,
+      // revenue-and-cost.ts) over a 15-50 second window can never exceed
+      // a few hundred dollars — the generic 6,000+ bands used elsewhere
+      // in the catalog (sized for longer, costlier incidents) would tie
+      // every realistic path here at the top band regardless of how long
+      // the candidate took, hiding the real cost of the patient
+      // strategy's required 45s observation window (~$323) against the
+      // fast strategy's ~$20. This is the genuine, already-modeled
+      // tradeoff the fix in revenue-and-cost.ts's acceptableCondition
+      // change actually produces — not an arbitrary penalty layered on
+      // top of it.
       dimension: "customerImpact",
       maxPoints: 200,
       measure: "revenueLossUsd",
       bands: [
-        { atMost: 6_000, points: 200 },
-        { atMost: 18_000, points: 160 },
-        { atMost: 35_000, points: 110 },
-        { atMost: 60_000, points: 60 },
+        { atMost: 50, points: 200 },
+        { atMost: 500, points: 170 },
+        { atMost: 2_000, points: 120 },
+        { atMost: 6_000, points: 70 },
         { points: 10 },
       ],
     },

@@ -1,0 +1,107 @@
+import type { CandidateUIDescriptor } from "../candidate-ui";
+import {
+  ADMISSION_CONTROL_KEY,
+  API_CONCURRENCY_KEY,
+  ASYNC_DEFERRAL_KEY,
+  CACHE_STRATEGY_KEY,
+  DB_CONNECTION_BUDGET_KEY,
+  LOAD_SHEDDING_KEY,
+  OPTIONAL_FEATURE_DISABLE_KEY,
+  REGIONAL_ROUTING_KEY,
+  TRAFFIC_CLASS_PRIORITY_KEY,
+  WORKER_CONCURRENCY_KEY,
+} from "./controls";
+
+export const capacityExhaustionDuringPeakEventCandidateUI: CandidateUIDescriptor = {
+  metrics: [
+    { key: "checkoutSuccessRatePercent", label: "Checkout Success Rate", sourceStateKey: "checkoutSuccessRatePercent", format: "percentage" },
+    { key: "checkoutLatencyMs", label: "Checkout Latency", sourceStateKey: "checkoutLatencyMs", format: "duration" },
+    { key: "cacheHitRatePercent", label: "Cache Hit Rate", sourceStateKey: "cacheHitRatePercent", format: "percentage" },
+    { key: "dbConnectionUtilizationPercent", label: "DB Connection Utilization", sourceStateKey: "dbConnectionUtilizationPercent", format: "percentage" },
+    { key: "dbSaturationStatus", label: "DB Saturation Status", sourceStateKey: "dbSaturationStatus", format: "status" },
+    { key: "asyncQueueBacklogCount", label: "Async Queue Backlog", sourceStateKey: "asyncQueueBacklogCount", format: "number" },
+    { key: "asyncQueueDrainingStatus", label: "Async Queue Status", sourceStateKey: "asyncQueueDrainingStatus", format: "status" },
+    { key: "searchAvailabilityStatus", label: "Search/Personalization Availability", sourceStateKey: "searchAvailabilityStatus", format: "status" },
+    { key: "searchSuccessRatePercent", label: "Search/Personalization Success Rate", sourceStateKey: "searchSuccessRatePercent", format: "percentage" },
+    { key: "globalSuccessRatePercent", label: "Global Success Rate (aggregate)", sourceStateKey: "globalSuccessRatePercent", format: "percentage" },
+    { key: "cumulativeCriticalTrafficDroppedCount", label: "Cumulative Critical Traffic Dropped (historical)", sourceStateKey: "cumulativeCriticalTrafficDroppedCount", format: "number" },
+    { key: "peakEventStatus", label: "Peak Event Status", sourceStateKey: "peakEventStatus", format: "status" },
+  ],
+  controls: [
+    {
+      key: TRAFFIC_CLASS_PRIORITY_KEY,
+      label: "Traffic Class Priority",
+      componentId: "edge-cdn",
+      valueLabels: {
+        "all-admitted": "All Admitted",
+        "shed-optional": "Shed Optional",
+        "shed-aggressive": "Shed Aggressive",
+      },
+    },
+    {
+      key: LOAD_SHEDDING_KEY,
+      label: "Load Shedding",
+      componentId: "edge-cdn",
+      valueLabels: { off: "Off", "random-shed": "Random Shed" },
+    },
+    {
+      key: ADMISSION_CONTROL_KEY,
+      label: "Admission Control (Critical Path)",
+      componentId: "payment-service",
+      valueLabels: { open: "Open", "protect-critical": "Protect Critical" },
+    },
+    {
+      key: API_CONCURRENCY_KEY,
+      label: "API Concurrency",
+      componentId: "api-fleet",
+      valueLabels: { standard: "Standard", high: "High" },
+    },
+    {
+      key: CACHE_STRATEGY_KEY,
+      label: "Cache Strategy",
+      componentId: "cache",
+      valueLabels: { standard: "Standard", "extended-ttl": "Extended TTL" },
+    },
+    {
+      key: DB_CONNECTION_BUDGET_KEY,
+      label: "DB Connection Budget",
+      componentId: "database",
+      valueLabels: { unbounded: "Unbounded", bounded: "Bounded" },
+    },
+    {
+      key: OPTIONAL_FEATURE_DISABLE_KEY,
+      label: "Search/Personalization Service",
+      componentId: "search-service",
+      valueLabels: { enabled: "Enabled", disabled: "Disabled" },
+    },
+    {
+      key: ASYNC_DEFERRAL_KEY,
+      label: "Async Deferral",
+      componentId: "api-fleet",
+      valueLabels: { synchronous: "Synchronous", "defer-to-queue": "Defer To Queue" },
+    },
+    {
+      key: WORKER_CONCURRENCY_KEY,
+      label: "Worker Concurrency",
+      componentId: "async-workers",
+      valueLabels: { standard: "Standard", high: "High" },
+    },
+    {
+      key: REGIONAL_ROUTING_KEY,
+      label: "Regional Routing",
+      componentId: "edge-cdn",
+      valueLabels: { "primary-only": "Primary Only", "split-regional": "Split Regional" },
+    },
+  ],
+  components: [
+    { id: "clients", label: "Clients" },
+    { id: "edge-cdn", label: "Edge / CDN" },
+    { id: "api-fleet", label: "API Fleet" },
+    { id: "payment-service", label: "Payment / Transaction Service" },
+    { id: "search-service", label: "Search / Personalization Service" },
+    { id: "cache", label: "Cache" },
+    { id: "database", label: "Database" },
+    { id: "async-queue", label: "Async Queue" },
+    { id: "async-workers", label: "Async Workers" },
+  ],
+};

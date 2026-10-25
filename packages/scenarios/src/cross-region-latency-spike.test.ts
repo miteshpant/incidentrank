@@ -251,8 +251,8 @@ describe("Cross-Region Latency Spike", () => {
       expect(eligibility).toEqual({ eligible: true, tier: "optimal" });
     });
 
-    it("the patient path, sustained, is eligible for an ACCEPTABLE-tier Finish — a legitimate handback, not a trap", () => {
-      const state = runScenario(RTT_SPIKE_MS + 20_000);
+    it("the patient path becomes eligible for an ACCEPTABLE-tier Finish only after the real sustain window — a legitimate handback once observed, not a trap", () => {
+      const state = runScenario(RTT_SPIKE_MS + 50_000);
       expect(state.status).not.toBe("resolved");
       const eligibility = evaluateCompletionEligibility(crossRegionLatencySpikeSimulation, state);
       expect(eligibility).toEqual({ eligible: true, tier: "acceptable" });
@@ -282,7 +282,7 @@ describe("Cross-Region Latency Spike", () => {
     });
 
     it("acceptable does not auto-terminal even when sustained", () => {
-      const state = runScenario(RTT_SPIKE_MS + 20_000);
+      const state = runScenario(RTT_SPIKE_MS + 50_000);
       expect(state.status).not.toBe("resolved");
       expect(state.resolvedAtMs).toBeNull();
       expect(state.transitions.consecutiveAcceptableSeconds).toBeGreaterThanOrEqual(
@@ -298,7 +298,7 @@ describe("Cross-Region Latency Spike", () => {
     });
 
     it("Finish from acceptable -> resolved/acceptable", () => {
-      const state = runScenario(RTT_SPIKE_MS + 20_000);
+      const state = runScenario(RTT_SPIKE_MS + 50_000);
       const result = evaluateCandidateDeclaredFinish(crossRegionLatencySpikeSimulation, state);
       expect(result.outcome).toBe("resolved");
       expect(result.completionTier).toBe("acceptable");
@@ -321,6 +321,52 @@ describe("Cross-Region Latency Spike", () => {
     });
   });
 
+  describe("Phase 6B.1 fix: immediate Finish no longer yields an instant near-perfect score", () => {
+    it("zero-action immediate Finish (seconds after the incident begins) -> declared_unstable, not acceptable", () => {
+      const state = runScenario(RTT_SPIKE_MS + 5_000);
+      const eligibility = evaluateCompletionEligibility(crossRegionLatencySpikeSimulation, state);
+      expect(eligibility).toEqual({ eligible: false });
+      const result = evaluateCandidateDeclaredFinish(crossRegionLatencySpikeSimulation, state);
+      expect(result.outcome).toBe("declared_unstable");
+      expect(result.completionTier).toBeNull();
+    });
+
+    it("waiting alone (no control changes) is never counted as a harmful or configuration change", () => {
+      const state = runScenario(RTT_SPIKE_MS + 50_000);
+      expect(state.numberOfConfigurationChanges).toBe(0);
+      expect(state.numberOfHarmfulChanges).toBe(0);
+    });
+
+    it("the patient strategy only becomes Finish-eligible once the acceptable condition has genuinely been observed for the full post-incident sustain window, not merely the instant it first became true", () => {
+      // consecutiveAcceptableSeconds only starts counting once the
+      // incident actually begins (incidentStartedAtMs is set at
+      // RTT_SPIKE_MS, and the counter reads ~1 at that tick, not
+      // RTT_SPIKE_MS/1000) — this confirms there is no pre-incident
+      // credit a fast-acknowledging candidate could exploit.
+      const atTrigger = runScenario(RTT_SPIKE_MS);
+      expect(atTrigger.incidentStartedAtMs).toBe(RTT_SPIKE_MS);
+      expect(atTrigger.transitions.consecutiveAcceptableSeconds).toBeLessThanOrEqual(1);
+
+      const justUnderSustain = runScenario(RTT_SPIKE_MS + 43_000);
+      expect(
+        evaluateCompletionEligibility(crossRegionLatencySpikeSimulation, justUnderSustain),
+      ).toEqual({ eligible: false });
+
+      const atSustain = runScenario(RTT_SPIKE_MS + 44_000);
+      expect(
+        evaluateCompletionEligibility(crossRegionLatencySpikeSimulation, atSustain),
+      ).toEqual({ eligible: true, tier: "acceptable" });
+    });
+
+    it("second-wave unsafe state cannot Finish as acceptable even if the candidate waits past the (now longer) sustain window", () => {
+      const state = runScenario(SUSTAINED_DEGRADATION_MS + 20_000);
+      const eligibility = evaluateCompletionEligibility(crossRegionLatencySpikeSimulation, state);
+      expect(eligibility).toEqual({ eligible: false });
+      const result = evaluateCandidateDeclaredFinish(crossRegionLatencySpikeSimulation, state);
+      expect(result.outcome).toBe("declared_unstable");
+    });
+  });
+
   describe("Determinism", () => {
     it("produces identical state for the same action sequence run twice", () => {
       const runA = runScenario(RTT_SPIKE_MS + 20_000, RELAX_GENERAL_TRAFFIC_ACTIONS);
@@ -338,7 +384,7 @@ describe("Cross-Region Latency Spike", () => {
         extractFinishScoringInputs(crossRegionLatencySpikeSimulation, optimalFinish),
       );
 
-      const acceptableState = runScenario(RTT_SPIKE_MS + 20_000);
+      const acceptableState = runScenario(RTT_SPIKE_MS + 50_000);
       const acceptableFinish = evaluateCandidateDeclaredFinish(
         crossRegionLatencySpikeSimulation,
         acceptableState,
@@ -367,21 +413,23 @@ describe("Cross-Region Latency Spike", () => {
         extractScoringInputs(crossRegionLatencySpikeSimulation, alwaysGlobalState),
       );
 
-      // recovery/customerImpact/reliability/dataIntegrity legitimately
-      // tie between optimal and acceptable here — both mitigations are
-      // applied/declared on a similar timescale in this test, and both
-      // are genuinely safe (see scoring.ts's note, following Missing
-      // Database Index's accepted section-17 precedent). costEfficiency
-      // is the dimension that honestly discriminates them: running
-      // asynchronous cross-region replication for the relaxed general
-      // path carries a real ongoing cost the patient path never pays,
-      // so the "optimal" (fastest, correctness-maximal) tier can
-      // legitimately total at or slightly below the "acceptable"
-      // (patient) tier — a genuine tradeoff, not a scoring bug.
+      // Phase 6B.1 fix: recovery/reliability/dataIntegrity still tie
+      // between optimal and acceptable (both genuinely safe, same
+      // sustain-anchored scoring timestamp mechanism) — but
+      // customerImpact now carries real, decisive separation: the
+      // patient path's required 45s observation window (revenue-and-
+      // cost.ts) accrues real tracked revenue loss the fast path's much
+      // shorter 15s sustain window does not. costEfficiency still
+      // correctly runs the other way (the fast path pays a real ongoing
+      // infrastructure cost for async replication). Net: optimal now
+      // legitimately outscores acceptable overall, while acceptable
+      // still earns a strong score — not a scoring bug, the real,
+      // already-modeled tradeoff finally crossing a band boundary.
       expect(optimalScore.total).toBe(980);
-      expect(acceptableScore.total).toBe(1000);
+      expect(acceptableScore.total).toBe(970);
+      expect(optimalScore.total).toBeGreaterThan(acceptableScore.total);
       expect(harmfulScore.total).toBe(355);
-      expect(alwaysGlobalScore.total).toBe(535);
+      expect(alwaysGlobalScore.total).toBe(505);
 
       // Both safe paths clearly outscore both unsafe/harmful paths.
       expect(optimalScore.total).toBeGreaterThan(alwaysGlobalScore.total);
@@ -394,10 +442,42 @@ describe("Cross-Region Latency Spike", () => {
       expect(optimalScore.breakdown.dataIntegrity).toBe(200);
       expect(acceptableScore.breakdown.dataIntegrity).toBe(200);
       expect(harmfulScore.breakdown.dataIntegrity).toBe(20);
-      // The real, honest discriminator between the two safe paths.
+      // The real, honest discriminators between the two safe paths —
+      // each dimension pulls in its own genuine direction.
       expect(optimalScore.breakdown.costEfficiency).toBeLessThan(
         acceptableScore.breakdown.costEfficiency,
       );
+      expect(optimalScore.breakdown.customerImpact).toBeGreaterThan(
+        acceptableScore.breakdown.customerImpact,
+      );
+    });
+
+    it("immediate Finish (never eligible) scores clearly below both legitimate Finish outcomes", () => {
+      const immediateState = runScenario(RTT_SPIKE_MS + 5_000);
+      const immediateScore = scoreAuthoredAttempt(
+        CROSS_REGION_LATENCY_SPIKE_SCORING,
+        extractScoringInputs(crossRegionLatencySpikeSimulation, immediateState),
+      );
+
+      const optimalState = runScenario(RTT_SPIKE_MS + 20_000, RELAX_GENERAL_TRAFFIC_ACTIONS);
+      const optimalFinish = evaluateCandidateDeclaredFinish(crossRegionLatencySpikeSimulation, optimalState);
+      const optimalScore = scoreAuthoredAttempt(
+        CROSS_REGION_LATENCY_SPIKE_SCORING,
+        extractFinishScoringInputs(crossRegionLatencySpikeSimulation, optimalFinish),
+      );
+
+      const acceptableState = runScenario(RTT_SPIKE_MS + 50_000);
+      const acceptableFinish = evaluateCandidateDeclaredFinish(crossRegionLatencySpikeSimulation, acceptableState);
+      const acceptableScore = scoreAuthoredAttempt(
+        CROSS_REGION_LATENCY_SPIKE_SCORING,
+        extractFinishScoringInputs(crossRegionLatencySpikeSimulation, acceptableFinish),
+      );
+
+      expect(immediateScore.total).toBeLessThan(acceptableScore.total);
+      expect(immediateScore.total).toBeLessThan(optimalScore.total);
+      // unresolved terminal override: recovery and reliability both floor.
+      expect(immediateScore.breakdown.recovery).toBe(0);
+      expect(immediateScore.breakdown.reliability).toBe(0);
     });
   });
 });

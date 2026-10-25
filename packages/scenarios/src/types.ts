@@ -53,7 +53,7 @@ export interface ScenarioDefinition {
   version: number;
   name: string;
   description: string;
-  difficulty: "beginner" | "intermediate" | "senior" | "staff";
+  difficulty: "beginner" | "intermediate" | "senior" | "staff" | "senior_staff" | "principal";
   estimatedMinutes: number;
   /** Playable without signing in. Anonymous attempts on free scenarios are never persisted. */
   isFree: boolean;

@@ -292,6 +292,438 @@ export {
   CROSS_REGION_LATENCY_SPIKE_SCORING,
 } from "./cross-region-latency-spike";
 
+// Phase 6C batch 1 (scenarios 41-45): microservices/dependencies + API traffic
+export {
+  partialRegionalDependencyFailure,
+  partialRegionalDependencyFailureSimulation,
+  partialRegionalDependencyFailureCandidateUI,
+  PARTIAL_REGIONAL_DEPENDENCY_FAILURE_SCORING,
+} from "./partial-regional-dependency-failure";
+
+export {
+  dependencyRateLimitExhaustion,
+  dependencyRateLimitExhaustionSimulation,
+  dependencyRateLimitExhaustionCandidateUI,
+  DEPENDENCY_RATE_LIMIT_EXHAUSTION_SCORING,
+} from "./dependency-rate-limit-exhaustion";
+
+export {
+  apiTrafficSpike,
+  apiTrafficSpikeSimulation,
+  apiTrafficSpikeCandidateUI,
+  API_TRAFFIC_SPIKE_SCORING,
+} from "./api-traffic-spike";
+
+export {
+  rateLimitMisconfiguration,
+  rateLimitMisconfigurationSimulation,
+  rateLimitMisconfigurationCandidateUI,
+  RATE_LIMIT_MISCONFIGURATION_SCORING,
+} from "./rate-limit-misconfiguration";
+
+export {
+  loadBalancerImbalance,
+  loadBalancerImbalanceSimulation,
+  loadBalancerImbalanceCandidateUI,
+  LOAD_BALANCER_IMBALANCE_SCORING,
+} from "./load-balancer-imbalance";
+
+// Phase 6C batch 2 (scenarios 46-50): API traffic management
+export {
+  cacheRevalidationHerd,
+  cacheRevalidationHerdSimulation,
+  cacheRevalidationHerdCandidateUI,
+  CACHE_REVALIDATION_HERD_SCORING,
+} from "./cache-revalidation-herd";
+
+export {
+  requestTimeoutCascade,
+  requestTimeoutCascadeSimulation,
+  requestTimeoutCascadeCandidateUI,
+  REQUEST_TIMEOUT_CASCADE_SCORING,
+} from "./request-timeout-cascade";
+
+export {
+  largePayloadRegression,
+  largePayloadRegressionSimulation,
+  largePayloadRegressionCandidateUI,
+  LARGE_PAYLOAD_REGRESSION_SCORING,
+} from "./large-payload-regression";
+
+export {
+  apiGatewaySaturation,
+  apiGatewaySaturationSimulation,
+  apiGatewaySaturationCandidateUI,
+  API_GATEWAY_SATURATION_SCORING,
+} from "./api-gateway-saturation";
+
+export {
+  webhookDeliveryStorm,
+  webhookDeliveryStormSimulation,
+  webhookDeliveryStormCandidateUI,
+  WEBHOOK_DELIVERY_STORM_SCORING,
+} from "./webhook-delivery-storm";
+
+// Phase 6C batch 3 (scenarios 51-55): traffic/distributed systems
+export {
+  botTrafficSurge,
+  botTrafficSurgeSimulation,
+  botTrafficSurgeCandidateUI,
+  BOT_TRAFFIC_SURGE_SCORING,
+} from "./bot-traffic-surge";
+
+export {
+  unevenTenantTraffic,
+  unevenTenantTrafficSimulation,
+  unevenTenantTrafficCandidateUI,
+  UNEVEN_TENANT_TRAFFIC_SCORING,
+} from "./uneven-tenant-traffic";
+
+export {
+  networkPartition,
+  networkPartitionSimulation,
+  networkPartitionCandidateUI,
+  NETWORK_PARTITION_SCORING,
+} from "./network-partition";
+
+export {
+  quorumLoss,
+  quorumLossSimulation,
+  quorumLossCandidateUI,
+  QUORUM_LOSS_SCORING,
+} from "./quorum-loss";
+
+export {
+  replicationBacklog,
+  replicationBacklogSimulation,
+  replicationBacklogCandidateUI,
+  REPLICATION_BACKLOG_SCORING,
+} from "./replication-backlog";
+
+// Phase 6C batch 4 (scenarios 56-60): distributed systems + deployments
+export {
+  consistencyVsAvailabilityIncident,
+  consistencyVsAvailabilityIncidentSimulation,
+  consistencyVsAvailabilityIncidentCandidateUI,
+  CONSISTENCY_VS_AVAILABILITY_INCIDENT_SCORING,
+} from "./consistency-vs-availability-incident";
+
+export {
+  duplicateRequestProcessing,
+  duplicateRequestProcessingSimulation,
+  duplicateRequestProcessingCandidateUI,
+  DUPLICATE_REQUEST_PROCESSING_SCORING,
+} from "./duplicate-request-processing";
+
+export {
+  idempotencyFailure,
+  idempotencyFailureSimulation,
+  idempotencyFailureCandidateUI,
+  IDEMPOTENCY_FAILURE_SCORING,
+} from "./idempotency-failure";
+
+export {
+  distributedCoordinationFailure,
+  distributedCoordinationFailureSimulation,
+  distributedCoordinationFailureCandidateUI,
+  DISTRIBUTED_COORDINATION_FAILURE_SCORING,
+} from "./distributed-coordination-failure";
+
+export {
+  partialRolloutRegression,
+  partialRolloutRegressionSimulation,
+  partialRolloutRegressionCandidateUI,
+  PARTIAL_ROLLOUT_REGRESSION_SCORING,
+} from "./partial-rollout-regression";
+
+// Phase 6D batch 1 (scenarios 61-65): global/platform incidents
+export {
+  multiRegionPaymentPlatformDegradation,
+  multiRegionPaymentPlatformDegradationSimulation,
+  multiRegionPaymentPlatformDegradationCandidateUI,
+  MULTI_REGION_PAYMENT_PLATFORM_DEGRADATION_SCORING,
+} from "./multi-region-payment-platform-degradation";
+
+export {
+  globalCheckoutBrownout,
+  globalCheckoutBrownoutSimulation,
+  globalCheckoutBrownoutCandidateUI,
+  GLOBAL_CHECKOUT_BROWNOUT_SCORING,
+} from "./global-checkout-brownout";
+
+export {
+  multiTenantControlPlaneOverload,
+  multiTenantControlPlaneOverloadSimulation,
+  multiTenantControlPlaneOverloadCandidateUI,
+  MULTI_TENANT_CONTROL_PLANE_OVERLOAD_SCORING,
+} from "./multi-tenant-control-plane-overload";
+
+export {
+  regionalFailoverCausesGlobalOverload,
+  regionalFailoverSimulation,
+  regionalFailoverCandidateUI,
+  REGIONAL_FAILOVER_SCORING,
+} from "./regional-failover-causes-global-overload";
+
+export {
+  crossServiceRetryAmplification,
+  crossServiceRetryAmplificationSimulation,
+  crossServiceRetryAmplificationCandidateUI,
+  CROSS_SERVICE_RETRY_AMPLIFICATION_SCORING,
+} from "./cross-service-retry-amplification";
+
+// Phase 6D batch 2 (scenarios 66-70): data/event correctness incidents
+export {
+  ledgerReconciliationDivergence,
+  ledgerReconciliationDivergenceSimulation,
+  ledgerReconciliationDivergenceCandidateUI,
+  LEDGER_RECONCILIATION_DIVERGENCE_SCORING,
+} from "./ledger-reconciliation-divergence";
+
+export {
+  hotShardReplicaLagFailoverRisk,
+  hotShardReplicaLagFailoverRiskSimulation,
+  hotShardReplicaLagFailoverRiskCandidateUI,
+  HOT_SHARD_REPLICA_LAG_FAILOVER_RISK_SCORING,
+} from "./hot-shard-replica-lag-failover-risk";
+
+export {
+  eventPlatformPartialOutage,
+  eventPlatformPartialOutageSimulation,
+  eventPlatformPartialOutageCandidateUI,
+  EVENT_PLATFORM_PARTIAL_OUTAGE_SCORING,
+} from "./event-platform-partial-outage";
+
+export {
+  searchPlatformCascade,
+  searchPlatformCascadeSimulation,
+  searchPlatformCascadeCandidateUI,
+  SEARCH_PLATFORM_CASCADE_SCORING,
+} from "./search-platform-cascade";
+
+export {
+  apiMigrationDualWriteFailure,
+  apiMigrationDualWriteFailureSimulation,
+  apiMigrationDualWriteFailureCandidateUI,
+  API_MIGRATION_DUAL_WRITE_FAILURE_SCORING,
+} from "./api-migration-dual-write-failure";
+
+// Phase 6D batch 3 (scenarios 71-75): migration/identity/data platform incidents
+export {
+  schemaMigrationUnderLiveTraffic,
+  schemaMigrationUnderLiveTrafficSimulation,
+  schemaMigrationUnderLiveTrafficCandidateUI,
+  SCHEMA_MIGRATION_UNDER_LIVE_TRAFFIC_SCORING,
+} from "./schema-migration-under-live-traffic";
+
+export {
+  cacheInvalidationAcrossRegions,
+  cacheInvalidationAcrossRegionsSimulation,
+  cacheInvalidationAcrossRegionsCandidateUI,
+  CACHE_INVALIDATION_ACROSS_REGIONS_SCORING,
+} from "./cache-invalidation-across-regions";
+
+export {
+  identityPlatformDegradation,
+  identityPlatformDegradationSimulation,
+  identityPlatformDegradationCandidateUI,
+  IDENTITY_PLATFORM_DEGRADATION_SCORING,
+} from "./identity-platform-degradation";
+
+export {
+  authorizationPolicyRolloutFailure,
+  authorizationPolicyRolloutFailureSimulation,
+  authorizationPolicyRolloutFailureCandidateUI,
+  AUTHORIZATION_POLICY_ROLLOUT_FAILURE_SCORING,
+} from "./authorization-policy-rollout-failure";
+
+export {
+  dataPipelineFreshnessCollapse,
+  dataPipelineFreshnessCollapseSimulation,
+  dataPipelineFreshnessCollapseCandidateUI,
+  DATA_PIPELINE_FRESHNESS_COLLAPSE_SCORING,
+} from "./data-pipeline-freshness-collapse";
+
+// Phase 6D batch 4 (scenarios 76-80): peak-load/cross-platform incidents
+export {
+  backfillOverwhelmsProduction,
+  backfillOverwhelmsProductionSimulation,
+  backfillOverwhelmsProductionCandidateUI,
+  BACKFILL_OVERWHELMS_PRODUCTION_SCORING,
+} from "./backfill-overwhelms-production";
+
+export {
+  multiServiceMemoryPressureIncident,
+  multiServiceMemoryPressureIncidentSimulation,
+  multiServiceMemoryPressureIncidentCandidateUI,
+  MULTI_SERVICE_MEMORY_PRESSURE_INCIDENT_SCORING,
+} from "./multi-service-memory-pressure-incident";
+
+export {
+  globalFeatureRolloutIncident,
+  globalFeatureRolloutIncidentSimulation,
+  globalFeatureRolloutIncidentCandidateUI,
+  GLOBAL_FEATURE_ROLLOUT_INCIDENT_SCORING,
+} from "./global-feature-rollout-incident";
+
+export {
+  capacityExhaustionDuringPeakEvent,
+  capacityExhaustionDuringPeakEventSimulation,
+  capacityExhaustionDuringPeakEventCandidateUI,
+  CAPACITY_EXHAUSTION_DURING_PEAK_EVENT_SCORING,
+} from "./capacity-exhaustion-during-peak-event";
+
+export {
+  cascadingFailureAcrossSharedPlatform,
+  cascadingFailureAcrossSharedPlatformSimulation,
+  cascadingFailureAcrossSharedPlatformCandidateUI,
+  CASCADING_FAILURE_ACROSS_SHARED_PLATFORM_SCORING,
+} from "./cascading-failure-across-shared-platform";
+
+// Phase 6E batch 1 (scenarios 81-85): security/authorization/abuse-prevention incidents
+export {
+  privilegeEscalationViaStaleAuthorizationCache,
+  privilegeEscalationViaStaleAuthorizationCacheSimulation,
+  privilegeEscalationViaStaleAuthorizationCacheCandidateUI,
+  PRIVILEGE_ESCALATION_VIA_STALE_AUTHORIZATION_CACHE_SCORING,
+} from "./privilege-escalation-via-stale-authorization-cache";
+
+export {
+  serviceToServiceCredentialRotationFailure,
+  serviceToServiceCredentialRotationFailureSimulation,
+  serviceToServiceCredentialRotationFailureCandidateUI,
+  SERVICE_TO_SERVICE_CREDENTIAL_ROTATION_FAILURE_SCORING,
+} from "./service-to-service-credential-rotation-failure";
+
+export {
+  fraudControlDegradationDuringPaymentSurge,
+  fraudControlDegradationSimulation,
+  fraudControlDegradationCandidateUI,
+  FRAUD_CONTROL_DEGRADATION_SCORING,
+} from "./fraud-control-degradation-during-payment-surge";
+
+export {
+  abusePreventionFalsePositiveStorm,
+  abusePreventionFalsePositiveStormSimulation,
+  abusePreventionFalsePositiveStormCandidateUI,
+  ABUSE_PREVENTION_FALSE_POSITIVE_STORM_SCORING,
+} from "./abuse-prevention-false-positive-storm";
+
+export {
+  secretLeakageContainmentIncident,
+  secretLeakageContainmentIncidentSimulation,
+  secretLeakageContainmentIncidentCandidateUI,
+  SECRET_LEAKAGE_CONTAINMENT_INCIDENT_SCORING,
+} from "./secret-leakage-containment-incident";
+
+// Phase 6E batch 2 (scenarios 86-90): cost-efficiency and internal-data incidents
+export {
+  runawayCloudSpendDuringHealthyTraffic,
+  runawayCloudSpendDuringHealthyTrafficSimulation,
+  runawayCloudSpendDuringHealthyTrafficCandidateUI,
+  RUNAWAY_CLOUD_SPEND_DURING_HEALTHY_TRAFFIC_SCORING,
+} from "./runaway-cloud-spend-during-healthy-traffic";
+
+export {
+  crossRegionReplicationCostExplosion,
+  crossRegionReplicationCostExplosionSimulation,
+  crossRegionReplicationCostExplosionCandidateUI,
+  CROSS_REGION_REPLICATION_COST_EXPLOSION_SCORING,
+} from "./cross-region-replication-cost-explosion";
+
+export {
+  overprovisionedResilienceDuringLowRiskPeriod,
+  overprovisionedResilienceDuringLowRiskPeriodSimulation,
+  overprovisionedResilienceDuringLowRiskPeriodCandidateUI,
+  OVERPROVISIONED_RESILIENCE_DURING_LOW_RISK_PERIOD_SCORING,
+} from "./overprovisioned-resilience-during-low-risk-period";
+
+export {
+  expensiveRetryAndLoggingAmplification,
+  expensiveRetryAndLoggingAmplificationSimulation,
+  expensiveRetryAndLoggingAmplificationCandidateUI,
+  EXPENSIVE_RETRY_AND_LOGGING_AMPLIFICATION_SCORING,
+} from "./expensive-retry-and-logging-amplification";
+
+export {
+  modelFeatureFreshnessDegradation,
+  modelFeatureFreshnessDegradationSimulation,
+  modelFeatureFreshnessDegradationCandidateUI,
+  MODEL_FEATURE_FRESHNESS_DEGRADATION_SCORING,
+} from "./model-feature-freshness-degradation";
+
+// Phase 6E batch 3 (scenarios 91-95): ML/analytics/compliance incidents
+export {
+  trainingPipelineProducesCorruptedModelArtifact,
+  trainingPipelineProducesCorruptedModelArtifactSimulation,
+  trainingPipelineProducesCorruptedModelArtifactCandidateUI,
+  TRAINING_PIPELINE_PRODUCES_CORRUPTED_MODEL_ARTIFACT_SCORING,
+} from "./training-pipeline-produces-corrupted-model-artifact";
+
+export {
+  analyticsWarehouseQueryContention,
+  analyticsWarehouseQueryContentionSimulation,
+  analyticsWarehouseQueryContentionCandidateUI,
+  ANALYTICS_WAREHOUSE_QUERY_CONTENTION_SCORING,
+} from "./analytics-warehouse-query-contention";
+
+export {
+  dataLineageBreakDuringEtlMigration,
+  dataLineageBreakDuringEtlMigrationSimulation,
+  dataLineageBreakDuringEtlMigrationCandidateUI,
+  DATA_LINEAGE_BREAK_DURING_ETL_MIGRATION_SCORING,
+} from "./data-lineage-break-during-etl-migration";
+
+export {
+  mlInferenceCostVsQualityIncident,
+  mlInferenceCostVsQualityIncidentSimulation,
+  mlInferenceCostVsQualityIncidentCandidateUI,
+  ML_INFERENCE_COST_VS_QUALITY_INCIDENT_SCORING,
+} from "./ml-inference-cost-vs-quality-incident";
+
+export {
+  dataRetentionPolicyMisconfiguration,
+  dataRetentionPolicyMisconfigurationSimulation,
+  dataRetentionPolicyMisconfigurationCandidateUI,
+  DATA_RETENTION_POLICY_MISCONFIGURATION_SCORING,
+} from "./data-retention-policy-misconfiguration";
+
+// Phase 6E batch 4 (scenarios 96-100): privacy, auditability, long-horizon remediation, proactive capacity, and enterprise migration governance incidents — final Phase 6E batch
+export {
+  privacyDeletionBacklog,
+  privacyDeletionBacklogSimulation,
+  privacyDeletionBacklogCandidateUI,
+  PRIVACY_DELETION_BACKLOG_SCORING,
+} from "./privacy-deletion-backlog";
+
+export {
+  auditLogIntegrityFailure,
+  auditLogIntegrityFailureSimulation,
+  auditLogIntegrityFailureCandidateUI,
+  AUDIT_LOG_INTEGRITY_FAILURE_SCORING,
+} from "./audit-log-integrity-failure";
+
+export {
+  certificateExpiryAcrossLargeFleet,
+  certificateExpiryAcrossLargeFleetSimulation,
+  certificateExpiryAcrossLargeFleetCandidateUI,
+  CERTIFICATE_EXPIRY_ACROSS_LARGE_FLEET_SCORING,
+} from "./certificate-expiry-across-large-fleet";
+
+export {
+  emergencyCapacityReservationDecision,
+  emergencyCapacityReservationDecisionSimulation,
+  emergencyCapacityReservationDecisionCandidateUI,
+  EMERGENCY_CAPACITY_RESERVATION_DECISION_SCORING,
+} from "./emergency-capacity-reservation-decision";
+
+export {
+  enterpriseWideDependencyDeprecation,
+  enterpriseWideDependencyDeprecationSimulation,
+  enterpriseWideDependencyDeprecationCandidateUI,
+  ENTERPRISE_WIDE_DEPENDENCY_DEPRECATION_SCORING,
+} from "./enterprise-wide-dependency-deprecation";
+
 export {
   BUILT_IN_SCENARIO_CATALOG,
   getBuiltInScenarioEntry,

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { assessments, attempts, organizations, scenarios } from "@incidentrank/db";
 import { eq } from "drizzle-orm";
-import { paymentRetryStorm } from "@incidentrank/scenarios";
+import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
 import type { AuthoredScenario } from "@incidentrank/scenarios/authoring";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
@@ -75,7 +75,11 @@ interface CandidateSafeScenarioMeta {
 
 /**
  * Candidate-safe scenario metadata only — name, difficulty, estimated
- * duration. Never reads/returns rules, conditions, or scoring. For
+ * duration. Never reads/returns rules, conditions, or scoring. For a
+ * built-in (incidentrank-owned) scenario this is resolved generically
+ * from BUILT_IN_SCENARIO_CATALOG by slug — never a single hardcoded
+ * scenario — matching the pattern every other scenario-serving route
+ * (e.g. this assessment's own scenario/route.ts) already uses. For
  * organization-authored scenarios this reads only basics.* off the
  * authored document, never the rest of it.
  */
@@ -86,11 +90,19 @@ async function loadCandidateSafeScenarioMeta(
     where: eq(scenarios.id, scenarioId),
   });
 
-  if (!scenario || scenario.ownershipType === "incidentrank") {
+  if (!scenario) {
+    return { name: "Unknown scenario", difficulty: "intermediate", estimatedMinutes: 15 };
+  }
+
+  if (scenario.ownershipType === "incidentrank") {
+    const entry = getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, scenario.slug);
+    if (!entry) {
+      return { name: scenario.name, difficulty: "intermediate", estimatedMinutes: 15 };
+    }
     return {
-      name: paymentRetryStorm.name,
-      difficulty: paymentRetryStorm.difficulty,
-      estimatedMinutes: paymentRetryStorm.estimatedMinutes,
+      name: entry.definition.name,
+      difficulty: entry.definition.difficulty,
+      estimatedMinutes: entry.definition.estimatedMinutes,
     };
   }
 

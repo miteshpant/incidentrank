@@ -73,6 +73,18 @@ export const successCondition: SuccessCondition = {
  * once the backbone issue has visibly failed to clear on its own) — see
  * definition.ts's completion-mode audit for why patience alone cannot
  * stay acceptable indefinitely.
+ *
+ * Phase 6B.1 fix: sustainedSeconds raised from 15 to 45. The scenario's
+ * own timing scale is minutes (RTT_SPIKE_MS=30s, the second-wave
+ * confirmation at +3min), so 45s is a realistic "did you actually
+ * observe the system settle" window — long enough to require genuine
+ * observation, far short of the ~3.5-minute hidden second-wave event
+ * (never gate on that directly; see docs/implementation_plan/
+ * phase6b.1.md section 6). Before this fix, a candidate could click
+ * Finish seconds after the incident began and resolve acceptable with
+ * a near-perfect score without ever having watched the system behave —
+ * this raises the bar to "wait and confirm stability," not "wait out
+ * the hidden timer."
  */
 export const acceptableCondition: SuccessCondition = {
   conditions: [
@@ -81,7 +93,7 @@ export const acceptableCondition: SuccessCondition = {
     { key: "backboneStatus", operator: "not_equals", comparedTo: "critical" },
     { key: "paymentAuthConsistency", operator: "equals", comparedTo: "strong" },
   ],
-  sustainedSeconds: 15,
+  sustainedSeconds: 45,
 };
 
 export const failureCondition: FailureCondition = {

@@ -1,0 +1,91 @@
+import type { CandidateUIDescriptor } from "../candidate-ui";
+import {
+  ENRICHMENT_MODE_KEY,
+  INVENTORY_RESERVATION_STRATEGY_KEY,
+  MAX_CHECKOUT_CONCURRENCY_KEY,
+  PRICING_MODE_KEY,
+  PROMOTIONS_MODE_KEY,
+  RETRY_POLICY_KEY,
+  TAX_MODE_KEY,
+  TIMEOUT_BUDGET_MS_KEY,
+} from "./controls";
+
+export const globalCheckoutBrownoutCandidateUI: CandidateUIDescriptor = {
+  metrics: [
+    { key: "checkoutLatencyMs", label: "Checkout End-to-End Latency", sourceStateKey: "checkoutLatencyMs", format: "duration" },
+    { key: "pricingLatencyMs", label: "Pricing Latency", sourceStateKey: "pricingLatencyMs", format: "duration" },
+    { key: "promotionsLatencyMs", label: "Promotions Latency", sourceStateKey: "promotionsLatencyMs", format: "duration" },
+    { key: "taxLatencyMs", label: "Tax Latency", sourceStateKey: "taxLatencyMs", format: "duration" },
+    { key: "inventoryLatencyMs", label: "Inventory Latency", sourceStateKey: "inventoryLatencyMs", format: "duration" },
+    { key: "paymentLatencyMs", label: "Payment Latency", sourceStateKey: "paymentLatencyMs", format: "duration" },
+    { key: "pricingErrorRatePct", label: "Pricing Error Rate", sourceStateKey: "pricingErrorRatePct", format: "percentage" },
+    { key: "promotionsErrorRatePct", label: "Promotions Error Rate", sourceStateKey: "promotionsErrorRatePct", format: "percentage" },
+    { key: "taxErrorRatePct", label: "Tax Error Rate", sourceStateKey: "taxErrorRatePct", format: "percentage" },
+    { key: "requestConcurrency", label: "Request Concurrency", sourceStateKey: "requestConcurrency", format: "number" },
+    { key: "partialCheckoutPct", label: "Partial Checkout %", sourceStateKey: "partialCheckoutPct", format: "percentage" },
+    { key: "paymentAuthSuccessPct", label: "Payment Authorization Success", sourceStateKey: "paymentAuthSuccessPct", format: "percentage" },
+    { key: "inventoryReservationSuccessPct", label: "Inventory Reservation Success", sourceStateKey: "inventoryReservationSuccessPct", format: "percentage" },
+    { key: "checkoutPathStatus", label: "Checkout Path Status", sourceStateKey: "checkoutPathStatus", format: "status" },
+  ],
+  controls: [
+    {
+      key: PROMOTIONS_MODE_KEY,
+      label: "Promotions",
+      componentId: "promotions",
+      valueLabels: { enabled: "Enabled", disabled: "Disabled" },
+    },
+    {
+      key: TAX_MODE_KEY,
+      label: "Tax Mode",
+      componentId: "tax",
+      valueLabels: { live: "Live", "bounded-fallback": "Bounded Fallback" },
+    },
+    {
+      key: PRICING_MODE_KEY,
+      label: "Pricing Mode",
+      componentId: "pricing",
+      valueLabels: { live: "Live", "cached-fallback": "Cached Fallback" },
+    },
+    {
+      key: ENRICHMENT_MODE_KEY,
+      label: "Enrichment Mode",
+      componentId: "order-service",
+      valueLabels: { full: "Full", reduced: "Reduced" },
+    },
+    {
+      key: TIMEOUT_BUDGET_MS_KEY,
+      label: "Per-Call Timeout Budget",
+      componentId: "checkout-orchestrator",
+      valueLabels: { "2000": "2000 ms", "4000": "4000 ms", "8000": "8000 ms" },
+    },
+    {
+      key: RETRY_POLICY_KEY,
+      label: "Retry Policy (all dependencies)",
+      componentId: "checkout-orchestrator",
+      valueLabels: { none: "None", moderate: "Moderate (1x)", aggressive: "Aggressive (3x)" },
+    },
+    {
+      key: MAX_CHECKOUT_CONCURRENCY_KEY,
+      label: "Max Checkout Concurrency",
+      componentId: "checkout-orchestrator",
+      valueLabels: { "50": "50", "100": "100", "200": "200" },
+    },
+    {
+      key: INVENTORY_RESERVATION_STRATEGY_KEY,
+      label: "Inventory Reservation Strategy",
+      componentId: "inventory",
+      valueLabels: { strict: "Strict", optimistic: "Optimistic" },
+    },
+  ],
+  components: [
+    { id: "web-mobile", label: "Web / Mobile" },
+    { id: "checkout-orchestrator", label: "Checkout Orchestrator" },
+    { id: "cart", label: "Cart" },
+    { id: "pricing", label: "Pricing" },
+    { id: "inventory", label: "Inventory" },
+    { id: "promotions", label: "Promotions" },
+    { id: "tax", label: "Tax" },
+    { id: "payment", label: "Payment" },
+    { id: "order-service", label: "Order Service" },
+  ],
+};

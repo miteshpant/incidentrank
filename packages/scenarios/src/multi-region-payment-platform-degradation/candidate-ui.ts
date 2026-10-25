@@ -1,0 +1,91 @@
+import type { CandidateUIDescriptor } from "../candidate-ui";
+import {
+  CROSS_REGION_REPLICATION_MODE_KEY,
+  EU_TRAFFIC_PERCENTAGE_KEY,
+  EVENT_PUBLISHER_PRIORITY_KEY,
+  FRAUD_FALLBACK_MODE_KEY,
+  HIGH_RISK_THROTTLE_KEY,
+  LEDGER_WRITE_AUTHORITY_KEY,
+  RISK_ENRICHMENT_MODE_KEY,
+  SETTLEMENT_WORKER_PRIORITY_KEY,
+} from "./controls";
+
+export const multiRegionPaymentPlatformDegradationCandidateUI: CandidateUIDescriptor = {
+  metrics: [
+    { key: "usPaymentSuccessRate", label: "US Payment Success", sourceStateKey: "usPaymentSuccessRate", format: "percentage" },
+    { key: "euPaymentSuccessRate", label: "EU Payment Success", sourceStateKey: "euPaymentSuccessRate", format: "percentage" },
+    { key: "usPaymentLatencyMs", label: "US Payment Latency", sourceStateKey: "usPaymentLatencyMs", format: "duration" },
+    { key: "euPaymentLatencyMs", label: "EU Payment Latency", sourceStateKey: "euPaymentLatencyMs", format: "duration" },
+    { key: "ledgerReplicationLagSeconds", label: "Ledger Replication Lag (s)", sourceStateKey: "ledgerReplicationLagSeconds", format: "duration" },
+    { key: "usLedgerUtilization", label: "US Ledger Utilization", sourceStateKey: "usLedgerUtilization", format: "percentage" },
+    { key: "settlementBacklogThousands", label: "Settlement Backlog (thousands)", sourceStateKey: "settlementBacklogThousands", format: "number" },
+    { key: "fraudProviderHealth", label: "Fraud Provider Health", sourceStateKey: "fraudProviderHealth", format: "status" },
+    { key: "usRiskCheckSuccessRate", label: "US Risk-Check Success", sourceStateKey: "usRiskCheckSuccessRate", format: "percentage" },
+    { key: "euRiskCheckSuccessRate", label: "EU Risk-Check Success", sourceStateKey: "euRiskCheckSuccessRate", format: "percentage" },
+    { key: "crossRegionTrafficPercentage", label: "Cross-Region Traffic %", sourceStateKey: "crossRegionTrafficPercentage", format: "percentage" },
+  ],
+  controls: [
+    {
+      key: EU_TRAFFIC_PERCENTAGE_KEY,
+      label: "EU Traffic Percentage (kept local)",
+      componentId: "eu-payment-api",
+      valueLabels: { "100": "100% Local", "70": "70% Local", "40": "40% Local", "0": "0% Local" },
+    },
+    {
+      key: LEDGER_WRITE_AUTHORITY_KEY,
+      label: "Ledger Write Authority",
+      componentId: "us-ledger",
+      valueLabels: { "region-local": "Region-Local", "us-authoritative": "US Authoritative" },
+    },
+    {
+      key: FRAUD_FALLBACK_MODE_KEY,
+      label: "Fraud Fallback Mode",
+      componentId: "fraud-provider",
+      valueLabels: { "live-provider": "Live Provider", "cached-rules": "Cached Rules", bypass: "Bypass" },
+    },
+    {
+      key: RISK_ENRICHMENT_MODE_KEY,
+      label: "Optional Risk Enrichment",
+      componentId: "eu-risk-service",
+      valueLabels: { full: "Full", "optional-skip": "Skip Optional" },
+    },
+    {
+      key: SETTLEMENT_WORKER_PRIORITY_KEY,
+      label: "Settlement Worker Priority",
+      componentId: "settlement-pipeline",
+      valueLabels: { normal: "Normal", "critical-path-first": "Critical Path First" },
+    },
+    {
+      key: EVENT_PUBLISHER_PRIORITY_KEY,
+      label: "Event Publisher Priority",
+      componentId: "us-event-publisher",
+      valueLabels: { normal: "Normal", "defer-non-critical": "Defer Non-Critical" },
+    },
+    {
+      key: HIGH_RISK_THROTTLE_KEY,
+      label: "High-Risk Transaction Throttle",
+      componentId: "us-risk-service",
+      valueLabels: { off: "Off", on: "On" },
+    },
+    {
+      key: CROSS_REGION_REPLICATION_MODE_KEY,
+      label: "Cross-Region Replication Mode",
+      componentId: "eu-ledger-replica",
+      valueLabels: { "async-best-effort": "Async Best-Effort", "paused-until-caught-up": "Paused Until Caught Up" },
+    },
+  ],
+  components: [
+    { id: "clients", label: "Clients" },
+    { id: "global-traffic-manager", label: "Global Traffic Manager" },
+    { id: "us-payment-api", label: "US Payment API" },
+    { id: "us-risk-service", label: "US Risk Service" },
+    { id: "us-ledger", label: "US Ledger" },
+    { id: "us-event-publisher", label: "US Event Publisher" },
+    { id: "eu-payment-api", label: "EU Payment API" },
+    { id: "eu-risk-service", label: "EU Risk Service" },
+    { id: "eu-ledger-replica", label: "EU Ledger / Replica" },
+    { id: "eu-event-publisher", label: "EU Event Publisher" },
+    { id: "fraud-provider", label: "Fraud Provider" },
+    { id: "settlement-pipeline", label: "Settlement Pipeline" },
+  ],
+};

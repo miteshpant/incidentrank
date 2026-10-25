@@ -3,7 +3,23 @@
 import type { AuthoredDifficulty, AuthoredScenario, AuthoredScenarioValidationError } from "@incidentrank/scenarios/authoring";
 import { SectionErrors } from "./section-errors";
 
-const DIFFICULTIES: AuthoredDifficulty[] = ["beginner", "intermediate", "senior", "staff"];
+const DIFFICULTIES: AuthoredDifficulty[] = [
+  "beginner",
+  "intermediate",
+  "senior",
+  "staff",
+  "senior_staff",
+  "principal",
+];
+
+const DIFFICULTY_OPTION_LABEL: Record<AuthoredDifficulty, string> = {
+  beginner: "Beginner",
+  intermediate: "Intermediate",
+  senior: "Senior",
+  staff: "Staff",
+  senior_staff: "Senior Staff",
+  principal: "Principal",
+};
 
 interface BasicsSectionProps {
   authored: AuthoredScenario;
@@ -61,7 +77,7 @@ export function BasicsSection({ authored, errors, disabled, onChange }: BasicsSe
         >
           {DIFFICULTIES.map((d) => (
             <option key={d} value={d}>
-              {d.charAt(0).toUpperCase() + d.slice(1)}
+              {DIFFICULTY_OPTION_LABEL[d]}
             </option>
           ))}
         </select>

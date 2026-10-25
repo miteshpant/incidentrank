@@ -130,5 +130,19 @@ export const crossRegionLatencySpikeSimulation: ScenarioSimulationDefinition = {
   // — the candidate must judge whether payment auth is still
   // correctly synchronous, which is exactly the "is this safe enough
   // to hand back" judgment candidate_declared exists to test.
+  //
+  // Phase 6B.1 fix (docs/implementation_plan/phase6b.1.md): the
+  // acceptableCondition's sustainedSeconds was 15, identical to
+  // successCondition's — since fully-synchronous-degraded's fields are
+  // already true the instant the incident begins (no control change
+  // needed), a candidate could click Finish seconds in and resolve
+  // acceptable with a near-perfect score without ever observing the
+  // system. Raised to 45s (revenue-and-cost.ts) so the patient strategy
+  // requires real, candidate-driven observation time — not the hidden
+  // ~3.5-minute second-wave timer, which stays a pure escalation event
+  // the candidate is never required to wait for. The "is this safe"
+  // judgment this scenario tests now also includes "have you actually
+  // watched it be safe for long enough to trust that," not just
+  // "do the numbers happen to be under the bar this instant."
   completion: { mode: "candidate_declared", acceptableCondition },
 };

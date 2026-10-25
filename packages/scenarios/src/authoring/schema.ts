@@ -16,7 +16,7 @@
 // decrement, emit authored event, duration-based conditions).
 // ─────────────────────────────────────────────────────────────────────────
 
-export type AuthoredDifficulty = "beginner" | "intermediate" | "senior" | "staff";
+export type AuthoredDifficulty = "beginner" | "intermediate" | "senior" | "staff" | "senior_staff" | "principal";
 
 export type AuthoredNodeType =
   | "service"

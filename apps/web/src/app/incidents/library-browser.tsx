@@ -11,6 +11,8 @@ const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
   intermediate: "Intermediate",
   senior: "Senior",
   staff: "Staff",
+  senior_staff: "Senior Staff",
+  principal: "Principal",
 };
 
 const DURATION_RANGES = [
@@ -35,6 +37,8 @@ const DIFFICULTY_RANK: Record<ScenarioDefinition["difficulty"], number> = {
   intermediate: 1,
   senior: 2,
   staff: 3,
+  senior_staff: 4,
+  principal: 5,
 };
 
 export interface LibraryEntry {

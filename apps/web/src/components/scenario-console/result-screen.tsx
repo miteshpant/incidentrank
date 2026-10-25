@@ -183,14 +183,42 @@ export function GenericResultScreen({
   // terminal phase) and only when a persisted attemptId exists
   // (signed-in practice). The server independently re-enforces
   // practice-only + terminal-only regardless of when this fires.
+  //
+  // Phase 6B.1 fix: the client mounting this component (local
+  // simulation state reaching a terminal status) can race ahead of the
+  // server's own async terminal-attempt persistence write, so the
+  // review endpoint's terminal-only gate can still return 409 on the
+  // very first fetch even though the attempt is about to become
+  // terminal server-side within a tick or two. That 409 used to be
+  // silently swallowed (feedbackGroups stayed null forever, no retry,
+  // no visible error) — candidates would see no feedback at all,
+  // indistinguishable from "this attempt legitimately has none." Retry
+  // a bounded number of times on 409 specifically; every other error
+  // stays silent-but-terminal, matching the prior (correct) behavior
+  // for an ineligible/missing attempt.
   const [feedbackGroups, setFeedbackGroups] = useState<ActionFeedbackGroup[] | null>(null);
   useEffect(() => {
     if (!attemptId) return;
     let cancelled = false;
-    void requestActionFeedback(attemptId).then((result) => {
-      if (cancelled) return;
-      if (!("error" in result)) setFeedbackGroups(result);
-    });
+    let attempt = 0;
+    const MAX_ATTEMPTS = 4;
+    const RETRY_DELAY_MS = 500;
+
+    const fetchFeedback = () => {
+      void requestActionFeedback(attemptId).then((result) => {
+        if (cancelled) return;
+        if (!("error" in result)) {
+          setFeedbackGroups(result);
+          return;
+        }
+        attempt += 1;
+        if (result.status === 409 && attempt < MAX_ATTEMPTS) {
+          setTimeout(fetchFeedback, RETRY_DELAY_MS);
+        }
+      });
+    };
+    fetchFeedback();
+
     return () => {
       cancelled = true;
     };

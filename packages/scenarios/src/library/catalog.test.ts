@@ -28,7 +28,14 @@ describe("BUILT_IN_SCENARIO_CATALOG", () => {
   });
 
   it("gives every entry required difficulty/duration metadata", () => {
-    const validDifficulties = new Set(["beginner", "intermediate", "senior", "staff"]);
+    const validDifficulties = new Set([
+      "beginner",
+      "intermediate",
+      "senior",
+      "staff",
+      "senior_staff",
+      "principal",
+    ]);
     for (const entry of listBuiltInScenarioEntries(BUILT_IN_SCENARIO_CATALOG)) {
       expect(
         validDifficulties.has(entry.definition.difficulty),

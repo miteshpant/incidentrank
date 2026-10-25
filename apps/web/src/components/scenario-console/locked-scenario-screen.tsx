@@ -6,6 +6,8 @@ const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
   intermediate: "Intermediate",
   senior: "Senior",
   staff: "Staff",
+  senior_staff: "Senior Staff",
+  principal: "Principal",
 };
 
 /**
