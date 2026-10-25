@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -81,8 +87,13 @@ describe("Slow Query Regression", () => {
       { atMs: 31_000, controlKey: FORCE_INDEX_HINT_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.cpuUtilization).toBe(18);
+    expect(evaluateCandidateDeclaredFinish(slowQueryRegressionSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("scaling the connection pool without the index hint is harmful, not helpful", () => {
@@ -147,10 +158,10 @@ describe("Slow Query Regression", () => {
   });
 
   describe("scoring path", () => {
-    // Plain automatic completion (no `completion` field on definition.ts),
-    // so the engine auto-writes resolvedAtMs/failedAtMs itself and a raw
-    // extractScoringInputs(simulation, state) call is correct — no
-    // evaluateCandidateDeclaredFinish/extractFinishScoringInputs needed.
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — score a genuinely-resolvable run via its Finish
+    // declaration; every other (unresolved/failed) run still scores
+    // correctly via a raw extractScoringInputs call.
     //
     // Trigger fires at 30_000ms (see "regresses critically..." above).
     // failureCondition needs 60s sustained cpuUtilization>=90, which first
@@ -163,19 +174,33 @@ describe("Slow Query Regression", () => {
 
     function scoreFor(actions: TimedAction[]) {
       const state = runScenario(UNTIL_MS, actions);
-      const inputs = extractScoringInputs(slowQueryRegressionSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(slowQueryRegressionSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(slowQueryRegressionSimulation, finishResult)
+          : extractScoringInputs(slowQueryRegressionSimulation, state);
       return scoreAuthoredAttempt(SLOW_QUERY_REGRESSION_SCORING, inputs).total;
     }
 
-    it("scores the full index-hint recovery as a perfect run", () => {
+    it("scores the full index-hint recovery as a near-perfect run", () => {
       const state = runScenario(UNTIL_MS, [
         { atMs: 31_000, controlKey: FORCE_INDEX_HINT_ENABLED_KEY, value: true },
       ]);
-      expect(state.status).toBe("resolved");
+      expect(state.status).not.toBe("resolved");
 
-      const inputs = extractScoringInputs(slowQueryRegressionSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(slowQueryRegressionSimulation, state);
+      expect(finishResult.outcome).toBe("resolved");
+      const inputs = extractFinishScoringInputs(slowQueryRegressionSimulation, finishResult);
       const result = scoreAuthoredAttempt(SLOW_QUERY_REGRESSION_SCORING, inputs);
-      expect(result.total).toBe(1000);
+      // 865, not a perfect 1000: deriveScoringResolvedAtMs credits the
+      // INSTANT the success condition first became continuously true
+      // (1s after incident start), not the moment its sustain window
+      // finished — recoveryTimeSeconds is excellent (top band, 300/300),
+      // but totalTimeInCriticalMs (accumulated before the fix took
+      // effect) measured against that same short resolved window drives
+      // criticalTimeRatio to the worst reliability band (15/150). Same
+      // mechanism as autoscaling-failure.test.ts's equivalent note.
+      expect(result.total).toBe(865);
     });
 
     it("ranks good recovery above doing nothing, doing nothing above the masking timeout, and the masking timeout above the harmful pool-scaling trap", () => {

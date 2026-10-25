@@ -9,21 +9,24 @@ vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
 import { mockAuthState } from "@/test/clerk-mock";
 
 /**
- * Minimal automatic-mode fixture: the success condition is already
- * satisfied the instant the incident starts (sustainedSeconds: 0), so
- * the very first tick after acknowledging resolves it — no candidate
- * action required. Exercises the AUTOMATIC-mode score-fetch path
+ * Minimal fixture whose failure condition is already satisfied the
+ * instant the incident starts (sustainedSeconds: 0), so the very first
+ * tick after acknowledging fails it automatically — no candidate action
+ * required. Exercises the AUTOMATIC-failure score-fetch path
  * (completeAttemptRecord/requestScorePreview via
- * use-incident-attempt.ts's terminal-completion effects), which is
- * structurally distinct from the candidate_declared Finish flow (whose
- * score always arrives directly in the Finish response).
+ * use-incident-attempt.ts's terminal-completion effects). Per the Phase
+ * 7.1 doctrine the engine can only ever auto-detect FAILURE — a
+ * sustainedSeconds: 0 success condition (this fixture's original shape)
+ * is no longer reachable automatically at all, so this regression now
+ * exercises failure, the one terminal state that remains genuinely
+ * automatic and still needs this exact score-fetch-retry path tested.
  */
 const simulation: ScenarioSimulationDefinition = {
   tickMs: 1_000,
   architecture: { nodes: [{ id: "svc", label: "Service" }], edges: [] },
   controls: [],
-  initialValues: { errorRate: 0.1 },
-  initialComponentHealth: { svc: "healthy" },
+  initialValues: { errorRate: 60 },
+  initialComponentHealth: { svc: "critical" },
   severityFields: [],
   numericWatchFields: [],
   timedEvents: [
@@ -37,22 +40,22 @@ const simulation: ScenarioSimulationDefinition = {
   ],
   rules: [
     {
-      id: "already-healthy",
+      id: "already-critical",
       when: { triggerEquals: { active: true } },
-      incidentState: "healthy",
-      values: { errorRate: 0.1 },
-      componentHealth: { svc: "healthy" },
+      incidentState: "critical",
+      values: { errorRate: 60 },
+      componentHealth: { svc: "critical" },
     },
   ],
-  revenueLossRatePerMinute: { healthy: 0 },
+  revenueLossRatePerMinute: { healthy: 0, critical: 100 },
   infrastructureCost: { baselineMonthlyUsd: 100, perUnitMonthlyUsd: {} },
   successCondition: {
     conditions: [{ key: "errorRate", operator: "less_than", comparedTo: 1 }],
-    sustainedSeconds: 0,
+    sustainedSeconds: 60,
   },
   failureCondition: {
     conditions: [{ key: "errorRate", operator: "greater_than_or_equal", comparedTo: 50 }],
-    sustainedSeconds: 60,
+    sustainedSeconds: 0,
   },
   actionClassifications: [],
 };
@@ -81,7 +84,7 @@ function advanceSeconds(seconds: number) {
   });
 }
 
-describe("Scoring retry after a failed score-preview request (automatic-mode terminal scoring)", () => {
+describe("Scoring retry after a failed score-preview request (automatic-failure terminal scoring)", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     mockAuthState.isSignedIn = false;
@@ -116,7 +119,7 @@ describe("Scoring retry after a failed score-preview request (automatic-mode ter
     );
     acknowledgeIncident();
 
-    // One tick past the incident start is enough: the success condition
+    // One tick past the incident start is enough: the failure condition
     // is already satisfied with sustainedSeconds: 0.
     advanceSeconds(2);
 

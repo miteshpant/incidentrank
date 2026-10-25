@@ -23,8 +23,7 @@ export interface FinishResult extends CandidateDeclaredFinishResult {
 export type FinishAttemptResult =
   | { ok: true; result: FinishResult; alreadyApplied: boolean }
   | { ok: false; reason: "scenario_version_unresolvable" }
-  | { ok: false; reason: "terminal" }
-  | { ok: false; reason: "not_candidate_declared" };
+  | { ok: false; reason: "terminal" };
 
 /**
  * Evaluates a candidate's explicit "Finish Incident" DECLARATION against
@@ -39,10 +38,13 @@ export type FinishAttemptResult =
  * complete) are deliberately separate entry points representing
  * different TRIGGERS — Finish is a candidate decision ("I'm done"),
  * automatic completion is the engine detecting its own terminal
- * condition (success for automatic-mode scenarios, or failure for any
- * mode) with no candidate action involved. An automatic system failure
- * must never fabricate a completion declaration/note/timestamp, so it
- * never calls this function. Both converge on the shared
+ * failure condition with no candidate action involved. Per the Phase
+ * 7.1 doctrine, the engine can only ever auto-detect FAILURE — success
+ * always requires this function to be called via an explicit Finish
+ * declaration, for every scenario, regardless of completion mode. An
+ * automatic system failure must never fabricate a completion
+ * declaration/note/timestamp, so it never calls this function. Both
+ * paths converge on the shared
  * persistTerminalAttempt primitive (./terminal-attempt.ts) for the
  * actual row mutation, so "completed, one outcome, score persisted once"
  * is enforced in exactly one place.
@@ -73,10 +75,6 @@ export async function finishAttempt(
 
   const scenario = await resolveSimulationDefinition(attempt.scenario, attempt.scenarioVersion);
   if (!scenario) return { ok: false, reason: "scenario_version_unresolvable" };
-
-  if ((scenario.completion?.mode ?? "automatic") !== "candidate_declared") {
-    return { ok: false, reason: "not_candidate_declared" };
-  }
 
   const outcome = await db.transaction(async (tx) => {
     const [lockedAttempt] = await tx

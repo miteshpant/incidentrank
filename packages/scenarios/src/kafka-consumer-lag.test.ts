@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { kafkaConsumerLag } from "./kafka-consumer-lag";
@@ -81,15 +87,24 @@ describe("Kafka Consumer Lag", () => {
       { atMs: 31_000, controlKey: CONSUMER_INSTANCES_KEY, value: 16 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.consumerLagMessages).toBe(150);
+    expect(evaluateCandidateDeclaredFinish(kafkaConsumerLagSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("raising maxPollRecords once slow records appear is harmful, not helpful, even with many consumers", () => {
     const stateWithoutMitigation = runScenario(5 * 60_000 + 10_000, [
       { atMs: 31_000, controlKey: CONSUMER_INSTANCES_KEY, value: 16 },
     ]);
-    expect(stateWithoutMitigation.status).toBe("resolved");
+    expect(stateWithoutMitigation.status).not.toBe("resolved");
+    expect(
+      evaluateCandidateDeclaredFinish(kafkaConsumerLagSimulation, stateWithoutMitigation)
+        .outcome,
+    ).toBe("resolved");
 
     const stateWithHarmfulBatch = runScenario(5 * 60_000 + 10_000, [
       { atMs: 31_000, controlKey: CONSUMER_INSTANCES_KEY, value: 16 },
@@ -153,18 +168,16 @@ describe("Kafka Consumer Lag", () => {
   });
 
   describe("scoring orders good > baseline > harmful > partiallyScaled > unsafeCommitPartial", () => {
-    // Regression test for the scoring path: this scenario has no
-    // completion.mode override in definition.ts, so (per
-    // packages/simulator/src/completion-mode.test.ts's "omitting
-    // completion entirely defaults to automatic") it stays plain
-    // "automatic" completion — the engine auto-writes resolvedAtMs on
-    // genuine sustained success and auto-writes failedAtMs on sustained
-    // failure, so a raw extractScoringInputs(simulation, state) call is
-    // correct here; no evaluateCandidateDeclaredFinish/
-    // extractFinishScoringInputs detour is needed (unlike the
-    // candidate_declared scenarios converted this session).
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — score the genuinely-resolvable good path via its
+    // Finish declaration; every other (unresolved/failed) path still
+    // scores correctly via a raw extractScoringInputs call.
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(kafkaConsumerLagSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(kafkaConsumerLagSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(kafkaConsumerLagSimulation, finishResult)
+          : extractScoringInputs(kafkaConsumerLagSimulation, state);
       return scoreAuthoredAttempt(KAFKA_CONSUMER_LAG_SCORING, inputs);
     }
 
@@ -177,7 +190,10 @@ describe("Kafka Consumer Lag", () => {
         { atMs: 31_000, controlKey: CONSUMER_INSTANCES_KEY, value: 8 },
         { atMs: 31_000, controlKey: AUTO_COMMIT_ENABLED_KEY, value: false },
       ]);
-      expect(good.status).toBe("resolved");
+      expect(good.status).not.toBe("resolved");
+      expect(evaluateCandidateDeclaredFinish(kafkaConsumerLagSimulation, good).outcome).toBe(
+        "resolved",
+      );
 
       // Partial: rules.ts's "partially-scaled" — some scaling (4
       // instances) but not enough to fully absorb the spike; a genuine

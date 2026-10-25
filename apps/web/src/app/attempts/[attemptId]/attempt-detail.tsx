@@ -71,6 +71,33 @@ export async function AttemptDetail({ attemptId }: AttemptDetailProps) {
     notFound();
   }
 
+  // Phase 7.1: a company-assessment candidate must never receive
+  // evaluation-derived results (score, dimension breakdowns, final-state
+  // details, action tallies, etc.) through this page — loadOwnedAttempt
+  // only checks ownership, not attemptType, so this route is reachable
+  // for an assessment attempt the candidate happens to own.
+  if (attempt.attemptType === "assessment") {
+    return (
+      <>
+        <Link href="/attempts" className="font-mono text-xs text-muted hover:text-foreground">
+          ← Back to attempts
+        </Link>
+        <h1 className="mt-4 text-2xl font-semibold tracking-tight">
+          {attempt.scenario.name}
+        </h1>
+        <p className="mt-1 text-sm text-muted">
+          {attempt.createdAt.toLocaleString()} · Company assessment
+        </p>
+        <div className="mt-6 rounded-lg border border-border bg-surface p-6">
+          <p className="text-sm text-muted">
+            This was a company assessment attempt. Results are available to
+            the hiring organization, not shown here.
+          </p>
+        </div>
+      </>
+    );
+  }
+
   const SYSTEM_ONLY_EVENT_TYPES = new Set([
     "CONFIG_CHANGED",
     "CONFIG_CHANGE_REJECTED",

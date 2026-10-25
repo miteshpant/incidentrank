@@ -1,6 +1,7 @@
 import {
   createInitialState,
   evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
   extractScoringInputs,
   simulate,
 } from "@incidentrank/simulator";
@@ -97,27 +98,35 @@ describe("Cache Node Failure", () => {
     expect(state.status).not.toBe("resolved");
   });
 
-  it("recovers automatically when capacity is restored (good path A)", () => {
+  it("reaches a genuinely resolvable state when capacity is restored (good path A)", () => {
     const state = runScenario(50_000, [
       { atMs: 31_000, controlKey: CACHE_NODE_COUNT_KEY, value: 4 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.cacheHitRatePercent).toBe(95);
     expect(state.values.dbReadsPerSecond).toBe(95);
     expect(state.values.cacheStatus).toBe("normal");
+    expect(evaluateCandidateDeclaredFinish(cacheNodeFailureSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
-  it("recovers automatically via origin fallback + request coalescing (alternate good path B)", () => {
+  it("reaches a genuinely resolvable state via origin fallback + request coalescing (alternate good path B)", () => {
     const state = runScenario(50_000, [
       { atMs: 31_000, controlKey: FAILOVER_MODE_KEY, value: "originFallback" },
       { atMs: 31_000, controlKey: DB_REQUEST_PROTECTION_KEY, value: "coalescing" },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
     expect(state.values.cacheHitRatePercent).toBe(90);
     expect(state.values.dbReadsPerSecond).toBe(140);
     expect(state.values.cacheStatus).toBe("normal");
+    expect(evaluateCandidateDeclaredFinish(cacheNodeFailureSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("aggressive cache warming self-inflicts a database spike (the trap) even though it sounds helpful", () => {
@@ -222,25 +231,29 @@ describe("Cache Node Failure", () => {
       expect(cacheNodeFailureSimulation.completion?.acceptableCondition).toBeUndefined();
     });
 
-    it("auto-resolves without requiring a Finish declaration", () => {
+    it("never auto-resolves even once the success condition is genuinely sustained — only an explicit Finish declaration can resolve it (Phase 7.1: the completion.mode field is preserved but no longer auto-writes a successful outcome for any scenario)", () => {
       const state = runScenario(50_000, [
         { atMs: 31_000, controlKey: CACHE_NODE_COUNT_KEY, value: 4 },
       ]);
-      expect(state.status).toBe("resolved");
-      expect(state.resolvedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("resolved");
+      expect(state.resolvedAtMs).toBeNull();
 
-      // evaluateCandidateDeclaredFinish is not the completion path for an
-      // automatic scenario, but it should still behave sanely if called:
-      // the engine already wrote "resolved" and isLocallyTerminal would
-      // already report true via the automatic branch.
       const finish = evaluateCandidateDeclaredFinish(cacheNodeFailureSimulation, state);
       expect(finish.outcome).toBe("resolved");
     });
   });
 
   describe("scoring: good > baseline > harmful, and both good paths score well", () => {
+    // The engine never auto-writes resolvedAtMs (Phase 7.1 doctrine) —
+    // score the genuinely-resolvable good/alt-good paths via their
+    // Finish declaration; every other (unresolved/failed) path still
+    // scores correctly via a raw extractScoringInputs call.
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(cacheNodeFailureSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(cacheNodeFailureSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(cacheNodeFailureSimulation, finishResult)
+          : extractScoringInputs(cacheNodeFailureSimulation, state);
       return scoreAuthoredAttempt(CACHE_NODE_FAILURE_SCORING, inputs);
     }
 
@@ -261,8 +274,14 @@ describe("Cache Node Failure", () => {
         { atMs: 31_000, controlKey: CACHE_WARMING_MODE_KEY, value: "aggressive" },
       ]);
 
-      expect(good.status).toBe("resolved");
-      expect(altGood.status).toBe("resolved");
+      expect(good.status).not.toBe("resolved");
+      expect(evaluateCandidateDeclaredFinish(cacheNodeFailureSimulation, good).outcome).toBe(
+        "resolved",
+      );
+      expect(altGood.status).not.toBe("resolved");
+      expect(evaluateCandidateDeclaredFinish(cacheNodeFailureSimulation, altGood).outcome).toBe(
+        "resolved",
+      );
       // Masking never crosses the failure threshold on its own
       // (dbReadsPerSecond stays at 420, far below 2,500) — it lingers
       // indefinitely as "degraded", neither resolved nor failed. This is

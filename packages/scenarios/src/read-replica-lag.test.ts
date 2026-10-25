@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -85,8 +91,13 @@ describe("Read Replica Lag", () => {
       },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.replicationLagMs).toBe(120);
+    expect(evaluateCandidateDeclaredFinish(readReplicaLagSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("routing everything to the primary is harmful, not helpful", () => {
@@ -132,17 +143,17 @@ describe("Read Replica Lag", () => {
   });
 
   describe("scoring orders good recovery above baseline/partial, which beat the harmful traps", () => {
-    // Read Replica Lag is plain automatic-completion mode (no `completion`
-    // field in definition.ts): the engine auto-writes resolvedAtMs on
-    // genuine sustained success, so a raw extractScoringInputs(simulation,
-    // state) call is correct here — no evaluateCandidateDeclaredFinish/
-    // extractFinishScoringInputs detour needed, unlike the seven
-    // candidate_declared scenarios converted this session.
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — score a genuinely-resolvable run via its Finish
+    // declaration; every other (unresolved/failed) run still scores
+    // correctly via a raw extractScoringInputs call.
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      return scoreAuthoredAttempt(
-        READ_REPLICA_LAG_SCORING,
-        extractScoringInputs(readReplicaLagSimulation, state),
-      );
+      const finishResult = evaluateCandidateDeclaredFinish(readReplicaLagSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(readReplicaLagSimulation, finishResult)
+          : extractScoringInputs(readReplicaLagSimulation, state);
+      return scoreAuthoredAttempt(READ_REPLICA_LAG_SCORING, inputs);
     }
 
     const FAIL_WINDOW_MS = 30_000 + 61_000;
@@ -156,7 +167,10 @@ describe("Read Replica Lag", () => {
         },
       ]);
 
-      expect(good.status).toBe("resolved");
+      expect(good.status).not.toBe("resolved");
+      expect(evaluateCandidateDeclaredFinish(readReplicaLagSimulation, good).outcome).toBe(
+        "resolved",
+      );
 
       const baseline = runScenario(FAIL_WINDOW_MS);
       const harmful = runScenario(FAIL_WINDOW_MS, [

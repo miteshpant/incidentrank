@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CompletionMode, ControlValue, RuntimeView, SimulationEvent } from "@incidentrank/simulator";
 import type { CandidateActionGroup, TimelineEntry } from "./use-incident-attempt";
-import { requestFinish, type ServerScoreResult } from "./attempt-persistence";
+import { requestFinish } from "./attempt-persistence";
 
 /** How often the client asks the server to advance authoritative time while the console is actively visible. Not once per simulated second — request volume stays low while elapsed time still only ever moves forward at the server's discretion. */
 const ADVANCE_INTERVAL_MS = 4_000;
@@ -62,8 +62,6 @@ interface AssessmentRuntimeState {
   timeline: TimelineEntry[];
   actionGroups: CandidateActionGroup[];
   pendingControlValues: Record<string, ControlValue>;
-  outcome: AssessmentClientAttemptStatus | null;
-  completionTier: "optimal" | "acceptable" | null;
   errorMessage: string | null;
 }
 
@@ -92,14 +90,11 @@ export function useAssessmentRuntime(attemptId: string): {
   actionGroups: CandidateActionGroup[];
   pendingControlValues: Record<string, ControlValue>;
   hasPendingChanges: boolean;
-  serverScore: ServerScoreResult | null;
-  /** True if the automatic terminal-scoring fetch failed — serverScore
-   * stays null until a retry succeeds. Call retryScoring() to retry. */
-  scoringError: boolean;
-  retryScoring: () => void;
+  /** True once the attempt has reached a terminal state — the only
+   * candidate-visible signal for an assessment result (Phase 7.1: no
+   * outcome/score/tier is ever exposed here). */
+  submitted: boolean;
   errorMessage: string | null;
-  outcome: AssessmentClientAttemptStatus | null;
-  completionTier: "optimal" | "acceptable" | null;
   completionMode: CompletionMode;
   finishing: boolean;
   finishError: string | null;
@@ -114,13 +109,8 @@ export function useAssessmentRuntime(attemptId: string): {
     timeline: [],
     actionGroups: [],
     pendingControlValues: {},
-    outcome: null,
-    completionTier: null,
     errorMessage: null,
   });
-  const [serverScore, setServerScore] = useState<ServerScoreResult | null>(null);
-  const [scoringError, setScoringError] = useState(false);
-  const [scoringRetryToken, setScoringRetryToken] = useState(0);
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
   const isSubmitting = useRef(false);
@@ -164,8 +154,6 @@ export function useAssessmentRuntime(attemptId: string): {
           pendingControlValues: resetPendingValues
             ? { ...data.runtime.state.controlValues }
             : prev.pendingControlValues,
-          outcome: isTerminal ? data.attemptStatus : prev.outcome,
-          completionTier: prev.completionTier,
           errorMessage: null,
         };
       });
@@ -230,60 +218,10 @@ export function useAssessmentRuntime(attemptId: string): {
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [attemptId]);
 
-  // Fetch the server-computed score once a terminal result is reached.
-  // Scoring was already computed and persisted server-side the moment the
-  // triggering advance/action call detected the terminal transition
-  // (assessment-runtime.ts's persistTerminalResult) — this is purely a
-  // read of that already-stored result, never a recomputation.
-  useEffect(() => {
-    if (state.phase !== "result" || serverScore) return;
-    const attempt = state.view?.state.status;
-    if (attempt !== "resolved" && attempt !== "failed") return;
-
-    fetch(`/api/attempts/${attemptId}`)
-      .then(async (response) => {
-        if (!response.ok) {
-          setScoringError(true);
-          return;
-        }
-        const data = (await response.json()) as {
-          attempt?: {
-            score?: number | null;
-            recoveryScore?: number | null;
-            customerImpactScore?: number | null;
-            dataIntegrityScore?: number | null;
-            reliabilityScore?: number | null;
-            costEfficiencyScore?: number | null;
-            operationalEfficiencyScore?: number | null;
-          };
-        };
-        if (data.attempt?.score == null) {
-          // Either malformed response, or a genuine race (the terminal
-          // persist hadn't landed yet when this fetched) — either way,
-          // retry must be possible rather than leaving serverScore null
-          // forever with no visible error.
-          setScoringError(true);
-          return;
-        }
-        setServerScore({
-          total: data.attempt.score,
-          breakdown: {
-            recovery: data.attempt.recoveryScore ?? 0,
-            customerImpact: data.attempt.customerImpactScore ?? 0,
-            dataIntegrity: data.attempt.dataIntegrityScore ?? 0,
-            reliability: data.attempt.reliabilityScore ?? 0,
-            costEfficiency: data.attempt.costEfficiencyScore ?? 0,
-            operationalEfficiency: data.attempt.operationalEfficiencyScore ?? 0,
-          },
-        });
-      })
-      .catch(() => setScoringError(true));
-  }, [attemptId, state.phase, state.view, serverScore, scoringRetryToken]);
-
-  const retryScoring = useCallback(() => {
-    setScoringError(false);
-    setScoringRetryToken((token) => token + 1);
-  }, []);
+  // Phase 7.1: a company-assessment candidate never receives a score —
+  // AssessmentResultScreen renders a neutral "submitted" confirmation
+  // with no evaluation-derived props, so there is nothing left for this
+  // hook to fetch or expose once an attempt reaches "result".
 
   const setPendingValue = useCallback((controlKey: string, value: ControlValue) => {
     setState((prev) => ({
@@ -346,7 +284,10 @@ export function useAssessmentRuntime(attemptId: string): {
   // context differs, never the completion decision itself (Phase 6.1's
   // binding "same simulator, same completion evaluator, same scorer"
   // decision). Sends only an idempotency key and the optional note —
-  // never a claimed outcome/state/score.
+  // never a claimed outcome/state/score. The server's response to an
+  // assessment Finish is just `{ submitted: true }` (Phase 7.1) — this
+  // hook never receives or stores outcome/completionTier/score for an
+  // assessment attempt at all.
   const finishIncident = useCallback(
     (note: string | null) => {
       if (finishing) return;
@@ -364,13 +305,7 @@ export function useAssessmentRuntime(attemptId: string): {
             setFinishError(result.error);
             return;
           }
-          setState((prev) => ({
-            ...prev,
-            phase: "result",
-            outcome: result.outcome,
-            completionTier: result.completionTier,
-          }));
-          if (result.score) setServerScore(result.score);
+          setState((prev) => ({ ...prev, phase: "result" }));
         })
         .catch(() => {
           setFinishError("We couldn't finish that incident. Please try again.");
@@ -395,12 +330,8 @@ export function useAssessmentRuntime(attemptId: string): {
     actionGroups: state.actionGroups,
     pendingControlValues: state.pendingControlValues,
     hasPendingChanges,
-    serverScore,
-    scoringError,
-    retryScoring,
+    submitted: state.phase === "result",
     errorMessage: state.errorMessage,
-    outcome: state.outcome,
-    completionTier: state.completionTier,
     completionMode: state.view?.completionMode ?? "automatic",
     finishing,
     finishError,

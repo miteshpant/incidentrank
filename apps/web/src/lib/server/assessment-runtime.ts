@@ -26,7 +26,7 @@ import {
 } from "@incidentrank/simulator";
 import { db } from "./db";
 import { resolveSimulationDefinition } from "./scenario-registry";
-import { scoreAttempt } from "./scoring-helper";
+import { persistTerminalAttempt } from "./terminal-attempt";
 
 /**
  * The maximum amount of simulation time a single advance request may add,
@@ -220,68 +220,6 @@ export async function bootstrapRuntime(
   };
 }
 
-async function persistTerminalResult(
-  attempt: AssessmentRuntimeAttempt,
-  scenario: ScenarioSimulationDefinition,
-  state: SimulationState,
-): Promise<void> {
-  const inputs = extractScoringInputs(scenario, state);
-  const result = await scoreAttempt(attempt, inputs);
-
-  const recoveryTimeMs =
-    inputs.incidentStartedAtMs !== null &&
-    (inputs.resolvedAtMs !== null || inputs.failedAtMs !== null)
-      ? (inputs.resolvedAtMs ?? inputs.failedAtMs ?? 0) - inputs.incidentStartedAtMs
-      : null;
-
-  await db
-    .update(attempts)
-    .set({
-      status: "completed",
-      outcome: state.status as "resolved" | "failed",
-      completedAt: new Date(),
-      incidentStartedAt: inputs.incidentStartedAtMs
-        ? new Date(attempt.startedAt.getTime() + inputs.incidentStartedAtMs)
-        : null,
-
-      score: result.total,
-      recoveryScore: result.breakdown.recovery,
-      customerImpactScore: result.breakdown.customerImpact,
-      dataIntegrityScore: result.breakdown.dataIntegrity,
-      reliabilityScore: result.breakdown.reliability,
-      costEfficiencyScore: result.breakdown.costEfficiency,
-      operationalEfficiencyScore: result.breakdown.operationalEfficiency,
-
-      recoveryTimeMs,
-      revenueLossUsd: inputs.revenueLossUsd,
-
-      peakSeverityRank: inputs.peakSeverityRank,
-      peakInfrastructureCostUsd: inputs.peakMonthlyInfrastructureCostUsd,
-      peakKafkaLagMessages: inputs.peakNumericValues.kafkaLagMessages ?? 0,
-
-      numberOfConfigurationChanges: inputs.numberOfConfigurationChanges,
-      numberOfBeneficialChanges: inputs.numberOfBeneficialChanges,
-      numberOfHarmfulChanges: inputs.numberOfHarmfulChanges,
-
-      finalStateJson: state,
-      runtimeAnchoredAt: null,
-    })
-    // `status: "in_progress"` guard: if two racing requests both compute a
-    // terminal transition (e.g. a tick-driven advance and a simultaneous
-    // action that also resolves the incident), only the first writer's
-    // terminal result is ever persisted — the second's identical-by-
-    // determinism computation is simply discarded rather than re-writing
-    // an already-terminal, already-scored attempt.
-    .where(and(eq(attempts.id, attempt.id), eq(attempts.status, "in_progress")));
-
-  if (attempt.assessmentId) {
-    await db
-      .update(assessmentCandidates)
-      .set({ status: "completed", completedAt: new Date() })
-      .where(eq(assessmentCandidates.attemptId, attempt.id));
-  }
-}
-
 async function persistNewEvents(
   attemptId: string,
   events: SimulationEvent[],
@@ -437,7 +375,13 @@ async function tryAdvanceOnce(
   await persistNewEvents(attemptId, events, eventSeq);
 
   if (isTerminal) {
-    await persistTerminalResult(attempt, scenario, state);
+    // isLocallyTerminal is only ever true here via a genuine automatic
+    // FAILURE (Phase 7.1: the engine never auto-writes "resolved" for
+    // any completion mode) — state.status is therefore always "failed"
+    // at this point, never "resolved".
+    await persistTerminalAttempt(db, attempt, extractScoringInputs(scenario, state), state, {
+      outcome: state.status as "failed",
+    });
   }
 
   return {
@@ -691,7 +635,16 @@ export async function submitAction(
   }
 
   if (outcome.isTerminal) {
-    await persistTerminalResult(attempt, scenario, outcome.state);
+    // Same reasoning as tryAdvanceOnce's identical call: isTerminal here
+    // can only mean an automatic FAILURE (Phase 7.1) — submitAction
+    // never auto-writes "resolved" either.
+    await persistTerminalAttempt(
+      db,
+      attempt,
+      extractScoringInputs(scenario, outcome.state),
+      outcome.state,
+      { outcome: outcome.state.status as "failed" },
+    );
   }
 
   const actionGroups = await loadActionGroupHistory(attempt.id);

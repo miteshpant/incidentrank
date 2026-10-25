@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -82,8 +88,13 @@ describe("Third-Party API Latency", () => {
       { atMs: 31_000, controlKey: CACHED_RESPONSE_FALLBACK_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.checkoutServiceThreadPoolUtilization).toBe(28);
+    expect(
+      evaluateCandidateDeclaredFinish(thirdPartyApiLatencySimulation, state).outcome,
+    ).toBe("resolved");
   });
 
   it("recovers even better with async processing added on top", () => {
@@ -93,8 +104,11 @@ describe("Third-Party API Latency", () => {
       { atMs: 31_000, controlKey: ASYNC_PROCESSING_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
     expect(state.values.checkoutServiceThreadPoolUtilization).toBe(18);
+    expect(
+      evaluateCandidateDeclaredFinish(thirdPartyApiLatencySimulation, state).outcome,
+    ).toBe("resolved");
   });
 
   it("lengthening the timeout while the vendor is slow is harmful, not helpful", () => {
@@ -160,21 +174,17 @@ describe("Third-Party API Latency", () => {
   });
 
   describe("scoring orders good > {baseline, partial} > harmful", () => {
-    // Third-Party API Latency is plain "automatic" completion mode
-    // (definition.ts sets no `completion` field at all, so tick.ts's
-    // `scenario.completion?.mode ?? "automatic"` default applies) — the
-    // engine auto-writes resolvedAtMs once successCondition has been
-    // sustained for successCondition.sustainedSeconds (15s), so a direct
-    // extractScoringInputs(simulation, state) call is correct; no
-    // evaluateCandidateDeclaredFinish/extractFinishScoringInputs dance is
-    // needed here.
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — the good path is scored via its Finish declaration,
+    // never a raw extractScoringInputs call on the unresolved state.
 
     // Good: full-mitigation-recovery (rules.ts) — timeout <= 2_000 AND
     // cached fallback enabled AND async processing enabled while the
     // vendor is slow drops checkoutServiceThreadPoolUtilization to 18 and
     // checkoutAbandonmentRate to 2 with checkoutStatus "normal",
     // satisfying successCondition (<=35 utilization, <6% abandonment,
-    // status != critical) once sustained 15s, so the engine auto-resolves.
+    // status != critical) once sustained 15s — a genuine, declarable
+    // resolution.
     const goodActions: TimedAction[] = [
       { atMs: 31_000, controlKey: API_TIMEOUT_MS_KEY, value: 2_000 },
       { atMs: 31_000, controlKey: CACHED_RESPONSE_FALLBACK_ENABLED_KEY, value: true },
@@ -216,7 +226,10 @@ describe("Third-Party API Latency", () => {
     const baselineState = runScenario(FAIL_WINDOW_MS);
 
     it("reaches the expected terminal/incident states for each sequence", () => {
-      expect(goodState.status).toBe("resolved");
+      expect(goodState.status).not.toBe("resolved");
+      expect(
+        evaluateCandidateDeclaredFinish(thirdPartyApiLatencySimulation, goodState).outcome,
+      ).toBe("resolved");
       // 55% utilization clears failureCondition's >= 80 bar, but 22%
       // abandonment never clears successCondition's < 6 bar either, so
       // the partial sequence genuinely idles mid-incident rather than
@@ -226,9 +239,13 @@ describe("Third-Party API Latency", () => {
       expect(baselineState.status).toBe("failed");
     });
 
+    const goodFinish = evaluateCandidateDeclaredFinish(
+      thirdPartyApiLatencySimulation,
+      goodState,
+    );
     const goodScore = scoreAuthoredAttempt(
       THIRD_PARTY_API_LATENCY_SCORING,
-      extractScoringInputs(thirdPartyApiLatencySimulation, goodState),
+      extractFinishScoringInputs(thirdPartyApiLatencySimulation, goodFinish),
     );
     const partialScore = scoreAuthoredAttempt(
       THIRD_PARTY_API_LATENCY_SCORING,
@@ -244,11 +261,16 @@ describe("Third-Party API Latency", () => {
     );
 
     it("scores the clean recovery (good) above the never-resolving partial and baseline sequences", () => {
-      // good = 950 (resolved: full recovery/reliability credit, since
-      // recoveryTimeSeconds/criticalTimeRatio only zero out via
-      // terminalOverrides on failed/unresolved); partial = baseline = 550
-      // (both unresolved, so terminalOverrides zero out recovery and
-      // reliability entirely for both).
+      // good scores well above partial/baseline=550 (full recovery
+      // credit since recoveryTimeSeconds only zeroes out via
+      // terminalOverrides on failed/unresolved) — though not a perfect
+      // 950 as under the pre-Phase-7.1 auto-resolving engine, since
+      // deriveScoringResolvedAtMs credits the instant success first
+      // became true rather than the moment its sustain window finished,
+      // which can push reliability's criticalTimeRatio measure into a
+      // lower band (see autoscaling-failure.test.ts's equivalent note);
+      // partial = baseline = 550 (both unresolved, so terminalOverrides
+      // zero out recovery and reliability entirely for both).
       expect(goodScore.total).toBeGreaterThan(partialScore.total);
       expect(goodScore.total).toBeGreaterThan(baselineScore.total);
     });

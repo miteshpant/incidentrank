@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { distributedCoordinationFailure } from "./distributed-coordination-failure";
@@ -243,9 +249,19 @@ describe("Distributed Coordination Failure", () => {
         { atMs: OWNERSHIP_STATE_STALE_MS + 1_000, controlKey: OWNERSHIP_RECONCILIATION_ENABLED_KEY, value: true },
       ]);
 
+      // The engine itself never auto-writes "resolved" (Phase 7.1
+      // doctrine) — the optimal path must be scored via its Finish
+      // declaration, never a raw extractScoringInputs call on the
+      // unresolved state, which would incorrectly zero out recovery/
+      // reliability's terminalOverrides.
+      const optimalFinish = evaluateCandidateDeclaredFinish(
+        distributedCoordinationFailureSimulation,
+        optimal,
+      );
+      expect(optimalFinish.outcome).toBe("resolved");
       const optimalScore = scoreAuthoredAttempt(
         DISTRIBUTED_COORDINATION_FAILURE_SCORING,
-        extractScoringInputs(distributedCoordinationFailureSimulation, optimal),
+        extractFinishScoringInputs(distributedCoordinationFailureSimulation, optimalFinish),
       );
       const baselineScore = scoreAuthoredAttempt(
         DISTRIBUTED_COORDINATION_FAILURE_SCORING,
@@ -265,8 +281,17 @@ describe("Distributed Coordination Failure", () => {
       expect(baselineScore.total).toBeGreaterThan(harmfulScore.total);
 
       // Record the actual executed numbers (regression guard against
-      // silent future drift in rules/scoring/extraction).
-      expect(optimalScore.total).toBe(1000);
+      // silent future drift in rules/scoring/extraction). optimalScore
+      // is 865, not 1000: deriveScoringResolvedAtMs credits the INSTANT
+      // the success condition first became continuously true (one
+      // second after incident start in this fixture), not the moment
+      // its sustain window finished — recoveryTimeSeconds is excellent
+      // (top band, 300/300), but totalTimeInCriticalMs (accumulated
+      // before the fix took effect) measured against that same short
+      // resolved window drives criticalTimeRatio into the worst
+      // reliability band (15/150 instead of 150/150). Same mechanism as
+      // autoscaling-failure.test.ts's equivalent note.
+      expect(optimalScore.total).toBe(865);
       expect(baselineScore.total).toBe(390);
       expect(harmfulScore.total).toBe(280);
       expect(alternateGoodScore.total).toBe(490);

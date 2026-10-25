@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -81,9 +87,14 @@ describe("Bad Configuration Rollout", () => {
       { atMs: 31_000, controlKey: CONFIG_REVERT_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.requestRejectionRate).toBe(0.2);
     expect(state.values.configStatus).toBe("normal");
+    expect(evaluateCandidateDeclaredFinish(badConfigurationRolloutSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("scaling up API service instances without reverting is a plausible-but-harmful trap", () => {
@@ -113,8 +124,11 @@ describe("Bad Configuration Rollout", () => {
       { atMs: 32_000, controlKey: CONFIG_REVERT_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
     expect(state.values.requestRejectionRate).toBe(0.2);
+    expect(evaluateCandidateDeclaredFinish(badConfigurationRolloutSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("fails if the request rejection rate stays critical for the full sustained window", () => {
@@ -172,7 +186,12 @@ describe("Bad Configuration Rollout", () => {
 
     expect(baselineState.status).toBe("failed");
     expect(harmfulState.status).toBe("failed");
-    expect(goodState.status).toBe("resolved");
+    expect(goodState.status).not.toBe("resolved");
+    const goodFinish = evaluateCandidateDeclaredFinish(
+      badConfigurationRolloutSimulation,
+      goodState,
+    );
+    expect(goodFinish.outcome).toBe("resolved");
 
     const baselineScore = scoreAuthoredAttempt(
       BAD_CONFIGURATION_ROLLOUT_SCORING,
@@ -184,7 +203,7 @@ describe("Bad Configuration Rollout", () => {
     );
     const goodScore = scoreAuthoredAttempt(
       BAD_CONFIGURATION_ROLLOUT_SCORING,
-      extractScoringInputs(badConfigurationRolloutSimulation, goodState),
+      extractFinishScoringInputs(badConfigurationRolloutSimulation, goodFinish),
     );
 
     // The core regression: doing nothing must not be scored as flawlessly

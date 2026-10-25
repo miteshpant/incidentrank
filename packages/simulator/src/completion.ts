@@ -9,15 +9,21 @@ import { extractScoringInputs } from "./scoring";
 /**
  * Whether engine state has reached a terminal condition WITHOUT a Finish
  * declaration — i.e. a terminal condition the engine itself is allowed to
- * write automatically. For "automatic" mode, resolved or failed both
- * qualify. For "candidate_declared" mode, only failed does — tick.ts
- * never auto-writes "resolved" for this mode (see its completion-mode
- * gate), so reaching "resolved" terminality for a candidate_declared
- * scenario happens exclusively via a successful Finish declaration,
- * never via this predicate. Shared by every runtime that needs to decide
- * "should I stop ticking / show a terminal view without Finish having
- * been called" — the practice client hook, and the assessment server
- * runtime alike.
+ * write automatically. Per the Phase 7.1 doctrine ("the system may fail a
+ * candidate automatically, but it must never pass a candidate
+ * automatically"), tick.ts never auto-writes status="resolved" for ANY
+ * completion mode — only "failed" can ever be written automatically.
+ * Reaching "resolved" terminality therefore happens exclusively via a
+ * successful Finish declaration, never via this predicate, regardless of
+ * mode. The `completionMode` parameter and the per-mode branch are kept
+ * (rather than collapsing this to a single unconditional check) only
+ * because the "automatic" branch's `state.status === "resolved"` clause
+ * is now permanently unreachable, not because it changes behavior — it
+ * stays as explicit, self-documenting proof that automatic-mode scenarios
+ * never actually reach that state outside a Finish call. Shared by every
+ * runtime that needs to decide "should I stop ticking / show a terminal
+ * view without Finish having been called" — the practice client hook,
+ * and the assessment server runtime alike.
  */
 export function isLocallyTerminal(state: SimulationState, completionMode: CompletionMode): boolean {
   if (completionMode === "automatic") {

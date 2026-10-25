@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -81,8 +87,13 @@ describe("Downstream Dependency Failure", () => {
       { atMs: 31_000, controlKey: CIRCUIT_BREAKER_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.callingServiceThreadPoolUtilization).toBe(25);
+    expect(
+      evaluateCandidateDeclaredFinish(downstreamDependencyFailureSimulation, state).outcome,
+    ).toBe("resolved");
   });
 
   it("lengthening the request timeout without the circuit breaker is harmful, not helpful", () => {
@@ -147,12 +158,10 @@ describe("Downstream Dependency Failure", () => {
   });
 
   describe("scoring", () => {
-    // This scenario has no completion mode override (see definition.ts),
-    // so it defaults to "automatic" (runtime-view.ts) — the engine itself
-    // writes resolvedAtMs/failedAtMs via tick.ts, and a plain
-    // extractScoringInputs(simulation, state) call (no
-    // evaluateCandidateDeclaredFinish/extractFinishScoringInputs) is the
-    // correct, simpler extraction path.
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — score a genuinely-resolvable run via its Finish
+    // declaration; every other (unresolved/failed) run still scores
+    // correctly via a raw extractScoringInputs call.
     //
     // Sequences below are grounded directly in rules.ts: opening the
     // circuit breaker reaches "circuit-breaker-recovery" (status
@@ -173,7 +182,14 @@ describe("Downstream Dependency Failure", () => {
     const UNTIL_FAILED_MS = 30_000 + 61_000;
 
     function scoreFor(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(downstreamDependencyFailureSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(
+        downstreamDependencyFailureSimulation,
+        state,
+      );
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(downstreamDependencyFailureSimulation, finishResult)
+          : extractScoringInputs(downstreamDependencyFailureSimulation, state);
       return scoreAuthoredAttempt(DOWNSTREAM_DEPENDENCY_FAILURE_SCORING, inputs).total;
     }
 
@@ -181,7 +197,11 @@ describe("Downstream Dependency Failure", () => {
       const goodState = runScenario(UNTIL_RESOLVED_MS, [
         { atMs: 31_000, controlKey: CIRCUIT_BREAKER_ENABLED_KEY, value: true },
       ]);
-      expect(goodState.status).toBe("resolved");
+      expect(goodState.status).not.toBe("resolved");
+      expect(
+        evaluateCandidateDeclaredFinish(downstreamDependencyFailureSimulation, goodState)
+          .outcome,
+      ).toBe("resolved");
 
       const baselineState = runScenario(UNTIL_FAILED_MS);
       expect(baselineState.status).toBe("failed");

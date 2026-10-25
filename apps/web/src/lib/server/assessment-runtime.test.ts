@@ -1266,27 +1266,94 @@ describe("score equality: local simulator path vs. server-authoritative runtime"
       localInputs,
     );
 
-    if (localFinalState.status === "resolved" || localFinalState.status === "failed") {
+    // Phase 7.1: the engine itself can only ever auto-detect FAILURE —
+    // "spiking→recovered" is a genuine success-condition path, so even
+    // though localFinalState.status legitimately reaches "resolved"
+    // sustain-eligibility, the server-authoritative attempt correctly
+    // stays in_progress with no finalStateJson persisted until an
+    // explicit Finish declaration evaluates and persists it. This test's
+    // whole point (identical final state/score between the local replay
+    // oracle and the server-authoritative runtime) still holds — it just
+    // has to go through finishAttempt, the same shared completion-
+    // decision core used everywhere else, exactly like the test above it
+    // already does for its own equality assertion.
+    if (localFinalState.status === "failed") {
       expect(serverFinalAttempt.status).toBe("completed");
-      expect(serverFinalAttempt.outcome).toBe(localFinalState.status);
-    } else {
-      expect(serverFinalAttempt.status).toBe("in_progress");
-      expect(serverFinalAttempt.outcome).toBeNull();
+      expect(serverFinalAttempt.outcome).toBe("failed");
+      expect(serverFinalAttempt.finalStateJson).toEqual(localFinalState);
+
+      const serverInputs = extractScoringInputs(
+        compiled.definition.simulation,
+        serverFinalAttempt.finalStateJson as SimulationState,
+      );
+      expect(serverInputs).toEqual(localInputs);
+
+      expect(serverFinalAttempt.score).toBe(localScore.total);
+      expect(serverFinalAttempt.recoveryScore).toBe(localScore.breakdown.recovery);
+      expect(serverFinalAttempt.customerImpactScore).toBe(localScore.breakdown.customerImpact);
+      expect(serverFinalAttempt.dataIntegrityScore).toBe(localScore.breakdown.dataIntegrity);
+      expect(serverFinalAttempt.reliabilityScore).toBe(localScore.breakdown.reliability);
+      expect(serverFinalAttempt.costEfficiencyScore).toBe(localScore.breakdown.costEfficiency);
+      expect(serverFinalAttempt.operationalEfficiencyScore).toBe(
+        localScore.breakdown.operationalEfficiency,
+      );
+      return;
     }
-    expect(serverFinalAttempt.finalStateJson).toEqual(localFinalState);
 
-    const serverInputs = extractScoringInputs(
-      compiled.definition.simulation,
-      serverFinalAttempt.finalStateJson as SimulationState,
+    expect(serverFinalAttempt.status).toBe("in_progress");
+    expect(serverFinalAttempt.outcome).toBeNull();
+    expect(serverFinalAttempt.finalStateJson).toBeNull();
+
+    const finishableAttempt = await testDb.query.attempts.findFirst({
+      where: eq(attempts.id, attempt.id),
+      with: { scenario: true },
+    });
+    if (!finishableAttempt) throw new Error("attempt disappeared before finish");
+    const finishOutcome = await finishAttempt(
+      finishableAttempt,
+      "assessment-equality-automatic-finish",
+      null,
     );
-    expect(serverInputs).toEqual(localInputs);
+    expect(finishOutcome.ok).toBe(true);
+    if (!finishOutcome.ok) return;
 
-    expect(serverFinalAttempt.score).toBe(localScore.total);
-    expect(serverFinalAttempt.recoveryScore).toBe(localScore.breakdown.recovery);
-    expect(serverFinalAttempt.customerImpactScore).toBe(localScore.breakdown.customerImpact);
-    expect(serverFinalAttempt.dataIntegrityScore).toBe(localScore.breakdown.dataIntegrity);
-    expect(serverFinalAttempt.reliabilityScore).toBe(localScore.breakdown.reliability);
-    expect(serverFinalAttempt.costEfficiencyScore).toBe(localScore.breakdown.costEfficiency);
-    expect(serverFinalAttempt.operationalEfficiencyScore).toBe(localScore.breakdown.operationalEfficiency);
+    const localFinishResult = evaluateCandidateDeclaredFinish(
+      compiled.definition.simulation,
+      localFinalState,
+    );
+    expect(finishOutcome.result.outcome).toBe(localFinishResult.outcome);
+    expect(finishOutcome.result.completionTier).toBe(localFinishResult.completionTier);
+
+    const persistedAttempt = await testDb.query.attempts.findFirst({
+      where: eq(attempts.id, attempt.id),
+    });
+    if (!persistedAttempt) throw new Error("attempt disappeared after finish");
+
+    expect(persistedAttempt.status).toBe("completed");
+    expect(persistedAttempt.outcome).toBe(localFinishResult.outcome);
+    expect(persistedAttempt.finalStateJson).toEqual(localFinalState);
+
+    const localFinishInputs = extractFinishScoringInputs(
+      compiled.definition.simulation,
+      localFinishResult,
+    );
+    const localFinishScore = await scoreAttempt(
+      {
+        scenarioId: scenario.id,
+        scenario: { slug: scenario.slug, ownershipType: "organization" },
+        scenarioVersion: draft.version,
+      },
+      localFinishInputs,
+    );
+
+    expect(persistedAttempt.score).toBe(localFinishScore.total);
+    expect(persistedAttempt.recoveryScore).toBe(localFinishScore.breakdown.recovery);
+    expect(persistedAttempt.customerImpactScore).toBe(localFinishScore.breakdown.customerImpact);
+    expect(persistedAttempt.dataIntegrityScore).toBe(localFinishScore.breakdown.dataIntegrity);
+    expect(persistedAttempt.reliabilityScore).toBe(localFinishScore.breakdown.reliability);
+    expect(persistedAttempt.costEfficiencyScore).toBe(localFinishScore.breakdown.costEfficiency);
+    expect(persistedAttempt.operationalEfficiencyScore).toBe(
+      localFinishScore.breakdown.operationalEfficiency,
+    );
   });
 });

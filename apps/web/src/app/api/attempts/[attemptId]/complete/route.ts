@@ -37,21 +37,24 @@ function isValidSimulationState(value: unknown): value is SimulationState {
 
 /**
  * The AUTOMATIC completion path — the engine itself reached a terminal
- * state (success for an automatic-mode scenario, or failure for any
- * scenario, any completion mode) with no candidate decision involved.
- * This is distinct from POST /api/attempts/[attemptId]/finish, which
- * represents an explicit candidate "I'm done" declaration — see
+ * FAILURE state with no candidate decision involved. This is distinct
+ * from POST /api/attempts/[attemptId]/finish, which represents an
+ * explicit candidate "I'm done" declaration — see
  * docs/implementation_plan/phase6.1.md's "Candidate completion is a
  * final assessment decision, not a hint request" and
  * apps/web/src/lib/server/finish-attempt.ts's docblock for the full
  * distinction. Both converge on the shared persistTerminalAttempt
  * primitive for the actual row mutation.
  *
- * Guard: a candidate_declared scenario's sustained success must NEVER be
- * persisted as "resolved" through this route — only Finish may do that.
- * This route may still persist an automatic failure for a
- * candidate_declared scenario (failure remains unconditional in every
- * mode), but never a client-claimed "resolved" for one.
+ * Guard: per the Phase 7.1 doctrine ("the system may fail a candidate
+ * automatically, but it must never pass a candidate automatically"), a
+ * client-claimed "resolved" is rejected UNCONDITIONALLY through this
+ * route, for every scenario — no completion mode may ever legitimately
+ * reach automatic success (see packages/simulator/src/tick.ts, which
+ * never auto-writes status="resolved" for any mode). A request claiming
+ * otherwise is either a stale/buggy client or a direct API call
+ * attempting to bypass Finish. A client-claimed "failed" remains
+ * accepted, since automatic failure stays unconditional in every mode.
  */
 export async function POST(
   request: Request,
@@ -118,16 +121,7 @@ export async function POST(
     return NextResponse.json({ error: "Scenario version unresolvable" }, { status: 500 });
   }
 
-  const isCandidateDeclared = (scenario.completion?.mode ?? "automatic") === "candidate_declared";
-  if (isCandidateDeclared && body.status === "resolved") {
-    // A candidate_declared scenario's sustained success is never
-    // auto-converted into "resolved" by this route, regardless of what
-    // the client claims — only an explicit Finish declaration
-    // (POST .../finish) may do that. The client-local engine for such a
-    // scenario cannot even reach status==="resolved" on its own (see
-    // packages/simulator/src/tick.ts's completion-mode gate), so a
-    // request claiming otherwise is either a stale/buggy client or a
-    // direct API call attempting to bypass Finish.
+  if (body.status === "resolved") {
     return NextResponse.json(
       {
         error:

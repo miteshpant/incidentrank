@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { deploymentRegression } from "./deployment-regression";
@@ -81,8 +87,13 @@ describe("Deployment Regression", () => {
       { atMs: 31_000, controlKey: ROLLBACK_TO_PREVIOUS_VERSION_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.errorRate).toBe(0.2);
+    expect(evaluateCandidateDeclaredFinish(deploymentRegressionSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("recovers cleanly when canary traffic is driven to zero", () => {
@@ -90,8 +101,11 @@ describe("Deployment Regression", () => {
       { atMs: 31_000, controlKey: CANARY_TRAFFIC_PERCENT_KEY, value: 0 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
     expect(state.values.errorRate).toBe(0.2);
+    expect(evaluateCandidateDeclaredFinish(deploymentRegressionSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("enabling debug logging without a traffic-routing change is harmful, not helpful", () => {
@@ -174,8 +188,16 @@ describe("Deployment Regression", () => {
     // (rules.ts, revenue-and-cost.ts) and tightening customerImpact's
     // bands to this scenario's actual revenue scale (scoring.ts) so the
     // measurable difference in revenueLossUsd actually crosses a band.
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — score a genuinely-resolvable run via its Finish
+    // declaration; every other (unresolved/failed) run still scores
+    // correctly via a raw extractScoringInputs call.
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(deploymentRegressionSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(deploymentRegressionSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(deploymentRegressionSimulation, finishResult)
+          : extractScoringInputs(deploymentRegressionSimulation, state);
       return scoreAuthoredAttempt(DEPLOYMENT_REGRESSION_SCORING, inputs);
     }
 

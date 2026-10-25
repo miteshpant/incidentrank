@@ -1,4 +1,9 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -81,8 +86,13 @@ describe("Cache Stampede", () => {
       { atMs: 31_000, controlKey: REQUEST_COALESCING_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.queuedRequests).toBe(0);
+    expect(evaluateCandidateDeclaredFinish(cacheStampedeSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("lowering the TTL without coalescing is harmful, not helpful", () => {

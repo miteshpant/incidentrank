@@ -415,11 +415,11 @@ export interface IncidentAttempt {
   resetAttempt: () => void;
   /** Transitions out of "paused" (resume) into "active", restarting the clock. */
   resumeClock: () => void;
-  /** Candidate-declared completion (Phase 6.1) — only meaningful when
-   * completionMode === "candidate_declared"; a no-op call for automatic
-   * scenarios would be rejected server-side ("not_candidate_declared")
-   * rather than silently succeeding. UI should only ever render/enable
-   * the Finish control when completionMode is candidate_declared. */
+  /** Candidate-declared completion (Phase 6.1/7.1) — available
+   * universally once the incident has started and the attempt isn't
+   * already terminal, regardless of completionMode. The engine can only
+   * ever auto-detect failure, never success (Phase 7.1 doctrine), so
+   * every scenario relies on this call for a successful resolution. */
   finishIncident: (note: string | null) => Promise<void>;
 }
 
@@ -611,12 +611,16 @@ export function useIncidentAttempt(
     });
   }, [state.attemptId, state.unsyncedEvents]);
 
-  // Persist the terminal result exactly once when the attempt resolves/fails
-  // (signed-in: has a real attemptId). The score is always server-computed
-  // — the browser never recomputes it from scoring bands.
+  // Persist the terminal result exactly once when the attempt automatically
+  // fails (signed-in: has a real attemptId). Per the Phase 7.1 doctrine the
+  // engine can only ever auto-detect FAILURE — "resolved" is reached
+  // exclusively via an explicit Finish declaration, which sets serverScore
+  // directly from the Finish response (see finishIncident below), never
+  // through this effect. The score is always server-computed — the
+  // browser never recomputes it from scoring bands.
   useEffect(() => {
     if (!state.attemptId || completionSent.current) return;
-    if (state.engineState.status !== "resolved" && state.engineState.status !== "failed") {
+    if (state.engineState.status !== "failed") {
       return;
     }
     completionSent.current = true;
@@ -644,10 +648,13 @@ export function useIncidentAttempt(
   // never persisted), so request a stateless score preview instead —
   // still always server-computed, never recomputed in the browser. Only
   // reachable for scenarios anonymous users could start at all (free
-  // scenarios); the endpoint itself re-verifies practice access.
+  // scenarios); the endpoint itself re-verifies practice access. As
+  // above, only automatic FAILURE reaches this effect — "resolved" is
+  // always via an explicit Finish (requestFinishPreview for anonymous
+  // candidates), never this terminal-engine-state watcher.
   useEffect(() => {
     if (state.attemptId || isSignedIn || completionSent.current) return;
-    if (state.engineState.status !== "resolved" && state.engineState.status !== "failed") {
+    if (state.engineState.status !== "failed") {
       return;
     }
     completionSent.current = true;
@@ -726,6 +733,15 @@ export function useIncidentAttempt(
 
       if ("error" in response) {
         dispatch({ type: "finish-failed", error: response.error });
+        return;
+      }
+
+      // Practice attempts never receive the assessment-only `{submitted:
+      // true}` shape (Phase 7.1) — requestFinish's return type is shared
+      // with the assessment runtime, so this narrows defensively rather
+      // than assuming it at the type level.
+      if ("submitted" in response) {
+        dispatch({ type: "finish-failed", error: "Unexpected response from server." });
         return;
       }
 

@@ -1,4 +1,9 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -76,13 +81,20 @@ describe("Autoscaling Failure", () => {
     expect(state.values.capacityStatus).toBe("critical");
   });
 
-  it("recovers cleanly when the instance cap is raised to an adequate level", () => {
+  it("recovers cleanly when the instance cap is raised to an adequate level, and resolves on an explicit Finish declaration", () => {
     const state = runScenario(50_000, [
       { atMs: 31_000, controlKey: MAX_INSTANCE_COUNT_KEY, value: 16 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine
+    // — only Finish may do that) — it stays non-terminal even once the
+    // success condition has long since sustained.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.currentInstanceCount).toBe(18);
+
+    const finish = evaluateCandidateDeclaredFinish(autoscalingFailureSimulation, state);
+    expect(finish.outcome).toBe("resolved");
+    expect(finish.completionTier).toBe("optimal");
   });
 
   it("tuning scale-up threshold and cooldown aggressively is ineffective while the cap stays low", () => {
@@ -110,6 +122,9 @@ describe("Autoscaling Failure", () => {
     expect(state.status).not.toBe("resolved");
     expect(state.values.capacityStatus).toBe("warning");
     expect(state.values.currentInstanceCount).toBe(8);
+
+    const finish = evaluateCandidateDeclaredFinish(autoscalingFailureSimulation, state);
+    expect(finish.outcome).toBe("declared_unstable");
   });
 
   it("raising the cap moderately AND tuning reaction speed improves further than the cap alone", () => {
@@ -133,12 +148,15 @@ describe("Autoscaling Failure", () => {
     expect(state.values.cpuUtilizationPercent).toBe(99);
   });
 
-  it("an adequate cap survives the further traffic surge", () => {
+  it("an adequate cap survives the further traffic surge, and resolves on an explicit Finish declaration", () => {
     const state = runScenario(5 * 60_000 + 30_000, [
       { atMs: 31_000, controlKey: MAX_INSTANCE_COUNT_KEY, value: 16 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
+
+    const finish = evaluateCandidateDeclaredFinish(autoscalingFailureSimulation, state);
+    expect(finish.outcome).toBe("resolved");
   });
 
   it("fails if CPU utilization stays critical for the full sustained window", () => {
@@ -181,12 +199,16 @@ describe("Autoscaling Failure", () => {
   });
 
   describe("scoring-path regression", () => {
-    // Automatic completion mode (definition.ts has no `completion` field,
-    // so it defaults to "automatic" per runtime-view.ts/tick.ts) — the
-    // engine auto-writes resolvedAtMs on genuine sustained success, so a
-    // plain extractScoringInputs(simulation, state) call is correct.
+    // This scenario's definition.ts has no `completion` field, which
+    // still defaults to "automatic" — but per the Phase 7.1 doctrine the
+    // engine never auto-writes resolvedAtMs for any mode; scoring a
+    // successful path always goes through the same Finish-declaration
+    // pipeline every other scenario uses (evaluateCandidateDeclaredFinish
+    // + extractFinishScoringInputs), never a bare extractScoringInputs
+    // call on the raw simulated state.
     function scoreOf(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(autoscalingFailureSimulation, state);
+      const finish = evaluateCandidateDeclaredFinish(autoscalingFailureSimulation, state);
+      const inputs = extractFinishScoringInputs(autoscalingFailureSimulation, finish);
       return scoreAuthoredAttempt(AUTOSCALING_FAILURE_SCORING, inputs);
     }
 
@@ -230,11 +252,27 @@ describe("Autoscaling Failure", () => {
 
     it("resolves and scores highest when the cap is raised to an adequate level", () => {
       const state = good();
-      expect(state.status).toBe("resolved");
+      expect(state.status).not.toBe("resolved");
+      expect(evaluateCandidateDeclaredFinish(autoscalingFailureSimulation, state).outcome).toBe(
+        "resolved",
+      );
 
       const score = scoreOf(state);
-      expect(score.total).toBe(960);
-      expect(score.breakdown.recovery).toBeGreaterThan(0);
+      // 825, not the pre-Phase-7.1 960: deriveScoringResolvedAtMs credits
+      // the INSTANT the success condition first became continuously true
+      // (31_000ms, 1s after incident start — recoveryTimeSeconds=1, top
+      // band, 300/300), not the moment its 15s sustain window finished
+      // (46_000ms, what the old auto-resolving engine used). Because
+      // totalTimeInCriticalMs (2_000ms) is measured against that same
+      // honest 1-second window, criticalTimeRatio comes out to 2.0 — the
+      // worst reliability band (15/150) — even though recovery itself
+      // scores at its very best. This is the same resolvedAtMs semantics
+      // every other candidate_declared scenario already uses (see
+      // db-connection-saturation.test.ts's identical scoreOf pattern);
+      // autoscaling-failure simply never exercised a genuinely-resolved
+      // scoring path before Phase 7.1 removed its automatic auto-finish.
+      expect(score.total).toBe(825);
+      expect(score.breakdown.recovery).toBe(300);
       expect(score.breakdown.reliability).toBeGreaterThan(0);
     });
 

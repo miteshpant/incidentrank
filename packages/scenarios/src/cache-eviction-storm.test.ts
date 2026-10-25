@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { cacheEvictionStorm } from "./cache-eviction-storm";
@@ -127,9 +133,14 @@ describe("Cache Eviction Storm", () => {
       expect(state.values.hitRatioPct).toBe(96);
       expect(state.values.cacheStatus).toBe("normal");
       expect(state.values.cacheRecoveryMode).toBe("policyFixed");
-      // Automatic completion mode: the success condition sustained long
-      // enough auto-resolves the attempt.
-      expect(state.status).toBe("resolved");
+      // The engine itself never auto-writes "resolved" — only an
+      // explicit Finish declaration can (Phase 7.1 doctrine). The
+      // success condition is nonetheless genuinely, continuously
+      // satisfied and sustained.
+      expect(state.status).not.toBe("resolved");
+      expect(evaluateCandidateDeclaredFinish(cacheEvictionStormSimulation, state).outcome).toBe(
+        "resolved",
+      );
     });
 
     it("capacity-only path: maximum memory gives real but incomplete relief and never reaches normal", () => {
@@ -216,12 +227,16 @@ describe("Cache Eviction Storm", () => {
       expect(state.failedAtMs).not.toBeNull();
     });
 
-    it("automatic recovery: success condition sustained resolves the attempt without a Finish declaration", () => {
+    it("never auto-resolves even once the success condition is genuinely sustained — only an explicit Finish declaration can resolve it", () => {
       const state = runScenario(EVICTION_CHURN_RISING_MS + 20_000, [
         { atMs: EVICTION_CHURN_RISING_MS + 1_000, controlKey: CACHE_ADMISSION_POLICY_KEY, value: "sizeAwareAdmission" },
       ]);
-      expect(state.status).toBe("resolved");
-      expect(state.resolvedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("resolved");
+      expect(state.resolvedAtMs).toBeNull();
+
+      const finish = evaluateCandidateDeclaredFinish(cacheEvictionStormSimulation, state);
+      expect(finish.outcome).toBe("resolved");
+      expect(finish.completionTier).toBe("optimal");
     });
 
     it("tracks peak eviction rate and peak DB reads generically via numericWatchFields", () => {
@@ -277,18 +292,23 @@ describe("Cache Eviction Storm", () => {
       const goodState = runScenario(EVICTION_CHURN_RISING_MS + 20_000, [
         { atMs: EVICTION_CHURN_RISING_MS + 1_000, controlKey: CACHE_ADMISSION_POLICY_KEY, value: "sizeAwareAdmission" },
       ]);
+      const goodFinish = evaluateCandidateDeclaredFinish(cacheEvictionStormSimulation, goodState);
       const goodScore = scoreAuthoredAttempt(
         CACHE_EVICTION_STORM_SCORING,
-        extractScoringInputs(cacheEvictionStormSimulation, goodState),
+        extractFinishScoringInputs(cacheEvictionStormSimulation, goodFinish),
       );
 
       const alternateGoodState = runScenario(EVICTION_CHURN_RISING_MS + 20_000, [
         { atMs: EVICTION_CHURN_RISING_MS + 1_000, controlKey: OBJECT_CACHING_POLICY_KEY, value: "projectedFields" },
         { atMs: EVICTION_CHURN_RISING_MS + 1_000, controlKey: CACHE_ADMISSION_POLICY_KEY, value: "sizeAwareAdmission" },
       ]);
+      const alternateGoodFinish = evaluateCandidateDeclaredFinish(
+        cacheEvictionStormSimulation,
+        alternateGoodState,
+      );
       const alternateGoodScore = scoreAuthoredAttempt(
         CACHE_EVICTION_STORM_SCORING,
-        extractScoringInputs(cacheEvictionStormSimulation, alternateGoodState),
+        extractFinishScoringInputs(cacheEvictionStormSimulation, alternateGoodFinish),
       );
 
       // Memory-only partial path never resolves (never crosses the
@@ -317,12 +337,22 @@ describe("Cache Eviction Storm", () => {
       );
 
       // Good and alternate-good both resolve almost immediately (one
-      // tick after incident start in this test), so recovery/
-      // customerImpact/reliability/dataIntegrity all tie at maximum —
-      // a legitimate tie (section 16/17), not a suspicious one: both
-      // paths are genuine, equally fast, equally durable fixes.
-      expect(goodScore.total).toBe(1000);
-      expect(alternateGoodScore.total).toBe(1000);
+      // tick after incident start in this test) — recovery/
+      // customerImpact/dataIntegrity all tie at maximum, a legitimate
+      // tie (section 16/17), not a suspicious one: both paths are
+      // genuine, equally fast, equally durable fixes. Total is 865, not
+      // 1000: deriveScoringResolvedAtMs credits the INSTANT the success
+      // condition first became continuously true (31_000ms, 1s after
+      // incident start), not the moment its sustain window finished —
+      // recoveryTimeSeconds is excellent (1s, top band, 300/300), but
+      // totalTimeInCriticalMs (2_000ms, accumulated before the fix took
+      // effect) measured against that same honest 1-second window gives
+      // criticalTimeRatio=2.0 — the worst reliability band (15/150).
+      // Same mechanism as autoscaling-failure.test.ts's equivalent note.
+      expect(goodScore.total).toBe(865);
+      expect(alternateGoodScore.total).toBe(865);
+      expect(goodScore.breakdown.recovery).toBe(300);
+      expect(alternateGoodScore.breakdown.recovery).toBe(300);
       expect(goodScore.breakdown.dataIntegrity).toBe(200);
       expect(alternateGoodScore.breakdown.dataIntegrity).toBe(200);
 

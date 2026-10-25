@@ -187,6 +187,16 @@ export interface FinishResponse {
 }
 
 /**
+ * The candidate-facing response to a company-assessment Finish — never
+ * outcome/completionTier/score (Phase 7.1 candidate score-privacy
+ * doctrine, docs/implementation_plan/phase7.action.md). Practice attempts
+ * keep receiving FinishResponse unchanged.
+ */
+export interface FinishSubmittedResponse {
+  submitted: true;
+}
+
+/**
  * The candidate-declared "Finish Incident" completion request, for a
  * persisted (signed-in) attempt — practice or assessment alike. Sends
  * ONLY an idempotency key and an optional note; never a claimed status,
@@ -201,16 +211,25 @@ export async function requestFinish(
   attemptId: string,
   requestId: string,
   note: string | null,
-): Promise<FinishResponse | { error: string }> {
+): Promise<FinishResponse | FinishSubmittedResponse | { error: string }> {
   try {
     const response = await fetch(`/api/attempts/${attemptId}/finish`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ requestId, note }),
     });
-    const data = (await response.json()) as Partial<FinishResponse> & { error?: string };
-    if (!response.ok || !data.outcome) {
-      return { error: data.error ?? "We couldn't finish that incident. Please try again." };
+    const data = (await response.json()) as
+      | (Partial<FinishResponse> & { error?: string; submitted?: boolean })
+      | { error: string };
+    if (!response.ok) {
+      const message = "error" in data ? data.error : undefined;
+      return { error: message ?? "We couldn't finish that incident. Please try again." };
+    }
+    if ("submitted" in data && data.submitted) {
+      return { submitted: true };
+    }
+    if (!("outcome" in data) || !data.outcome) {
+      return { error: "We couldn't finish that incident. Please try again." };
     }
     return { outcome: data.outcome, completionTier: data.completionTier ?? null, score: data.score ?? null };
   } catch {

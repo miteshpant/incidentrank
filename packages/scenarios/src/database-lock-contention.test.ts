@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -82,8 +88,13 @@ describe("Database Lock Contention", () => {
       { atMs: 31_000, controlKey: BATCH_JOB_CONCURRENCY_KEY, value: 2 },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.blockedTransactions).toBe(2);
+    expect(evaluateCandidateDeclaredFinish(databaseLockContentionSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("using a much larger chunk size to 'finish faster' is harmful, not helpful", () => {
@@ -165,21 +176,16 @@ describe("Database Lock Contention", () => {
   });
 
   describe("scoring orders good > {baseline, partial} > harmful", () => {
-    // Database Lock Contention is plain "automatic" completion mode
-    // (definition.ts sets no `completion` field at all, so tick.ts's
-    // `scenario.completion?.mode ?? "automatic"` default applies) — the
-    // engine auto-writes resolvedAtMs once successCondition has been
-    // sustained for successCondition.sustainedSeconds (15s), so a direct
-    // extractScoringInputs(simulation, state) call is correct; no
-    // evaluateCandidateDeclaredFinish/extractFinishScoringInputs dance is
-    // needed here.
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — the good path is scored via its Finish declaration,
+    // never a raw extractScoringInputs call on the unresolved state.
 
     // Good: small-chunks-low-concurrency-recovery (rules.ts) —
     // chunk size <= 100 AND concurrency <= 2 while the batch job is
     // running drops blockedTransactions to 2 and lockStatus to "normal",
     // satisfying successCondition (blockedTransactions <= 5,
     // timedOutTransactions == 0, lockStatus != "critical") once sustained
-    // for 15s, so the engine auto-resolves.
+    // for 15s — a genuine, declarable resolution.
     const goodActions: TimedAction[] = [
       { atMs: 31_000, controlKey: BATCH_JOB_CHUNK_SIZE_KEY, value: 100 },
       { atMs: 31_000, controlKey: BATCH_JOB_CONCURRENCY_KEY, value: 2 },
@@ -218,7 +224,10 @@ describe("Database Lock Contention", () => {
     const baselineState = runScenario(FAIL_WINDOW_MS);
 
     it("reaches the expected terminal/incident states for each sequence", () => {
-      expect(goodState.status).toBe("resolved");
+      expect(goodState.status).not.toBe("resolved");
+      expect(
+        evaluateCandidateDeclaredFinish(databaseLockContentionSimulation, goodState).outcome,
+      ).toBe("resolved");
       // 55 blocked transactions clears successCondition's unresolved bar
       // but never crosses failureCondition's >= 150 bar either, so the
       // partial sequence genuinely idles mid-incident rather than ever
@@ -228,9 +237,13 @@ describe("Database Lock Contention", () => {
       expect(baselineState.status).toBe("failed");
     });
 
+    const goodFinish = evaluateCandidateDeclaredFinish(
+      databaseLockContentionSimulation,
+      goodState,
+    );
     const goodScore = scoreAuthoredAttempt(
       DATABASE_LOCK_CONTENTION_SCORING,
-      extractScoringInputs(databaseLockContentionSimulation, goodState),
+      extractFinishScoringInputs(databaseLockContentionSimulation, goodFinish),
     );
     const partialScore = scoreAuthoredAttempt(
       DATABASE_LOCK_CONTENTION_SCORING,
@@ -246,11 +259,16 @@ describe("Database Lock Contention", () => {
     );
 
     it("scores the clean recovery (good) above the partial-improvement trap state", () => {
-      // good = 965 (resolved: full recovery/reliability credit, since
-      // recoveryTimeSeconds/criticalTimeRatio only zero out via
-      // terminalOverrides on failed/unresolved); partial = 515
-      // (unresolved, so terminalOverrides zero out recovery and
-      // reliability entirely).
+      // good = 830 (resolved, via Finish: full recovery credit since
+      // recoveryTimeSeconds only zeroes out via terminalOverrides on
+      // failed/unresolved — but reliability lands in the worst band
+      // (15/150) because deriveScoringResolvedAtMs credits the instant
+      // success first became true, not the moment its sustain window
+      // finished, so criticalTimeRatio is measured against a much
+      // shorter window than the pre-Phase-7.1 auto-resolving engine
+      // used); partial = 515 (unresolved, so terminalOverrides zero out
+      // recovery and reliability entirely). Either way, good clearly
+      // outscores partial.
       expect(goodScore.total).toBeGreaterThan(partialScore.total);
     });
 

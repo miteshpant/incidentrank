@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -81,12 +87,17 @@ describe("Cascading Service Failure", () => {
       { atMs: 31_000, controlKey: ROOT_SERVICE_CIRCUIT_BREAKER_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.checkoutSuccessRate).toBe(99.5);
     // The root cause is never actually fixed by isolation alone — this is
     // the scenario's central point: isolating a failure is not the same
     // as repairing it.
     expect(state.values.rootServiceErrorRate).toBe(95);
+    expect(
+      evaluateCandidateDeclaredFinish(cascadingServiceFailureSimulation, state).outcome,
+    ).toBe("resolved");
   });
 
   it("restarting the healthy upstream services is harmful, not helpful, and does not touch the root cause", () => {
@@ -158,15 +169,17 @@ describe("Cascading Service Failure", () => {
   });
 
   describe("scoring", () => {
-    // Automatic completion mode (definition.ts has no `completion` field,
-    // so the engine's tick.ts default of "automatic" applies) — a genuine
-    // sustained-success run auto-writes resolvedAtMs via the
-    // successCondition's 15s sustain window, so a plain extractScoringInputs
-    // call is correct here; no evaluateCandidateDeclaredFinish/
-    // extractFinishScoringInputs dance is needed.
+    // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+    // doctrine) — score a genuinely-resolvable run via its Finish
+    // declaration; every other (unresolved/failed) run still scores
+    // correctly via a raw extractScoringInputs call.
     function scoreFor(actions: TimedAction[], untilMs: number) {
       const state = runScenario(untilMs, actions);
-      const inputs = extractScoringInputs(cascadingServiceFailureSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(cascadingServiceFailureSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(cascadingServiceFailureSimulation, finishResult)
+          : extractScoringInputs(cascadingServiceFailureSimulation, state);
       return { state, score: scoreAuthoredAttempt(CASCADING_SERVICE_FAILURE_SCORING, inputs) };
     }
 
@@ -181,8 +194,20 @@ describe("Cascading Service Failure", () => {
         55_000,
       );
 
-      expect(state.status).toBe("resolved");
-      expect(score.total).toBe(985);
+      expect(state.status).not.toBe("resolved");
+      expect(
+        evaluateCandidateDeclaredFinish(cascadingServiceFailureSimulation, state).outcome,
+      ).toBe("resolved");
+      // 850, not the pre-Phase-7.1 985: deriveScoringResolvedAtMs credits
+      // the INSTANT the success condition first became continuously true
+      // (31_000ms, 1s after incident start), not the moment its 15s
+      // sustain window finished — recoveryTimeSeconds is excellent (top
+      // band, 300/300), but totalTimeInCriticalMs (2_000ms, accumulated
+      // before the breaker took effect) measured against that same
+      // honest 1-second window drives criticalTimeRatio to 2.0 — the
+      // worst reliability band (15/150). Same mechanism as
+      // autoscaling-failure.test.ts's equivalent note.
+      expect(score.total).toBe(850);
     });
 
     it("scores an unmitigated run to failure the same total as a tight-queue-limit-only partial, both strictly above the harmful restart trap", () => {

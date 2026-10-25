@@ -1,4 +1,10 @@
-import { createInitialState, extractScoringInputs, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  extractScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { scoreAuthoredAttempt } from "./authoring/score";
@@ -81,8 +87,13 @@ describe("Thundering Herd", () => {
       { atMs: 31_000, controlKey: CLIENT_JITTER_ENABLED_KEY, value: true },
     ]);
 
-    expect(state.status).toBe("resolved");
+    // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
+    // — only an explicit Finish declaration can.
+    expect(state.status).not.toBe("resolved");
     expect(state.values.rejectedRequestCount).toBe(0);
+    expect(evaluateCandidateDeclaredFinish(thunderingHerdSimulation, state).outcome).toBe(
+      "resolved",
+    );
   });
 
   it("scaling the gateway without jitter survives the spike but never resolves — masked, not fixed", () => {
@@ -159,27 +170,43 @@ describe("Thundering Herd", () => {
     expect(runA).toEqual(runB);
   });
 
-  // Thundering Herd uses automatic completion (definition.ts has no
-  // `completion` field, so `scenario.completion?.mode ?? "automatic"`
-  // resolves to "automatic"), so a plain extractScoringInputs(simulation,
-  // state) call is correct here — no evaluateCandidateDeclaredFinish /
-  // extractFinishScoringInputs dance is needed.
+  // The engine itself never auto-writes resolvedAtMs (Phase 7.1
+  // doctrine) — score a genuinely-resolvable run via its Finish
+  // declaration; every other (unresolved/failed) run still scores
+  // correctly via a raw extractScoringInputs call.
   describe("scoring path", () => {
     function score(state: ReturnType<typeof runScenario>) {
-      const inputs = extractScoringInputs(thunderingHerdSimulation, state);
+      const finishResult = evaluateCandidateDeclaredFinish(thunderingHerdSimulation, state);
+      const inputs =
+        finishResult.outcome === "resolved"
+          ? extractFinishScoringInputs(thunderingHerdSimulation, finishResult)
+          : extractScoringInputs(thunderingHerdSimulation, state);
       return scoreAuthoredAttempt(THUNDERING_HERD_SCORING, inputs);
     }
 
-    it("scores a clean jitter-enabled recovery at the maximum", () => {
+    it("scores a clean jitter-enabled recovery near the maximum", () => {
       // jitter-enabled-recovery (rules.ts) matches first once jitter=true,
-      // resolving the incident well inside the 15s sustained window.
+      // reaching a genuinely declarable resolution well inside the 15s
+      // sustained window.
       const state = runScenario(46_000, [
         { atMs: 31_000, controlKey: CLIENT_JITTER_ENABLED_KEY, value: true },
       ]);
-      expect(state.status).toBe("resolved");
+      expect(state.status).not.toBe("resolved");
+      expect(evaluateCandidateDeclaredFinish(thunderingHerdSimulation, state).outcome).toBe(
+        "resolved",
+      );
 
       const result = score(state);
-      expect(result.total).toBe(1000);
+      // 865, not a perfect 1000: deriveScoringResolvedAtMs credits the
+      // INSTANT the success condition first became continuously true,
+      // not the moment its sustain window finished — recoveryTimeSeconds
+      // is excellent (top band, 300/300), but totalTimeInCriticalMs
+      // (accumulated before the fix took effect) measured against that
+      // same short resolved window drives criticalTimeRatio to the worst
+      // reliability band (15/150). Same mechanism as
+      // autoscaling-failure.test.ts's equivalent note.
+      expect(result.total).toBe(865);
+      expect(result.breakdown.recovery).toBe(300);
     });
 
     it("scores doing nothing the same as the queueing-only trap, since neither resolves, costs extra, or triggers a harmful classification", () => {

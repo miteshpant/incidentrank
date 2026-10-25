@@ -88,25 +88,20 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
   if (!runtime.view) return null;
 
   if (runtime.phase === "result") {
-    const outcome =
-      runtime.outcome === "resolved" || runtime.outcome === "failed" || runtime.outcome === "declared_unstable"
-        ? runtime.outcome
-        : null;
-    return (
-      <AssessmentResultScreen
-        state={runtime.view.state}
-        serverScore={runtime.serverScore}
-        scoringError={runtime.scoringError}
-        retryScoring={runtime.retryScoring}
-        outcome={outcome}
-        completionTier={runtime.completionTier}
-      />
-    );
+    // Phase 7.1: the candidate never receives outcome/score/tier for an
+    // assessment attempt — AssessmentResultScreen takes no evaluation-
+    // derived props at all.
+    return <AssessmentResultScreen />;
   }
 
   const isTerminal = runtime.view.status === "resolved" || runtime.view.status === "failed";
   const incidentStarted = runtime.view.state.transitions.nextTimedEventIndex > 0;
-  const canFinish = runtime.completionMode === "candidate_declared" && incidentStarted && !isTerminal;
+  // Finish Incident is universally available once the incident has
+  // started and the attempt isn't already terminal — never gated on
+  // completion mode (Phase 7.1 doctrine: the candidate must always be
+  // able to declare Finish; the server alone decides whether that
+  // declaration resolves).
+  const canFinish = incidentStarted && !isTerminal;
 
   return (
     <main className="flex flex-1 flex-col">
@@ -161,30 +156,28 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
             onApplyChanges={runtime.applyChanges}
           />
 
-          {runtime.completionMode === "candidate_declared" && (
-            <div className="mt-6 border-t border-border pt-6">
-              <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
-                Candidate Judgment
+          <div className="mt-6 border-t border-border pt-6">
+            <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+              Candidate Judgment
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              When you believe the system is sufficiently stabilized, declare
+              the incident finished.
+            </p>
+            <button
+              type="button"
+              onClick={() => setFinishDialogOpen(true)}
+              disabled={!canFinish}
+              className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Finish Incident
+            </button>
+            {runtime.finishError && !finishDialogOpen && (
+              <p className="mt-2 text-sm text-[#dc2626]" role="alert">
+                {runtime.finishError}
               </p>
-              <p className="mt-1 text-sm text-muted">
-                When you believe the system is sufficiently stabilized, declare
-                the incident finished.
-              </p>
-              <button
-                type="button"
-                onClick={() => setFinishDialogOpen(true)}
-                disabled={!canFinish}
-                className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Finish Incident
-              </button>
-              {runtime.finishError && !finishDialogOpen && (
-                <p className="mt-2 text-sm text-[#dc2626]" role="alert">
-                  {runtime.finishError}
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </section>
 
         <section className="bg-background p-6">
@@ -196,17 +189,15 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
         </section>
       </div>
 
-      {runtime.completionMode === "candidate_declared" && (
-        <FinishIncidentDialog
-          open={finishDialogOpen}
-          finishing={runtime.finishing}
-          finishError={runtime.finishError}
-          onCancel={() => setFinishDialogOpen(false)}
-          onConfirm={(note) => {
-            runtime.finishIncident(note);
-          }}
-        />
-      )}
+      <FinishIncidentDialog
+        open={finishDialogOpen}
+        finishing={runtime.finishing}
+        finishError={runtime.finishError}
+        onCancel={() => setFinishDialogOpen(false)}
+        onConfirm={(note) => {
+          runtime.finishIncident(note);
+        }}
+      />
     </main>
   );
 }

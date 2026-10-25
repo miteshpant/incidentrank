@@ -93,19 +93,16 @@ export function GenericIncidentConsole({
   }
 
   // The only local engine transition that can end an "active" phase is
-  // state.status==="failed" for candidate_declared scenarios (success
-  // never auto-writes in that mode — see use-incident-attempt.ts's
-  // isLocallyTerminal) — attempt.phase itself already reflects this
-  // correctly, so checking status alone here (as before) remains
-  // accurate for disabling controls; the phase-vs-status distinction
-  // only matters for *how the attempt became terminal*, not whether it
-  // currently is.
+  // state.status==="failed" — success never auto-writes, for any
+  // scenario (see tick.ts's completion-sustain-tracking comment) — so
+  // checking status alone here remains accurate for disabling controls.
+  // Finish Incident is universally available once the incident has
+  // started and the attempt isn't already terminal; it is never gated
+  // on completion mode (Phase 7.1 doctrine: the candidate must always be
+  // able to declare Finish, early or late — the server alone decides
+  // whether that declaration resolves).
   const isTerminal = attempt.state.status === "resolved" || attempt.state.status === "failed";
-  const canFinish =
-    attempt.completionMode === "candidate_declared" &&
-    attempt.phase === "active" &&
-    attempt.incidentStarted &&
-    !isTerminal;
+  const canFinish = attempt.phase === "active" && attempt.incidentStarted && !isTerminal;
 
   return (
     <main className="flex flex-1 flex-col">
@@ -160,30 +157,28 @@ export function GenericIncidentConsole({
             onApplyChanges={attempt.applyChanges}
           />
 
-          {attempt.completionMode === "candidate_declared" && (
-            <div className="mt-6 border-t border-border pt-6">
-              <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
-                Candidate Judgment
+          <div className="mt-6 border-t border-border pt-6">
+            <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+              Candidate Judgment
+            </p>
+            <p className="mt-1 text-sm text-muted">
+              When you believe the system is sufficiently stabilized, declare
+              the incident finished.
+            </p>
+            <button
+              type="button"
+              onClick={() => setFinishDialogOpen(true)}
+              disabled={!canFinish}
+              className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Finish Incident
+            </button>
+            {attempt.finishError && !finishDialogOpen && (
+              <p className="mt-2 text-sm text-[#dc2626]" role="alert">
+                {attempt.finishError}
               </p>
-              <p className="mt-1 text-sm text-muted">
-                When you believe the system is sufficiently stabilized, declare
-                the incident finished.
-              </p>
-              <button
-                type="button"
-                onClick={() => setFinishDialogOpen(true)}
-                disabled={!canFinish}
-                className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                Finish Incident
-              </button>
-              {attempt.finishError && !finishDialogOpen && (
-                <p className="mt-2 text-sm text-[#dc2626]" role="alert">
-                  {attempt.finishError}
-                </p>
-              )}
-            </div>
-          )}
+            )}
+          </div>
         </section>
 
         <section className="bg-background p-6">
@@ -195,21 +190,19 @@ export function GenericIncidentConsole({
         </section>
       </div>
 
-      {attempt.completionMode === "candidate_declared" && (
-        <FinishIncidentDialog
-          open={finishDialogOpen}
-          finishing={attempt.finishing}
-          finishError={attempt.finishError}
-          onCancel={() => setFinishDialogOpen(false)}
-          onConfirm={(note) => {
-            // Stays open on failure so the candidate sees finishError and
-            // can retry or cancel — only closes once the attempt actually
-            // reaches a terminal phase (the console then unmounts this
-            // dialog entirely by rendering the result screen instead).
-            void attempt.finishIncident(note);
-          }}
-        />
-      )}
+      <FinishIncidentDialog
+        open={finishDialogOpen}
+        finishing={attempt.finishing}
+        finishError={attempt.finishError}
+        onCancel={() => setFinishDialogOpen(false)}
+        onConfirm={(note) => {
+          // Stays open on failure so the candidate sees finishError and
+          // can retry or cancel — only closes once the attempt actually
+          // reaches a terminal phase (the console then unmounts this
+          // dialog entirely by rendering the result screen instead).
+          void attempt.finishIncident(note);
+        }}
+      />
     </main>
   );
 }

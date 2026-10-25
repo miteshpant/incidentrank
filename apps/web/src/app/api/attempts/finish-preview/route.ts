@@ -99,12 +99,6 @@ export async function POST(request: Request) {
   }
 
   const scenario = entry.definition.simulation;
-  if ((scenario.completion?.mode ?? "automatic") !== "candidate_declared") {
-    return NextResponse.json(
-      { error: "This scenario does not support candidate-declared completion" },
-      { status: 400 },
-    );
-  }
 
   const { state } = replayAttempt({
     scenario,

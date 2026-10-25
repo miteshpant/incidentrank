@@ -22,6 +22,13 @@ const MAX_NOTE_LENGTH = 1000;
  * the score, and persists the terminal result. No hidden success/
  * acceptable thresholds are ever returned to the client, before or after
  * completion.
+ *
+ * Phase 7.1: this is one of the confirmed candidate-score-privacy
+ * surfaces — a company-assessment attempt must receive only a neutral
+ * `{ submitted: true }` confirmation, never outcome/completionTier/score
+ * (docs/implementation_plan/phase7.action.md's "Company-assessment
+ * candidates must not see evaluation results"). Practice attempts keep
+ * the existing response shape unchanged.
  */
 export async function POST(
   request: Request,
@@ -64,17 +71,15 @@ export async function POST(
     if (result.reason === "terminal") {
       return NextResponse.json({ error: "This attempt has already finished" }, { status: 409 });
     }
-    if (result.reason === "not_candidate_declared") {
-      return NextResponse.json(
-        { error: "This scenario does not support candidate-declared completion" },
-        { status: 400 },
-      );
-    }
     console.error(`Failed to finish attempt ${attemptId}: ${result.reason}`);
     return NextResponse.json(
       { error: "We couldn't finish that incident. Your existing attempt has not been changed." },
       { status: 500 },
     );
+  }
+
+  if (owned.attempt.attemptType === "assessment") {
+    return NextResponse.json({ submitted: true });
   }
 
   return NextResponse.json({

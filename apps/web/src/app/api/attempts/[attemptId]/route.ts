@@ -4,6 +4,7 @@ import { attempts } from "@incidentrank/db";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadOwnedAttempt } from "@/lib/server/load-owned-attempt";
+import { redactAttemptForCandidate } from "@/lib/server/redact-attempt-for-candidate";
 
 export async function GET(
   _request: Request,
@@ -25,21 +26,16 @@ export async function GET(
 
   const attempt = await db.query.attempts.findFirst({
     where: eq(attempts.id, attemptId),
-    with: {
-      scenario: true,
-      actionGroups: {
-        orderBy: (table, { asc }) => [asc(table.sequence)],
-        with: {
-          changes: {
-            orderBy: (table, { asc }) => [asc(table.sequence)],
-          },
-        },
-      },
-      events: {
-        orderBy: (table, { asc }) => [asc(table.sequence)],
-      },
-    },
   });
 
-  return NextResponse.json({ attempt });
+  // Phase 7.1: company-assessment candidates must never receive
+  // evaluation-derived results (score, dimension breakdowns, completion
+  // tier, outcome, etc.) — see redact-attempt-for-candidate.ts. This is
+  // the only response this route has ever returned the full raw
+  // `attempts` row for (no caller reads the scenario/actionGroups/events
+  // relations this route used to also fetch, so they're dropped
+  // entirely rather than redacted field-by-field).
+  return NextResponse.json({
+    attempt: attempt ? redactAttemptForCandidate(attempt) : null,
+  });
 }

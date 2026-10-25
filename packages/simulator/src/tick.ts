@@ -91,14 +91,16 @@ export function tickOnce(
   );
 
   // ── Success / failure sustain tracking ────────────────────────────────
-  // This sustain-window bookkeeping runs identically regardless of
-  // completion mode — the ONLY thing completion mode changes is whether
-  // reaching a sustained successCondition auto-writes status="resolved"
-  // below. A candidate_declared scenario still accumulates
-  // consecutiveSuccessSeconds/consecutiveAcceptableSeconds every tick;
-  // finishAttempt (server-side) reads this exact same tracked state
-  // rather than re-implementing success evaluation a second time.
-  const completionMode = scenario.completion?.mode ?? "automatic";
+  // This sustain-window bookkeeping runs every tick regardless of
+  // completion mode. A sustained successCondition is NEVER auto-written
+  // to status="resolved" here — the engine may only ever mark an attempt
+  // "failed" automatically. Reaching success just accumulates
+  // consecutiveSuccessSeconds/consecutiveAcceptableSeconds; finishAttempt
+  // (server-side) reads this exact same tracked state when the candidate
+  // explicitly clicks Finish, rather than re-implementing success
+  // evaluation a second time. See docs/implementation_plan/
+  // phase7.action.md's core doctrine: "The system may fail a candidate
+  // automatically, but it must never pass a candidate automatically."
   const acceptableCondition = scenario.completion?.acceptableCondition;
 
   const meetsSuccess =
@@ -144,19 +146,6 @@ export function tickOnce(
         timestampMs: nextTimeMs,
         type: "INCIDENT_FAILED",
         message: "Incident failed: failure condition remained true.",
-      });
-    } else if (
-      completionMode === "automatic" &&
-      incidentStartedAtMs !== null &&
-      consecutiveSuccessSeconds >= scenario.successCondition.sustainedSeconds
-    ) {
-      status = "resolved";
-      resolvedAtMs = nextTimeMs;
-      events.push({
-        id: nextEventId(state, "incident-resolved"),
-        timestampMs: nextTimeMs,
-        type: "INCIDENT_RESOLVED",
-        message: "Incident resolved: success condition stable within target.",
       });
     } else if (incidentStartedAtMs === null) {
       status = "healthy";

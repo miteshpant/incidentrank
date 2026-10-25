@@ -1,4 +1,9 @@
-import { createInitialState, simulate } from "@incidentrank/simulator";
+import {
+  createInitialState,
+  evaluateCandidateDeclaredFinish,
+  extractFinishScoringInputs,
+  simulate,
+} from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { cacheRevalidationHerd } from "./cache-revalidation-herd";
@@ -280,17 +285,27 @@ describe("Cache Revalidation Herd", () => {
       const goodState = runScenario(SYNCHRONIZED_EXPIRY_MS + 25_000, [
         { atMs: EXPIRY_APPROACHING_MS + 1_000, controlKey: TTL_JITTER_ENABLED_KEY, value: true },
       ]);
+      // The engine itself never auto-writes "resolved" (Phase 7.1
+      // doctrine) — score via the Finish-declaration derivation, never a
+      // raw extractScoringInputs call on the unresolved state.
+      const goodFinish = evaluateCandidateDeclaredFinish(cacheRevalidationHerdSimulation, goodState);
+      expect(goodFinish.outcome).toBe("resolved");
       const goodScore = scoreAuthoredAttempt(
         CACHE_REVALIDATION_HERD_SCORING,
-        extractScoringInputs(cacheRevalidationHerdSimulation, goodState),
+        extractFinishScoringInputs(cacheRevalidationHerdSimulation, goodFinish),
       );
 
       const alternateGoodState = runScenario(SYNCHRONIZED_EXPIRY_MS + 25_000, [
         { atMs: SYNCHRONIZED_EXPIRY_MS + 1_000, controlKey: SINGLE_FLIGHT_COALESCING_KEY, value: true },
       ]);
+      const alternateGoodFinish = evaluateCandidateDeclaredFinish(
+        cacheRevalidationHerdSimulation,
+        alternateGoodState,
+      );
+      expect(alternateGoodFinish.outcome).toBe("resolved");
       const alternateGoodScore = scoreAuthoredAttempt(
         CACHE_REVALIDATION_HERD_SCORING,
-        extractScoringInputs(cacheRevalidationHerdSimulation, alternateGoodState),
+        extractFinishScoringInputs(cacheRevalidationHerdSimulation, alternateGoodFinish),
       );
 
       const unmitigatedWindowMs = SYNCHRONIZED_EXPIRY_MS + 3 * 60_000;
