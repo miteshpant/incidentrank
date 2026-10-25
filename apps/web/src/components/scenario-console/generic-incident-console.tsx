@@ -14,6 +14,7 @@ import { GenericTimelinePanel } from "./timeline-panel";
 import { GenericBriefingScreen } from "./briefing-screen";
 import { GenericResultScreen } from "./result-screen";
 import { FinishIncidentDialog } from "./finish-incident-dialog";
+import { IncidentBrief } from "./incident-brief";
 
 function usePreviousValues(
   values: Record<string, StateValue>,
@@ -61,6 +62,7 @@ export function GenericIncidentConsole({
     candidateUI.components[0]?.id ?? "",
   );
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
   const previousValues = usePreviousValues(attempt.state.values);
 
   if (attempt.phase === "briefing") {
@@ -113,6 +115,23 @@ export function GenericIncidentConsole({
         incidentStartedAtMs={attempt.state.incidentStartedAtMs}
         incidentStarted={attempt.incidentStarted}
         incidentStartMs={attempt.incidentStartMs}
+      />
+
+      <div className="mx-auto flex w-full max-w-6xl justify-end px-6 pt-4">
+        <button
+          type="button"
+          onClick={() => setBriefOpen(true)}
+          className="rounded-md border border-border px-3 py-1.5 font-mono text-xs transition-colors hover:border-foreground/40"
+        >
+          Incident Brief
+        </button>
+      </div>
+
+      <IncidentBrief
+        scenario={scenario}
+        architecture={simulation.architecture}
+        open={briefOpen}
+        onClose={() => setBriefOpen(false)}
       />
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-px bg-border lg:grid-cols-[1.1fr_0.9fr]">

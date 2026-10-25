@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createInitialState, simulate } from "./simulate";
 import { replayAttempt, type ReplayActionGroup } from "./replay";
+import { evaluateCandidateDeclaredFinish } from "./completion";
 import type {
   CandidateAction,
   ScenarioSimulationDefinition,
@@ -246,7 +247,7 @@ describe("replayAttempt", () => {
     expect(replayedShuffled.state).toEqual(replayedInOrder.state);
   });
 
-  it("resolves the incident deterministically when replayed to a later elapsed time", () => {
+  it("reaches a genuinely resolvable state deterministically when replayed to a later elapsed time — the engine itself never auto-writes resolved (Phase 7.1), only an explicit Finish declaration can", () => {
     const elapsedMs = 200_000;
     const replayed = replayAttempt({
       scenario,
@@ -254,7 +255,10 @@ describe("replayAttempt", () => {
       actionGroups: STRONG_MITIGATION,
     });
 
-    expect(replayed.state.status).toBe("resolved");
-    expect(replayed.state.resolvedAtMs).not.toBeNull();
+    expect(replayed.state.status).not.toBe("resolved");
+    expect(replayed.state.resolvedAtMs).toBeNull();
+
+    const finish = evaluateCandidateDeclaredFinish(scenario, replayed.state);
+    expect(finish.outcome).toBe("resolved");
   });
 });

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CandidateUIDescriptor } from "@incidentrank/scenarios";
 import { startAssessmentAttempt } from "@/lib/attempt-persistence";
+import { StructuredDescription } from "@/components/scenario-console/structured-description";
 import { AssessmentConsole } from "./assessment-console";
 import { AlreadyCompleted } from "./already-completed";
 
@@ -13,6 +14,7 @@ interface AssessmentPreview {
   attemptId: string | null;
   attemptStatus: "in_progress" | "resolved" | "failed" | "abandoned" | null;
   scenarioName: string;
+  scenarioDescription: string;
   scenarioDifficulty: string;
   scenarioEstimatedMinutes: number;
 }
@@ -157,6 +159,9 @@ export function AssessmentLanding({ assessmentId }: AssessmentLandingProps) {
       <AssessmentConsole
         attemptId={startedAttemptId}
         scenarioName={preview?.scenarioName ?? scenarioPayload.scenarioSlug}
+        scenarioDescription={preview?.scenarioDescription ?? ""}
+        scenarioDifficulty={preview?.scenarioDifficulty ?? "intermediate"}
+        scenarioEstimatedMinutes={preview?.scenarioEstimatedMinutes ?? 15}
         candidateUI={scenarioPayload.candidateUI}
       />
     );
@@ -219,6 +224,12 @@ export function AssessmentLanding({ assessmentId }: AssessmentLandingProps) {
             <dd className="mt-1 text-foreground">~{preview.scenarioEstimatedMinutes} min</dd>
           </div>
         </dl>
+
+        {preview.scenarioDescription && (
+          <div className="mt-6">
+            <StructuredDescription description={preview.scenarioDescription} />
+          </div>
+        )}
 
         <p className="mt-6 rounded-md border border-border bg-background p-4 text-sm text-muted">
           Your actions, reasoning, result, and incident timeline will be

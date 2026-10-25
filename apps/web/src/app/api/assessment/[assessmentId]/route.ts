@@ -62,26 +62,38 @@ export async function GET(
     attemptId: attempt?.id ?? null,
     attemptStatus: attempt?.status ?? null,
     scenarioName: scenarioMeta.name,
+    scenarioDescription: scenarioMeta.description,
     scenarioDifficulty: scenarioMeta.difficulty,
     scenarioEstimatedMinutes: scenarioMeta.estimatedMinutes,
+    scenarioCategory: scenarioMeta.category,
+    scenarioSkills: scenarioMeta.skills,
   });
 }
 
 interface CandidateSafeScenarioMeta {
   name: string;
+  description: string;
   difficulty: string;
   estimatedMinutes: number;
+  /** Only populated for built-in scenarios — organization-authored
+   * scenarios have no library/category/skills concept. */
+  category: string | null;
+  skills: string[];
 }
 
 /**
- * Candidate-safe scenario metadata only — name, difficulty, estimated
- * duration. Never reads/returns rules, conditions, or scoring. For a
- * built-in (incidentrank-owned) scenario this is resolved generically
- * from BUILT_IN_SCENARIO_CATALOG by slug — never a single hardcoded
- * scenario — matching the pattern every other scenario-serving route
- * (e.g. this assessment's own scenario/route.ts) already uses. For
- * organization-authored scenarios this reads only basics.* off the
- * authored document, never the rest of it.
+ * Candidate-safe scenario metadata only — name, description, difficulty,
+ * estimated duration, and (built-in only) category/skills. Never reads/
+ * returns rules, conditions, or scoring. For a built-in (incidentrank-
+ * owned) scenario this is resolved generically from
+ * BUILT_IN_SCENARIO_CATALOG by slug — never a single hardcoded scenario
+ * — matching the pattern every other scenario-serving route (e.g. this
+ * assessment's own scenario/route.ts) already uses. For organization-
+ * authored scenarios this reads only basics.* off the authored document,
+ * never the rest of it. The description field (Phase 7.1,
+ * docs/implementation_plan/phase7.action.md section 11) is required so
+ * the assessment landing page and Incident Brief can render the same
+ * candidate-safe briefing every practice flow already shows.
  */
 async function loadCandidateSafeScenarioMeta(
   scenarioId: string,
@@ -91,31 +103,58 @@ async function loadCandidateSafeScenarioMeta(
   });
 
   if (!scenario) {
-    return { name: "Unknown scenario", difficulty: "intermediate", estimatedMinutes: 15 };
+    return {
+      name: "Unknown scenario",
+      description: "",
+      difficulty: "intermediate",
+      estimatedMinutes: 15,
+      category: null,
+      skills: [],
+    };
   }
 
   if (scenario.ownershipType === "incidentrank") {
     const entry = getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, scenario.slug);
     if (!entry) {
-      return { name: scenario.name, difficulty: "intermediate", estimatedMinutes: 15 };
+      return {
+        name: scenario.name,
+        description: "",
+        difficulty: "intermediate",
+        estimatedMinutes: 15,
+        category: null,
+        skills: [],
+      };
     }
     return {
       name: entry.definition.name,
+      description: entry.definition.description,
       difficulty: entry.definition.difficulty,
       estimatedMinutes: entry.definition.estimatedMinutes,
+      category: entry.definition.library?.category ?? null,
+      skills: entry.definition.library?.skills ?? [],
     };
   }
 
   const published = await getLatestPublishedVersion(scenario.id);
   const versionRow = published ?? (await getDraftVersion(scenario.id));
   if (!versionRow) {
-    return { name: scenario.name, difficulty: "intermediate", estimatedMinutes: 15 };
+    return {
+      name: scenario.name,
+      description: "",
+      difficulty: "intermediate",
+      estimatedMinutes: 15,
+      category: null,
+      skills: [],
+    };
   }
 
   const authored = versionRow.definitionJson as AuthoredScenario;
   return {
     name: authored.basics.name,
+    description: authored.basics.description,
     difficulty: authored.basics.difficulty,
     estimatedMinutes: authored.basics.estimatedMinutes,
+    category: null,
+    skills: [],
   };
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { StateValue } from "@incidentrank/simulator";
-import type { CandidateUIDescriptor } from "@incidentrank/scenarios";
+import type { CandidateUIDescriptor, ScenarioDefinition } from "@incidentrank/scenarios";
 import { useAssessmentRuntime } from "@/lib/use-assessment-runtime";
 import { formatUsd } from "@/lib/format";
 import { IncidentHeader } from "@/app/incidents/payment-retry-storm/incident-header";
@@ -11,8 +11,22 @@ import { GenericMetricsPanel } from "@/components/scenario-console/metrics-panel
 import { GenericComponentPanel } from "@/components/scenario-console/component-panel";
 import { GenericTimelinePanel } from "@/components/scenario-console/timeline-panel";
 import { FinishIncidentDialog } from "@/components/scenario-console/finish-incident-dialog";
+import { IncidentBrief } from "@/components/scenario-console/incident-brief";
 import { AssessmentResultScreen } from "./assessment-result-screen";
 import { ResumeScreen } from "./resume-screen";
+
+const KNOWN_DIFFICULTIES: ReadonlySet<string> = new Set([
+  "beginner",
+  "intermediate",
+  "senior",
+  "staff",
+  "senior_staff",
+  "principal",
+]);
+
+function toBriefingDifficulty(value: string): ScenarioDefinition["difficulty"] {
+  return KNOWN_DIFFICULTIES.has(value) ? (value as ScenarioDefinition["difficulty"]) : "intermediate";
+}
 
 function usePreviousValues(
   values: Record<string, StateValue> | undefined,
@@ -33,6 +47,9 @@ function usePreviousValues(
 interface AssessmentConsoleProps {
   attemptId: string;
   scenarioName: string;
+  scenarioDescription: string;
+  scenarioDifficulty: string;
+  scenarioEstimatedMinutes: number;
   candidateUI: CandidateUIDescriptor;
 }
 
@@ -49,12 +66,20 @@ interface AssessmentConsoleProps {
  * attempt's runtime clock starts paused until the candidate's first visit
  * resumes it (see assessment-landing.tsx's start/resume flow).
  */
-export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: AssessmentConsoleProps) {
+export function AssessmentConsole({
+  attemptId,
+  scenarioName,
+  scenarioDescription,
+  scenarioDifficulty,
+  scenarioEstimatedMinutes,
+  candidateUI,
+}: AssessmentConsoleProps) {
   const runtime = useAssessmentRuntime(attemptId);
   const [selectedComponentId, setSelectedComponentId] = useState(
     candidateUI.components[0]?.id ?? "",
   );
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
+  const [briefOpen, setBriefOpen] = useState(false);
   const previousValues = usePreviousValues(runtime.view?.state.values);
 
   if (runtime.phase === "loading") {
@@ -112,6 +137,28 @@ export function AssessmentConsole({ attemptId, scenarioName, candidateUI }: Asse
         incidentStartedAtMs={runtime.view.state.incidentStartedAtMs}
         incidentStarted={incidentStarted}
         incidentStartMs={runtime.view.incidentStartMs}
+      />
+
+      <div className="mx-auto flex w-full max-w-6xl justify-end px-6 pt-4">
+        <button
+          type="button"
+          onClick={() => setBriefOpen(true)}
+          className="rounded-md border border-border px-3 py-1.5 font-mono text-xs transition-colors hover:border-foreground/40"
+        >
+          Incident Brief
+        </button>
+      </div>
+
+      <IncidentBrief
+        scenario={{
+          name: scenarioName,
+          description: scenarioDescription,
+          difficulty: toBriefingDifficulty(scenarioDifficulty),
+          estimatedMinutes: scenarioEstimatedMinutes,
+        }}
+        architecture={runtime.view.architecture}
+        open={briefOpen}
+        onClose={() => setBriefOpen(false)}
       />
 
       <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-px bg-border lg:grid-cols-[1.1fr_0.9fr]">

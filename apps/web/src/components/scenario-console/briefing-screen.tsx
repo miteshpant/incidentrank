@@ -3,15 +3,7 @@
 import { SignInButton } from "@clerk/nextjs";
 import type { ArchitectureDefinition } from "@incidentrank/simulator";
 import type { ScenarioDefinition } from "@incidentrank/scenarios";
-
-const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
-  beginner: "Beginner",
-  intermediate: "Intermediate",
-  senior: "Senior",
-  staff: "Staff",
-  senior_staff: "Senior Staff",
-  principal: "Principal",
-};
+import { BriefingContent } from "./briefing-content";
 
 interface GenericBriefingScreenProps {
   scenario: ScenarioDefinition;
@@ -32,6 +24,11 @@ interface GenericBriefingScreenProps {
  * or hidden events — the architecture preview shows node/edge topology
  * only (the same ArchitectureView already rendered live during an
  * active incident), never rule logic or component health thresholds.
+ *
+ * A thin wrapper around BriefingContent (Phase 7.1) — the SEV/paid
+ * badges and the Acknowledge/sign-in affordances are pre-start-only
+ * concerns; the actual candidate-safe content is shared verbatim with
+ * the post-start Incident Brief so the two can never drift.
  */
 export function GenericBriefingScreen({
   scenario,
@@ -55,68 +52,9 @@ export function GenericBriefingScreen({
           </span>
         </div>
 
-        <h1 className="mt-4 text-2xl font-semibold tracking-tight">
-          {scenario.name}
-        </h1>
-
-        <p className="mt-4 text-sm text-foreground">{scenario.description}</p>
-
-        <dl className="mt-6 grid grid-cols-3 gap-4 font-mono text-xs">
-          <div>
-            <dt className="uppercase tracking-wide text-muted">Difficulty</dt>
-            <dd className="mt-1 text-foreground">
-              {DIFFICULTY_LABEL[scenario.difficulty]}
-            </dd>
-          </div>
-          <div>
-            <dt className="uppercase tracking-wide text-muted">
-              Expected Time
-            </dt>
-            <dd className="mt-1 text-foreground">~{scenario.estimatedMinutes} min</dd>
-          </div>
-          <div>
-            <dt className="uppercase tracking-wide text-muted">Category</dt>
-            <dd className="mt-1 text-foreground">
-              {scenario.library?.category ?? "Incident Response"}
-            </dd>
-          </div>
-        </dl>
-
-        {scenario.library && scenario.library.skills.length > 0 && (
-          <div className="mt-6">
-            <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
-              Skills
-            </p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">
-              {scenario.library.skills.map((skill) => (
-                <li
-                  key={skill}
-                  className="rounded border border-border px-2 py-0.5 text-xs text-muted"
-                >
-                  {skill}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {architecture.nodes.length > 0 && (
-          <div className="mt-6">
-            <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
-              System Architecture
-            </p>
-            <ul className="mt-2 flex flex-wrap gap-1.5">
-              {architecture.nodes.map((node) => (
-                <li
-                  key={node.id}
-                  className="rounded border border-border px-2 py-0.5 text-xs text-foreground"
-                >
-                  {node.label}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <div className="mt-4">
+          <BriefingContent scenario={scenario} architecture={architecture} />
+        </div>
 
         {showSignInNudge && (
           <p className="mt-6 text-xs text-muted">

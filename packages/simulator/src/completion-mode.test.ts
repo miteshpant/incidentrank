@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createInitialState, simulate } from "./simulate";
+import { evaluateCandidateDeclaredFinish } from "./completion";
 import type { CandidateAction, ScenarioSimulationDefinition } from "./types";
 
 /**
@@ -102,13 +103,16 @@ function runScenario(
 }
 
 describe("completion mode gating", () => {
-  it("automatic + sustained success -> resolves automatically", () => {
+  it("automatic mode never auto-resolves even once success is genuinely sustained — only an explicit Finish declaration can (Phase 7.1: the completion.mode field is preserved but no longer auto-writes a successful outcome for any mode)", () => {
     const scenario = buildScenario({ mode: "automatic" });
     const state = runScenario(scenario, 10_000 + 26_000, [
       { atMs: 10_000, controlKey: "mitigationLevel", value: 2 },
     ]);
-    expect(state.status).toBe("resolved");
-    expect(state.resolvedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("resolved");
+    expect(state.resolvedAtMs).toBeNull();
+
+    const finish = evaluateCandidateDeclaredFinish(scenario, state);
+    expect(finish.outcome).toBe("resolved");
   });
 
   it("candidate_declared + sustained success -> remains in_progress (never auto-resolves)", () => {
@@ -206,11 +210,14 @@ describe("completion mode gating", () => {
     expect(state.transitions.consecutiveAcceptableSeconds).toBe(0);
   });
 
-  it("omitting completion entirely defaults to automatic (pre-Phase-6.1 scenarios unaffected)", () => {
+  it("omitting completion entirely defaults to automatic, which (Phase 7.1) never auto-resolves either — only an explicit Finish declaration can", () => {
     const scenario = buildScenario(undefined);
     const state = runScenario(scenario, 10_000 + 26_000, [
       { atMs: 10_000, controlKey: "mitigationLevel", value: 2 },
     ]);
-    expect(state.status).toBe("resolved");
+    expect(state.status).not.toBe("resolved");
+
+    const finish = evaluateCandidateDeclaredFinish(scenario, state);
+    expect(finish.outcome).toBe("resolved");
   });
 });

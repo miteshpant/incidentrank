@@ -127,7 +127,7 @@ export function tickOnce(
     : 0;
 
   let status = state.status;
-  let resolvedAtMs = state.resolvedAtMs;
+  const resolvedAtMs = state.resolvedAtMs;
   let failedAtMs = state.failedAtMs;
 
   if (status !== "resolved" && status !== "failed") {
