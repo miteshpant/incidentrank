@@ -1,4 +1,4 @@
-# Phase 6E.4 Completion Report
+~~# Phase 6E.4 Completion Report
 
 Final Phase 6E batch. Scenarios 96–100. This report also closes out Phase 6E in full (§31–§33).
 
@@ -116,7 +116,7 @@ Two real instances found and fixed this batch:
 
 #100's author self-caught and fixed 2 real design/default-value defects during its own mandatory audits (a trap that would have wrongly caught Strategy A's legitimate permanent Compatibility Layer use; an OPTIMAL rule that hardcoded `migrationGovernanceStatus:"governed"` regardless of real `migrationCohortOrder`, fixed via 3 exhaustive variant rules).
 
-**Total this batch: 2 defects reached verification and were caught by verifiers (#96, #99); 4 additional defects of the same class were self-caught and fixed by authors before verification (#98 ×2, #100 ×2) — 6 total instances of this defect class found and closed in 6E.4, 0 remaining.**
+**Total this batch: 2 default-value-path defects reached verification and were caught by verifiers (#96, #99); 4 additional defects of the same class were self-caught and fixed by authors before verification (#98 ×2, #100 ×2) — 6 total default-value-path-defect instances found and closed in 6E.4, 0 remaining. This is a distinct defect class from dead controls (§9); 6E.4 had zero dead-control instances.**
 
 ---
 
@@ -631,15 +631,19 @@ All 20 Phase 6E scenarios use candidate-declared completion — judgment-bound s
 
 ## Control-quality counts across 81–100
 
-| Metric | Count |
-|---|---|
-| Dead controls found before fix | 11 instances total — 5 across 81–95 (6E.2: #86 ×2, #89 ×2; 6E.3: #93 ×1) + 6 default-value-path-defect instances across 96–100 counted as a related but distinct class (6E.4: #96, #99 found by verifiers; #98 ×2, #100 ×2 self-caught by authors) |
-| Dead controls remaining after fix | 0 |
-| Verifier rejections | 5 total — 3 across 81–95 (#90, #91, #93) + 2 across 96–100 (#96, #99) |
-| Fix-agent dispatches | 5 total — 3 across 81–95 + 2 across 96–100, one fix-agent per rejection |
-| Default-value path defects found | 4 total — 2 across 81–95 (#90, #91) + 2 across 96–100 reaching verification (#96, #99); 4 additional instances of the same class were self-caught by authors before verification in 6E.4 (#98 ×2, #100 ×2) and are reported separately in §10 above since they never reached a REJECT verdict |
+Dead controls (a control with zero live references in `rules.ts`/`action-classifications.ts`) and default-value-path defects (a rule-matching gap that lets a meaningful control combination silently fall through to an unintended state before a sustained/deadline trigger) are two distinct defect classes. The 6E.4 completion report's §10 originally reported them separately, but an earlier version of this retrospective table incorrectly combined both into one "dead controls found before fix" figure. Corrected, arithmetically-consistent accounting:
 
-**Total controls audited across all 20 Phase 6E scenarios: 98 (81–95) + 42 (96–100) = 140 controls, 0 dead remaining.**
+| Metric | Count | Scenarios |
+|---|---|---|
+| Dead controls found before fix | **5** | 81–95 only: #86 ×2, #89 ×2 (6E.2), #93 ×1 (6E.3). Zero in 96–100 — the #96 `queueBacklogHealth` finding was an unused local variable, not a dead control (its associated control, `queuePriorityPolicy`, remained fully live). |
+| Dead controls remaining after fix | **0** | All 5 instances wired into a legitimate mechanic or removed before shipping. |
+| Default-value path defects reaching verification (caught by an independent verifier, resulted in a REJECT) | **4** | #90 (6E.2), #91 (6E.3), #96 and #99 (6E.4). |
+| Default-value path defects self-caught by authors before verification (never reached a REJECT) | **4** | #98 ×2, #100 ×2 (6E.4 only — these were caught during the author's own mandatory audit before the verifier ever saw them). |
+| Default-value path defects remaining after fix | **0** | All 8 instances (4 verifier-caught + 4 self-caught) closed with a permanent regression test. |
+| Verifier rejections | **5** | #90, #91, #93 across 81–95 + #96, #99 in 96–100 — note #93's rejection was for a dead control, not a default-value-path defect, so this total is the union of both defect classes' REJECT-triggering instances, not double-counted against either row above. |
+| Fix-agent dispatches | **5** | One fresh, scoped fix-agent per rejection (81–95: 3 dispatches for #90/#91/#93; 96–100: 2 dispatches for #96/#99), matching the rejection count exactly. |
+
+**Total controls audited across all 20 Phase 6E scenarios: 98 (81–95) + 42 (96–100) = 140 controls, 0 dead remaining.** Total default-value-path-defect instances found and closed across all of Phase 6E: 8 (4 reaching verification + 4 self-caught), 0 remaining.
 
 ## Top 5 strongest Phase 6E scenarios
 
@@ -738,4 +742,4 @@ product-level acceptance test answered   ✓ (§32 above, answered clearly in th
 
 ---
 
-**PHASE 6E.4 — AND PHASE 6E OVERALL — READY FOR APPROVAL.**
+**PHASE 6E.4 — AND PHASE 6E OVERALL — READY FOR APPROVAL.**~~
