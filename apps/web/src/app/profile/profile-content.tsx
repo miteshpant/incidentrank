@@ -1,5 +1,6 @@
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { SignOutButton } from "@/components/sign-out-button";
+import { IncidentPassPanel } from "@/components/incident-pass-panel";
 import { ProfileForm } from "./profile-form";
 
 export async function ProfileContent() {
@@ -11,6 +12,8 @@ export async function ProfileContent() {
   return (
     <>
       <ProfileForm user={user} />
+
+      <IncidentPassPanel userId={user.id} />
 
       <div className="mt-10 border-t border-border pt-6">
         <SignOutButton />

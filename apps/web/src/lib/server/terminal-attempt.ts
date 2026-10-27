@@ -4,6 +4,7 @@ import { assessmentCandidates, attempts, type Attempt } from "@incidentrank/db";
 import type { ScoringInputs, SimulationState } from "@incidentrank/simulator";
 import { db } from "./db";
 import { scoreAttempt, type AttemptScoreResult } from "./scoring-helper";
+import { qualifyReferralForAttempt } from "./referral-qualification";
 
 type TxOrDb = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
@@ -64,7 +65,7 @@ export async function persistTerminalAttempt(
       ? (inputs.resolvedAtMs ?? inputs.failedAtMs ?? 0) - inputs.incidentStartedAtMs
       : null;
 
-  await tx
+  const [updated] = await tx
     .update(attempts)
     .set({
       status: "completed",
@@ -101,13 +102,33 @@ export async function persistTerminalAttempt(
       finalStateJson: finalState,
       runtimeAnchoredAt: null,
     })
-    .where(and(eq(attempts.id, attempt.id), eq(attempts.status, "in_progress")));
+    .where(and(eq(attempts.id, attempt.id), eq(attempts.status, "in_progress")))
+    .returning({ id: attempts.id, userId: attempts.userId, incidentPassId: attempts.incidentPassId });
 
   if (attempt.attemptType === "assessment" && attempt.assessmentId) {
     await tx
       .update(assessmentCandidates)
       .set({ status: "completed", completedAt: new Date() })
       .where(eq(assessmentCandidates.attemptId, attempt.id));
+  }
+
+  // Phase 8: referral qualification + reward. Only runs when this call
+  // genuinely won the terminal-persistence race (the UPDATE above
+  // actually affected a row) — a concurrent writer that already
+  // completed this attempt first must never qualify a referral twice
+  // for the same attempt (docs/implementation_plan/
+  // phase8_admin_promotional_access_referrals.md §21: "do not rely on
+  // client result-screen code" — this is the one, single, server-
+  // authoritative integration point both completion triggers converge
+  // on, so a referral can never be qualified from anywhere else).
+  if (updated) {
+    await qualifyReferralForAttempt(tx, {
+      attemptId: updated.id,
+      userId: updated.userId,
+      incidentPassId: updated.incidentPassId,
+      outcome: fields.outcome,
+      completionTier: fields.completionTier ?? null,
+    });
   }
 
   return score;

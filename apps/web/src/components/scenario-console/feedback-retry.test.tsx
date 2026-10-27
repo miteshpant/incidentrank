@@ -57,6 +57,10 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === "string" ? input : input.toString();
 
+        if (url.startsWith("/api/attempts?scenarioSlug=")) {
+          return new Response(JSON.stringify({ attempt: null }), { status: 200 });
+        }
+
         if (url === "/api/attempts") {
           return new Response(JSON.stringify({ attempt: { id: "attempt-fixture-1" } }), {
             status: 200,
@@ -117,6 +121,9 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
         candidateUI={entry.candidateUI}
       />,
     );
+    await act(async () => {
+      await Promise.resolve();
+    });
     acknowledgeIncident();
     advanceSeconds(31);
 
@@ -161,6 +168,10 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === "string" ? input : input.toString();
 
+        if (url.startsWith("/api/attempts?scenarioSlug=")) {
+          return new Response(JSON.stringify({ attempt: null }), { status: 200 });
+        }
+
         if (url === "/api/attempts") {
           return new Response(JSON.stringify({ attempt: { id: "attempt-fixture-2" } }), {
             status: 200,
@@ -199,6 +210,9 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
         candidateUI={entry.candidateUI}
       />,
     );
+    await act(async () => {
+      await Promise.resolve();
+    });
     acknowledgeIncident();
     advanceSeconds(31);
 

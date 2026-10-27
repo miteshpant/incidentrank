@@ -86,5 +86,6 @@ export async function POST(
     outcome: result.result.outcome,
     completionTier: result.result.completionTier,
     score: result.result.score,
+    recoveryTimeMs: result.result.recoveryTimeMs,
   });
 }

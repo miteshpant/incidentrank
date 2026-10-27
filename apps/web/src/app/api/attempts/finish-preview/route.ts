@@ -110,9 +110,16 @@ export async function POST(request: Request) {
   const inputs = extractFinishScoringInputs(scenario, finishResult);
   const result = scoreAuthoredAttempt(entry.scoring, inputs);
 
+  const recoveryTimeMs =
+    inputs.incidentStartedAtMs !== null &&
+    (inputs.resolvedAtMs !== null || inputs.failedAtMs !== null)
+      ? (inputs.resolvedAtMs ?? inputs.failedAtMs ?? 0) - inputs.incidentStartedAtMs
+      : null;
+
   return NextResponse.json({
     outcome: finishResult.outcome,
     completionTier: finishResult.completionTier,
     score: { total: result.total, breakdown: result.breakdown },
+    recoveryTimeMs,
   });
 }

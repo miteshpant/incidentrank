@@ -42,6 +42,14 @@ beforeEach(() => {
     vi.fn(async (input: RequestInfo | URL) => {
       const url = String(input);
 
+      if (url.startsWith("/api/attempts?scenarioSlug=")) {
+        // No in-progress attempt to resume — the resume lookup this
+        // console now performs on mount (Phase 7.3) should find nothing
+        // for a fresh test render, falling through to the normal
+        // briefing/acknowledge flow these tests exercise.
+        return new Response(JSON.stringify({ attempt: null }), { status: 200 });
+      }
+
       if (url === "/api/attempts") {
         return new Response(
           JSON.stringify({ attempt: { id: FAKE_ATTEMPT_ID } }),
@@ -108,6 +116,9 @@ afterEach(() => {
 describe("Attempt persistence (signed in)", () => {
   it("creates an attempt record when the incident is acknowledged", async () => {
     render(<IncidentConsole />);
+    await act(async () => {
+      await Promise.resolve();
+    });
     acknowledgeIncident();
 
     await act(async () => {
@@ -125,6 +136,9 @@ describe("Attempt persistence (signed in)", () => {
 
   it("persists an action group after a successful apply", async () => {
     render(<IncidentConsole />);
+    await act(async () => {
+      await Promise.resolve();
+    });
     acknowledgeIncident();
 
     await act(async () => {
@@ -147,6 +161,9 @@ describe("Attempt persistence (signed in)", () => {
 
   it("persists the terminal result through Finish Incident when the candidate declares the incident resolved", async () => {
     render(<IncidentConsole />);
+    await act(async () => {
+      await Promise.resolve();
+    });
     acknowledgeIncident();
     await act(async () => {
       await Promise.resolve();

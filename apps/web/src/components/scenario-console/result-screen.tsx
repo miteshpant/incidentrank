@@ -38,6 +38,13 @@ interface GenericResultScreenProps {
   actionGroups: CandidateActionGroup[];
   descriptor: CandidateUIDescriptor;
   serverScore: ServerScoreResult | null;
+  /** Server-authoritative recovery time for a resolved outcome — see the
+   * recoveryTimeMs computation below for why this must be preferred over
+   * state.resolvedAtMs, which the engine never writes for any
+   * candidate-declared completion (Phase 7.1). Null for a failed/
+   * declared_unstable outcome, where state.failedAtMs is used instead
+   * (still genuinely engine-written, since failure stays automatic). */
+  serverRecoveryTimeMs?: number | null;
   /** True if the server-side scoring request failed and serverScore will
    * never arrive without a retry — see use-incident-attempt.ts's
    * scoringError/retryScoring. */
@@ -160,6 +167,7 @@ export function GenericResultScreen({
   actionGroups,
   descriptor,
   serverScore,
+  serverRecoveryTimeMs,
   scoringError,
   retryScoring,
   outcome,
@@ -227,13 +235,24 @@ export function GenericResultScreen({
     (feedbackGroups ?? []).map((group) => [group.elapsedMs, group]),
   );
 
+  // The engine never writes state.resolvedAtMs for any candidate-declared
+  // completion (Phase 7.1) — so for a resolved outcome, the server's
+  // scoring-derived recovery time (the accepted tier's sustain-start
+  // instant) is the only correct value, and must be preferred over any
+  // client-side fallback, which would otherwise silently show the later
+  // wall-clock Finish-click time instead. A failed outcome still has a
+  // genuinely engine-written state.failedAtMs, so the client-side
+  // formula remains correct and is used there (serverRecoveryTimeMs is
+  // only ever populated for a resolved outcome).
   const recoveryTimeMs =
-    state.incidentStartedAtMs !== null &&
-    (state.resolvedAtMs !== null || state.failedAtMs !== null)
-      ? (state.resolvedAtMs ?? state.failedAtMs ?? 0) - state.incidentStartedAtMs
-      : state.incidentStartedAtMs !== null
-        ? state.simulationTimeMs - state.incidentStartedAtMs
-        : 0;
+    resolved && serverRecoveryTimeMs !== null && serverRecoveryTimeMs !== undefined
+      ? serverRecoveryTimeMs
+      : state.incidentStartedAtMs !== null &&
+          (state.resolvedAtMs !== null || state.failedAtMs !== null)
+        ? (state.resolvedAtMs ?? state.failedAtMs ?? 0) - state.incidentStartedAtMs
+        : state.incidentStartedAtMs !== null
+          ? state.simulationTimeMs - state.incidentStartedAtMs
+          : 0;
 
   const peakNumericEntries = Object.entries(state.peaks.peakValues).filter(
     ([key]) => key in state.values,

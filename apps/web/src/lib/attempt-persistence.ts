@@ -1,7 +1,8 @@
 "use client";
 
-import type { ControlValue, ScoringInputs, SimulationState } from "@incidentrank/simulator";
-import type { CandidateActionGroup, TimelineEntry } from "./use-incident-attempt";
+import type { ControlValue, ScoringInputs, SimulationState, SimulationEvent } from "@incidentrank/simulator";
+import type { CandidateActionGroup, ResumeSeed, TimelineEntry } from "./use-incident-attempt";
+import { toTimelineEntries } from "./use-incident-attempt";
 
 /**
  * Best-effort persistence to the Phase 3 attempts API. Failures are logged
@@ -21,6 +22,91 @@ export async function createAttemptRecord(
     if (!response.ok) return null;
     const data = (await response.json()) as { attempt?: { id?: string } };
     return data.attempt?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Looks up the candidate's own in-progress practice attempt for this
+ * exact scenario, if one exists — called once on mount, before the
+ * briefing screen renders, so a candidate who navigated away/refreshed
+ * mid-incident is offered resume instead of silently starting a second,
+ * orphaning attempt (POST /api/attempts is now idempotent against this
+ * same row, but only the resume flow actually restores the candidate's
+ * prior state rather than merely avoiding a duplicate).
+ */
+export async function findActiveAttempt(
+  scenarioSlug: string,
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/attempts?scenarioSlug=${encodeURIComponent(scenarioSlug)}`,
+    );
+    if (!response.ok) return null;
+    const data = (await response.json()) as { attempt?: { id?: string } | null };
+    return data.attempt?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetches a full ResumeSeed for an in-progress practice attempt — the
+ * server replays the attempt's own persisted action history through the
+ * real engine (apps/web/src/lib/server/attempt-resume.ts) and returns
+ * the reconstructed state; this function does no replay itself. Returns
+ * null on any failure, including a 409 (the attempt is no longer
+ * in_progress — raced to completion elsewhere), so callers fall back to
+ * a fresh briefing rather than getting stuck.
+ */
+export async function fetchResumeSeed(attemptId: string): Promise<ResumeSeed | null> {
+  try {
+    const response = await fetch(`/api/attempts/${attemptId}/resume`);
+    if (!response.ok) return null;
+    const data = (await response.json()) as {
+      elapsedMs?: number;
+      state?: SimulationState;
+      events?: SimulationEvent[];
+      actionGroups?: Array<{
+        id: string;
+        elapsedMs: number;
+        reasoning: string | null;
+        changes: Array<{
+          controlKey: string;
+          previousValue: ControlValue;
+          newValue: ControlValue;
+        }>;
+      }>;
+      nextActionGroupSequence?: number;
+      nextEventSequence?: number;
+    };
+    if (
+      data.state === undefined ||
+      data.events === undefined ||
+      data.actionGroups === undefined ||
+      data.nextActionGroupSequence === undefined ||
+      data.nextEventSequence === undefined
+    ) {
+      return null;
+    }
+    return {
+      attemptId,
+      engineState: data.state,
+      timeline: toTimelineEntries(data.events),
+      actionGroups: data.actionGroups.map((group) => ({
+        id: group.id,
+        elapsedMs: group.elapsedMs,
+        reasoning: group.reasoning,
+        changes: group.changes.map((change) => ({
+          controlKey: change.controlKey,
+          previousValue: change.previousValue,
+          newValue: change.newValue,
+        })),
+      })),
+      nextGroupSeq: data.nextActionGroupSequence,
+      nextEventSeq: data.nextEventSequence,
+    };
   } catch {
     return null;
   }
@@ -184,6 +270,13 @@ export interface FinishResponse {
   outcome: "resolved" | "declared_unstable";
   completionTier: "optimal" | "acceptable" | null;
   score: ServerScoreResult | null;
+  /** Server-authoritative recovery time — derived from the accepted
+   * tier's sustain-start instant (deriveScoringResolvedAtMs), the same
+   * value the server persists and scores against. Never recomputed from
+   * client-side engine state, which no longer carries a resolvedAtMs for
+   * any candidate-declared completion (Phase 7.1). Null for
+   * declared_unstable or a scenario with no incidentStartedAtMs. */
+  recoveryTimeMs: number | null;
 }
 
 /**
@@ -231,7 +324,12 @@ export async function requestFinish(
     if (!("outcome" in data) || !data.outcome) {
       return { error: "We couldn't finish that incident. Please try again." };
     }
-    return { outcome: data.outcome, completionTier: data.completionTier ?? null, score: data.score ?? null };
+    return {
+      outcome: data.outcome,
+      completionTier: data.completionTier ?? null,
+      score: data.score ?? null,
+      recoveryTimeMs: data.recoveryTimeMs ?? null,
+    };
   } catch {
     return { error: "We couldn't finish that incident. Please try again." };
   }
@@ -265,7 +363,12 @@ export async function requestFinishPreview(
     if (!response.ok || !data.outcome) {
       return { error: data.error ?? "We couldn't finish that incident. Please try again." };
     }
-    return { outcome: data.outcome, completionTier: data.completionTier ?? null, score: data.score ?? null };
+    return {
+      outcome: data.outcome,
+      completionTier: data.completionTier ?? null,
+      score: data.score ?? null,
+      recoveryTimeMs: data.recoveryTimeMs ?? null,
+    };
   } catch {
     return { error: "We couldn't finish that incident. Please try again." };
   }

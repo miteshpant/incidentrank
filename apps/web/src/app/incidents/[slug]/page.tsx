@@ -1,7 +1,18 @@
 import { notFound } from "next/navigation";
+import { and, eq } from "drizzle-orm";
+import { attempts } from "@incidentrank/db";
 import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
-import { evaluatePracticeAccess } from "@/lib/practice-access";
+import {
+  evaluatePracticeAccess,
+  type IncidentPassAccessState,
+  type PaidEntitlementState,
+} from "@/lib/practice-access";
 import { isDevUnlockPaidScenarios } from "@/lib/server/dev-unlock";
+import { getOrCreateCurrentUser } from "@/lib/server/current-user";
+import { getActiveScenarioBySlug } from "@/lib/server/scenario-registry";
+import { getScenarioPassAccess } from "@/lib/server/pass-access";
+import { evaluatePaidPracticeEntitlement } from "@/lib/server/stripe/entitlements";
+import { db } from "@/lib/server/db";
 import { GenericIncidentConsole } from "@/components/scenario-console/generic-incident-console";
 import { LockedScenarioScreen } from "@/components/scenario-console/locked-scenario-screen";
 
@@ -30,9 +41,63 @@ export default async function ScenarioPracticePage({
   if (!entry) notFound();
 
   const devUnlockPaid = await isDevUnlockPaidScenarios();
-  const access = evaluatePracticeAccess({ isFree: entry.definition.isFree }, { devUnlockPaid });
+
+  let paidEntitlementState: PaidEntitlementState = null;
+  let incidentPassState: IncidentPassAccessState | null = null;
+  let availablePassId: string | undefined;
+  if (!devUnlockPaid && !entry.definition.isFree) {
+    const user = await getOrCreateCurrentUser();
+    const scenarioRow = user ? await getActiveScenarioBySlug(slug) : null;
+    if (user && scenarioRow) {
+      // A candidate resuming (refresh/revisit) an already-in-progress,
+      // pass-funded attempt must never be locked out: by the time an
+      // attempt exists, its funding pass is already "consumed" (not
+      // available/bound), so the pass-state check below would otherwise
+      // show the locked screen on every refresh. Mirrors the same
+      // existing-attempt-first ordering fix already applied to
+      // POST /api/attempts/route.ts for this exact regression class.
+      const existingAttempt = await db.query.attempts.findFirst({
+        where: and(
+          eq(attempts.userId, user.id),
+          eq(attempts.scenarioId, scenarioRow.id),
+          eq(attempts.attemptType, "practice"),
+          eq(attempts.status, "in_progress"),
+        ),
+      });
+      if (existingAttempt) {
+        return (
+          <GenericIncidentConsole
+            scenario={entry.definition}
+            simulation={entry.definition.simulation}
+            candidateUI={entry.candidateUI}
+          />
+        );
+      }
+
+      // Phase 9: Pro/Founding takes precedence over the Incident Pass —
+      // when a paid entitlement already grants access, the pass must
+      // never be looked up/bound/consumed at all (phase9.md §31/§50).
+      paidEntitlementState = await evaluatePaidPracticeEntitlement(user.id);
+      if (!paidEntitlementState) {
+        const passAccess = await getScenarioPassAccess(user.id, scenarioRow.id);
+        incidentPassState = passAccess.state;
+        availablePassId = passAccess.passId;
+      }
+    }
+  }
+
+  const access = evaluatePracticeAccess(
+    { isFree: entry.definition.isFree },
+    { devUnlockPaid, paidEntitlementState, incidentPassState },
+  );
   if (!access.allowed) {
-    return <LockedScenarioScreen scenario={entry.definition} />;
+    return (
+      <LockedScenarioScreen
+        scenario={entry.definition}
+        access={access}
+        availablePassId={availablePassId}
+      />
+    );
   }
 
   return (

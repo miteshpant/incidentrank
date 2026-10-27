@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const MAX_NOTE_LENGTH = 1000;
 
@@ -30,6 +30,20 @@ export function FinishIncidentDialog({
   onCancel,
 }: FinishIncidentDialogProps) {
   const [note, setNote] = useState("");
+  const cancelButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (open) cancelButtonRef.current?.focus();
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onCancel();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [open, onCancel]);
 
   if (!open) return null;
 
@@ -80,6 +94,7 @@ export function FinishIncidentDialog({
 
         <div className="mt-6 flex justify-end gap-3">
           <button
+            ref={cancelButtonRef}
             type="button"
             onClick={onCancel}
             disabled={finishing}

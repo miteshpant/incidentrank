@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { ScenarioSimulationDefinition, StateValue } from "@incidentrank/simulator";
 import type { CandidateUIDescriptor, ScenarioDefinition } from "@incidentrank/scenarios";
-import { useIncidentAttempt } from "@/lib/use-incident-attempt";
+import { useIncidentAttempt, type ResumeSeed } from "@/lib/use-incident-attempt";
+import { findActiveAttempt, fetchResumeSeed } from "@/lib/attempt-persistence";
 import { formatUsd } from "@/lib/format";
 import { IncidentHeader } from "@/app/incidents/payment-retry-storm/incident-header";
 import { ArchitectureView } from "@/app/incidents/payment-retry-storm/architecture-view";
@@ -13,6 +14,7 @@ import { GenericComponentPanel } from "./component-panel";
 import { GenericTimelinePanel } from "./timeline-panel";
 import { GenericBriefingScreen } from "./briefing-screen";
 import { GenericResultScreen } from "./result-screen";
+import { GenericResumeScreen } from "./resume-screen";
 import { FinishIncidentDialog } from "./finish-incident-dialog";
 import { IncidentBrief } from "./incident-brief";
 
@@ -50,20 +52,94 @@ interface GenericIncidentConsoleProps {
  * hand-written IncidentConsole (apps/web/src/app/incidents/
  * payment-retry-storm/incident-console.tsx) is preserved unchanged
  * alongside this — not replaced — per the Phase 6 promotion contract.
+ *
+ * Phase 7.3: before mounting useIncidentAttempt, checks whether the
+ * signed-in candidate already has an in-progress practice attempt for
+ * this exact scenario and, if so, fetches a full ResumeSeed so the hook
+ * never starts a fresh briefing over an abandoned-looking active
+ * incident — useIncidentAttempt only ever adopts a resumeSeed on its
+ * very first render, so this lookup must complete (or definitively find
+ * nothing) before the hook mounts, not in an effect afterward. Anonymous
+ * candidates skip the lookup entirely (no persisted attempt exists for
+ * them to resume).
  */
-export function GenericIncidentConsole({
+export function GenericIncidentConsole(props: GenericIncidentConsoleProps) {
+  const { isSignedIn, isLoaded } = useAuth();
+  const [fetchedSeed, setFetchedSeed] = useState<{ seed: ResumeSeed | null } | null>(null);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    findActiveAttempt(props.scenario.slug).then((attemptId) => {
+      if (!attemptId) {
+        if (!cancelled) setFetchedSeed({ seed: null });
+        return;
+      }
+      fetchResumeSeed(attemptId).then((seed) => {
+        if (!cancelled) setFetchedSeed({ seed });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Scenario slug is static for the lifetime of this component; only
+    // auth readiness should re-trigger the lookup.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn]);
+
+  if (!isLoaded) {
+    return (
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <p className="text-sm text-muted">Loading…</p>
+      </main>
+    );
+  }
+
+  // Signed-out candidates have no persisted attempt to resume — skip the
+  // lookup entirely. Signed-in candidates wait for the lookup to settle
+  // (fetchedSeed starts null) before mounting the hook, since
+  // useIncidentAttempt only ever adopts a resumeSeed on its first render.
+  if (isSignedIn && fetchedSeed === null) {
+    return (
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <p className="text-sm text-muted">Loading…</p>
+      </main>
+    );
+  }
+
+  return <GenericIncidentConsoleActive {...props} resumeSeed={fetchedSeed?.seed ?? null} />;
+}
+
+function GenericIncidentConsoleActive({
   scenario,
   simulation,
   candidateUI,
-}: GenericIncidentConsoleProps) {
+  resumeSeed,
+}: GenericIncidentConsoleProps & { resumeSeed: ResumeSeed | null }) {
   const { isSignedIn, isLoaded } = useAuth();
-  const attempt = useIncidentAttempt(simulation, scenario.slug, Boolean(isSignedIn));
+  const attempt = useIncidentAttempt(
+    simulation,
+    scenario.slug,
+    Boolean(isSignedIn),
+    null,
+    resumeSeed,
+  );
   const [selectedComponentId, setSelectedComponentId] = useState(
     candidateUI.components[0]?.id ?? "",
   );
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const previousValues = usePreviousValues(attempt.state.values);
+
+  if (attempt.phase === "paused") {
+    return (
+      <GenericResumeScreen
+        scenarioName={scenario.name}
+        elapsedMs={attempt.state.simulationTimeMs}
+        onResume={attempt.resumeClock}
+      />
+    );
+  }
 
   if (attempt.phase === "briefing") {
     return (
@@ -83,6 +159,7 @@ export function GenericIncidentConsole({
         actionGroups={attempt.actionGroups}
         descriptor={candidateUI}
         serverScore={attempt.serverScore}
+        serverRecoveryTimeMs={attempt.serverRecoveryTimeMs}
         scoringError={attempt.scoringError}
         retryScoring={attempt.retryScoring}
         outcome={attempt.outcome}

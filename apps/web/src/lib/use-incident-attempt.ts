@@ -138,7 +138,7 @@ export function incidentStartMs(
 
 const CANDIDATE_EVENT_TYPES = new Set(["CONFIG_CHANGED", "CONFIG_CHANGE_REJECTED"]);
 
-function toTimelineEntries(events: SimulationEvent[]): TimelineEntry[] {
+export function toTimelineEntries(events: SimulationEvent[]): TimelineEntry[] {
   return events.map((event) => ({
     ...event,
     source: CANDIDATE_EVENT_TYPES.has(event.type) ? "you" : "system",
@@ -389,6 +389,11 @@ export interface IncidentAttempt {
   /** Server-computed score for a terminal attempt, once the completion
    * request returns. Null until then — never a client-computed fallback. */
   serverScore: ServerScoreResult | null;
+  /** Server-authoritative recovery time for a resolved Finish — see
+   * result-screen.tsx's recoveryTimeMs computation for why this must be
+   * preferred over any client-derived value for a resolved outcome. Null
+   * for a failed/declared_unstable outcome or before Finish resolves. */
+  serverRecoveryTimeMs: number | null;
   /** True if the automatic terminal-scoring request failed (network error,
    * or a response with no score). serverScore stays null until a retry
    * succeeds — call retryScoring() to try again. */
@@ -466,6 +471,14 @@ export function useIncidentAttempt(
   // the browser. Remains null if the attempt is still in flight, or if
   // the completion request failed (best-effort — see completeAttemptRecord).
   const [serverScore, setServerScore] = useState<ServerScoreResult | null>(null);
+  // Server-authoritative recovery time for a resolved Finish — the
+  // accepted tier's sustain-start instant (deriveScoringResolvedAtMs),
+  // the same value persisted/scored server-side. Only ever set by a
+  // resolved Finish response; an automatic failure's recovery time is
+  // derived client-side instead (state.failedAtMs is still genuinely
+  // engine-written for failure, unlike resolvedAtMs — see
+  // result-screen.tsx).
+  const [serverRecoveryTimeMs, setServerRecoveryTimeMs] = useState<number | null>(null);
   // Set when the automatic-completion score request fails (network error,
   // non-2xx, or a 2xx with no score payload) so the UI can show a retry
   // affordance instead of an indefinite "Scoring…" with no feedback —
@@ -751,6 +764,7 @@ export function useIncidentAttempt(
         completionTier: response.completionTier,
       });
       if (response.score) setServerScore(response.score);
+      setServerRecoveryTimeMs(response.recoveryTimeMs ?? null);
     },
     [state.phase, state.finishing, state.attemptId, state.actionGroups, scenarioSlug],
   );
@@ -775,6 +789,7 @@ export function useIncidentAttempt(
     incidentStarted: hasIncidentStarted(state.engineState),
     incidentStartMs: incidentStartMs(scenario),
     serverScore,
+    serverRecoveryTimeMs,
     scoringError,
     retryScoring,
     outcome: state.outcome,

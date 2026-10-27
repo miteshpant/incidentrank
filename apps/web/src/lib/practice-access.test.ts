@@ -12,7 +12,10 @@ import { evaluatePracticeAccess } from "./practice-access";
  */
 describe("evaluatePracticeAccess", () => {
   it("allows practice access to a free scenario", () => {
-    expect(evaluatePracticeAccess({ isFree: true })).toEqual({ allowed: true });
+    expect(evaluatePracticeAccess({ isFree: true })).toEqual({
+      allowed: true,
+      mode: "free",
+    });
   });
 
   it("locks practice access to a paid scenario", () => {
@@ -32,6 +35,58 @@ describe("evaluatePracticeAccess", () => {
   it("unlocks a paid scenario when devUnlockPaid is true", () => {
     expect(evaluatePracticeAccess({ isFree: false }, { devUnlockPaid: true })).toEqual({
       allowed: true,
+      mode: "dev_unlocked",
     });
+  });
+});
+
+/**
+ * Phase 8: the Incident Pass entitlement states, per docs/
+ * implementation_plan/phase8_admin_promotional_access_referrals.md §13
+ * and phase8loc.md Step 5.
+ */
+describe("evaluatePracticeAccess — Incident Pass states", () => {
+  it("grants access when the pass is bound to this exact scenario", () => {
+    expect(
+      evaluatePracticeAccess(
+        { isFree: false },
+        { incidentPassState: "bound_here" },
+      ),
+    ).toEqual({ allowed: true, mode: "incident_pass_bound_here" });
+  });
+
+  it("does not grant access for a merely-available (not-yet-bound) pass", () => {
+    expect(
+      evaluatePracticeAccess(
+        { isFree: false },
+        { incidentPassState: "available" },
+      ),
+    ).toEqual({
+      allowed: false,
+      reason: "incident_pass_available",
+      passState: "available",
+    });
+  });
+
+  it("does not grant access when the pass is bound elsewhere", () => {
+    expect(
+      evaluatePracticeAccess(
+        { isFree: false },
+        { incidentPassState: "bound_elsewhere", incidentPassBoundScenarioId: "other-id" },
+      ),
+    ).toEqual({
+      allowed: false,
+      reason: "incident_pass_bound_elsewhere",
+      boundScenarioId: "other-id",
+    });
+  });
+
+  it("devUnlockPaid takes priority over any pass state", () => {
+    expect(
+      evaluatePracticeAccess(
+        { isFree: false },
+        { devUnlockPaid: true, incidentPassState: "available" },
+      ),
+    ).toEqual({ allowed: true, mode: "dev_unlocked" });
   });
 });

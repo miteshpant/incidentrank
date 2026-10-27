@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   index,
   integer,
@@ -104,6 +105,82 @@ export const scenarioVersionStatusEnum = pgEnum("scenario_version_status", [
   "draft",
   "published",
 ]);
+
+// Phase 8: platform-wide (not organization-scoped) admin authority. Owner
+// is the single bootstrap identity (see docs/implementation_plan/
+// phase8_admin_promotional_access_referrals.md §4); admin is every
+// subsequently-invited member. Distinct from organizationRoleEnum, which
+// is scoped to one organization — this enum governs the IncidentRank
+// admin portal itself.
+export const adminRoleEnum = pgEnum("admin_role", ["owner", "admin"]);
+
+export const adminInviteStatusEnum = pgEnum("admin_invite_status", [
+  "pending",
+  "accepted",
+  "expired",
+  "revoked",
+]);
+
+export const promotionalInviteStatusEnum = pgEnum(
+  "promotional_invite_status",
+  ["created", "sent", "redeemed", "expired", "revoked", "send_failed"],
+);
+
+// Phase 8: what created an Incident Pass. Polymorphic — incidentPasses.
+// sourceId points at a row in a different table depending on this value
+// (promotionalInvites.id, referrals.id, or null for an ad-hoc admin
+// grant with no originating row) — see the comment on incidentPasses
+// below for why sourceId is a plain uuid rather than a strict FK.
+export const incidentPassSourceTypeEnum = pgEnum("incident_pass_source_type", [
+  "promo_invite",
+  "referral_reward",
+  "admin_grant",
+]);
+
+export const incidentPassStatusEnum = pgEnum("incident_pass_status", [
+  "available",
+  "bound",
+  "consumed",
+  "expired",
+  "revoked",
+]);
+
+export const referralStatusEnum = pgEnum("referral_status", [
+  "created",
+  "claimed",
+  "qualified",
+  "rewarded",
+  "rejected",
+  "expired",
+  "revoked",
+]);
+
+// Phase 9 — paid entitlements (Stripe). entitlementType is the catalog-wide
+// grant kind; paidEntitlementStatusEnum is IncidentRank's own policy-level
+// status (never a raw mirror of Stripe's subscription status strings — see
+// stripeSubscriptions below for that).
+export const paidEntitlementTypeEnum = pgEnum("paid_entitlement_type", [
+  "pro",
+  "founding_lifetime",
+]);
+
+export const paidEntitlementStatusEnum = pgEnum("paid_entitlement_status", [
+  "active",
+  "inactive",
+  "canceled",
+  "past_due",
+  "revoked",
+]);
+
+export const stripeWebhookProcessingStatusEnum = pgEnum(
+  "stripe_webhook_processing_status",
+  ["received", "processing", "processed", "failed"],
+);
+
+export const foundingAllocationStatusEnum = pgEnum(
+  "founding_allocation_status",
+  ["reserved", "issued", "released", "expired"],
+);
 
 // ─────────────────────────────────────────────────────────────────────────
 // Users — one row per authenticated identity. No "candidate" role: a user
@@ -377,6 +454,21 @@ export const attempts = pgTable("attempts", {
     onDelete: "restrict",
   }),
 
+  // Phase 8: the Incident Pass that funded this attempt's start, if any —
+  // null for free-scenario attempts, assessment attempts, and any attempt
+  // predating Phase 8. Prevents one pass from funding two attempts (the
+  // pass-consumption transaction sets this and flips the pass to
+  // "consumed" atomically) and is the exact-lineage anchor referral
+  // qualification checks against (referrals.referredIncidentPassId must
+  // equal this column, not merely "same user", before a reward can
+  // issue — see persistTerminalAttempt). Set null on delete rather than
+  // restrict: a pass record may outlive the attempt it funded without
+  // blocking cleanup.
+  incidentPassId: uuid("incident_pass_id").references(
+    (): AnyPgColumn => incidentPasses.id,
+    { onDelete: "set null" },
+  ),
+
   status: attemptStatusEnum("status").notNull().default("in_progress"),
   // Null while status is "in_progress" or "abandoned"; always set once
   // status becomes "completed". See attemptOutcomeEnum above.
@@ -470,6 +562,7 @@ export const attempts = pgTable("attempts", {
   index("attempts_user_id_idx").on(table.userId),
   index("attempts_scenario_id_idx").on(table.scenarioId),
   index("attempts_assessment_id_idx").on(table.assessmentId),
+  index("attempts_incident_pass_id_idx").on(table.incidentPassId),
   index("attempts_user_scenario_status_idx").on(
     table.userId,
     table.scenarioId,
@@ -652,3 +745,463 @@ export const attemptEvents = pgTable("attempt_events", {
     table.sequence,
   ),
 ]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 8 — Admin bootstrap, promotional access & referral growth loop.
+// See docs/implementation_plan/phase8_admin_promotional_access_referrals.md
+// (binding spec) and docs/implementation_plan/phase8loc.md (corrections,
+// which take precedence wherever the two disagree).
+// ─────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────
+// Admin users — platform-wide IncidentRank admin authority. Authorization
+// requires BOTH a verified @incidentrank.com email AND an active row here
+// (revokedAt IS NULL) — domain alone never grants access (phase8loc.md
+// Step 2B). A user may hold at most one *active* admin row at a time
+// (partial unique index below); a revoked-then-reinstated history is
+// preserved rather than deleted, so admin-audit lineage stays intact.
+// Every authorization query MUST filter revokedAt IS NULL explicitly —
+// see loadAdminMembership in apps/web/src/lib/server/admin-auth.ts.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const adminUsers = pgTable("admin_users", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  role: adminRoleEnum("role").notNull(),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (table) => [
+  index("admin_users_user_id_idx").on(table.userId),
+  uniqueIndex("admin_users_active_user_idx")
+    .on(table.userId)
+    .where(sql`${table.revokedAt} IS NULL`),
+  // DB-level bootstrap race guard (phase8loc.md Step 2A): at most one
+  // "owner" row may ever exist, full stop — not just one *active* owner.
+  // Two simultaneous first-bootstrap requests both attempting to insert
+  // role='owner' race on this index; exactly one INSERT succeeds, the
+  // other hits a unique-violation and is treated as "already bootstrapped"
+  // rather than creating a second owner. Deliberately ignores revokedAt:
+  // bootstrap is a one-time event that must stay permanently closed even
+  // if that owner is later revoked, never "ensure an owner always exists."
+  uniqueIndex("admin_users_single_owner_idx")
+    .on(table.role)
+    .where(sql`${table.role} = 'owner'`),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Admin invites — mirrors organizationInvitations' token-based invite
+// pattern (opaque random token, only its SHA-256 hash stored), scoped to
+// granting platform admin membership rather than org membership. Email
+// must end in @incidentrank.com at creation time — enforced in
+// apps/web/src/lib/server/admin-invites.ts, not at the DB layer.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const adminInvites = pgTable("admin_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull(),
+  role: adminRoleEnum("role").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  invitedByUserId: uuid("invited_by_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  status: adminInviteStatusEnum("status").notNull().default("pending"),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedByUserId: uuid("accepted_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  uniqueIndex("admin_invites_token_hash_idx").on(table.tokenHash),
+  index("admin_invites_status_idx").on(table.status),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Incident passes — the entitlement primitive: one pass authorizes exactly
+// one premium-scenario attempt. Lifecycle: available -> bound (user
+// selects a scenario) -> consumed (that scenario's attempt actually
+// starts) -> never movable to a different scenario once bound. sourceId
+// is a plain uuid, not a strict FK, because it polymorphically points at
+// promotionalInvites.id or referrals.id depending on sourceType (or is
+// null for an admin_grant with no originating row) — a single FK column
+// cannot reference two different tables conditionally. The unique index
+// on (sourceType, sourceId) is the DB-level backstop (phase8loc.md Step
+// 1A) guaranteeing one promo invite or one referral reward can never
+// produce two passes, even under a concurrent-request race.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const incidentPasses = pgTable("incident_passes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  sourceType: incidentPassSourceTypeEnum("source_type").notNull(),
+  sourceId: uuid("source_id"),
+  scenarioId: uuid("scenario_id").references(() => scenarios.id, {
+    onDelete: "set null",
+  }),
+  status: incidentPassStatusEnum("status").notNull().default("available"),
+  grantedAt: timestamp("granted_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  boundAt: timestamp("bound_at", { withTimezone: true }),
+  consumedAt: timestamp("consumed_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("incident_passes_user_id_idx").on(table.userId),
+  index("incident_passes_status_idx").on(table.status),
+  index("incident_passes_scenario_id_idx").on(table.scenarioId),
+  uniqueIndex("incident_passes_source_idx")
+    .on(table.sourceType, table.sourceId)
+    .where(sql`${table.sourceId} IS NOT NULL`),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Promotional invites — a founder/admin-created, email-targeted invite
+// granting exactly one Incident Pass on redemption. Mirrors
+// assessmentCandidates/organizationInvitations' token-hash pattern.
+// incidentPassId is set once the invite's pass has been granted
+// (redemption is atomic: mark redeemed + grant pass together).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const promotionalInvites = pgTable("promotional_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").notNull(),
+  normalizedEmail: text("normalized_email").notNull(),
+  tokenHash: text("token_hash").notNull(),
+  campaign: text("campaign"),
+  status: promotionalInviteStatusEnum("status").notNull().default("created"),
+  createdByUserId: uuid("created_by_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  redeemedByUserId: uuid("redeemed_by_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  incidentPassId: uuid("incident_pass_id").references(() => incidentPasses.id, {
+    onDelete: "set null",
+  }),
+  sentAt: timestamp("sent_at", { withTimezone: true }),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  uniqueIndex("promotional_invites_token_hash_idx").on(table.tokenHash),
+  index("promotional_invites_normalized_email_idx").on(table.normalizedEmail),
+  index("promotional_invites_status_idx").on(table.status),
+  index("promotional_invites_campaign_idx").on(table.campaign),
+  index("promotional_invites_created_at_idx").on(table.createdAt),
+  index("promotional_invites_redeemed_by_user_id_idx").on(
+    table.redeemedByUserId,
+  ),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Referrals — a referrer's shareable code and its lineage through to a
+// reward. referredIncidentPassId is the pass granted to the referred user
+// at claim time; qualifyingAttemptId/rewardIncidentPassId are set only
+// once that *specific* pass funds a resolved acceptable/optimal attempt
+// (see persistTerminalAttempt's referral-qualification step) — a referred
+// user's unrelated attempt (funded by a different pass, or free) must
+// never qualify this referral. This exact-lineage requirement is binding
+// per phase8loc.md's "Referral qualification must follow pass lineage"
+// correction. The unique indexes on qualifyingAttemptId/
+// rewardIncidentPassId are the final concurrency backstop: even a
+// duplicate/replayed terminal-persistence callback can produce at most
+// one reward.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const referrals = pgTable("referrals", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  // Plaintext, not hashed — unlike invite tokens, a referral code is not
+  // a credential that grants anything by itself (claimReferral always
+  // re-runs full eligibility checks) and the referrer needs to be able
+  // to repeatedly view/copy their own link from their profile, which a
+  // one-way hash would make impossible.
+  referralCode: text("referral_code").notNull(),
+  referrerUserId: uuid("referrer_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  referredUserId: uuid("referred_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  status: referralStatusEnum("status").notNull().default("created"),
+  referredIncidentPassId: uuid("referred_incident_pass_id").references(
+    () => incidentPasses.id,
+    { onDelete: "set null" },
+  ),
+  qualifyingAttemptId: uuid("qualifying_attempt_id").references(
+    () => attempts.id,
+    { onDelete: "set null" },
+  ),
+  rewardIncidentPassId: uuid("reward_incident_pass_id").references(
+    () => incidentPasses.id,
+    { onDelete: "set null" },
+  ),
+  clickedAt: timestamp("clicked_at", { withTimezone: true }),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  qualifiedAt: timestamp("qualified_at", { withTimezone: true }),
+  rewardedAt: timestamp("rewarded_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  uniqueIndex("referrals_code_idx").on(table.referralCode),
+  uniqueIndex("referrals_qualifying_attempt_idx")
+    .on(table.qualifyingAttemptId)
+    .where(sql`${table.qualifyingAttemptId} IS NOT NULL`),
+  uniqueIndex("referrals_reward_pass_idx")
+    .on(table.rewardIncidentPassId)
+    .where(sql`${table.rewardIncidentPassId} IS NOT NULL`),
+  index("referrals_referrer_user_id_idx").on(table.referrerUserId),
+  index("referrals_referred_user_id_idx").on(table.referredUserId),
+  index("referrals_status_idx").on(table.status),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Admin audit events — append-only log of sensitive admin mutations
+// (invite created/sent/revoked, pass granted/revoked, admin invited/role-
+// changed/revoked, referral manually revoked). Never stores raw secrets
+// (tokens/codes) — see logAdminAction in apps/web/src/lib/server/
+// admin-audit.ts.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const adminAuditEvents = pgTable("admin_audit_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  adminUserId: uuid("admin_user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  action: text("action").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: uuid("target_id"),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("admin_audit_events_admin_user_id_idx").on(table.adminUserId),
+  index("admin_audit_events_target_idx").on(
+    table.targetType,
+    table.targetId,
+  ),
+  index("admin_audit_events_created_at_idx").on(table.createdAt),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 9 — Stripe payments. stripeCustomers is the DB-authoritative
+// user<->Stripe-Customer mapping (phase9.md §9): one user maps to at most
+// one Stripe Customer, created idempotently and reused on every future
+// checkout. Never use email alone as identity — always resolve through
+// this table.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const stripeCustomers = pgTable("stripe_customers", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  uniqueIndex("stripe_customers_user_id_idx").on(table.userId),
+  uniqueIndex("stripe_customers_stripe_customer_id_idx").on(
+    table.stripeCustomerId,
+  ),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Paid entitlements — the policy-level grant the rest of the application
+// reads (phase9.md §10, §19): "does this user have Pro or Founding access
+// right now" is answered from THIS table alone, never by re-deriving it
+// from stripeSubscriptions or a live Stripe API call on every request.
+// Synchronized from verified Stripe webhook events only (see
+// apps/web/src/lib/server/stripe/webhook-handlers.ts) — never written from
+// the checkout-success redirect page. Architecturally separate from
+// incidentPasses: a catalog-wide, possibly time-bound grant, not a
+// one-scenario single-use pass.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const paidEntitlements = pgTable("paid_entitlements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  entitlementType: paidEntitlementTypeEnum("entitlement_type").notNull(),
+  status: paidEntitlementStatusEnum("status").notNull(),
+  source: text("source").notNull(),
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+  stripePaymentIntentId: text("stripe_payment_intent_id"),
+  stripePriceId: text("stripe_price_id"),
+  startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+  // Null for founding_lifetime (never expires) and for a pro entitlement
+  // whose period end is not yet known.
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("paid_entitlements_user_id_idx").on(table.userId),
+  index("paid_entitlements_status_idx").on(table.status),
+  index("paid_entitlements_entitlement_type_idx").on(table.entitlementType),
+  // A user may hold at most one FOUNDING entitlement ever (phase9.md
+  // §26/§49's "same user cannot receive two Founding entitlements") —
+  // partial unique index scoped to entitlementType so a user can still
+  // separately hold a pro entitlement without conflict.
+  uniqueIndex("paid_entitlements_one_founding_per_user_idx")
+    .on(table.userId)
+    .where(sql`${table.entitlementType} = 'founding_lifetime'`),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Stripe subscriptions — the raw Stripe-state mirror for Pro subscriptions
+// (phase9.md §11), kept deliberately separate from paidEntitlements: this
+// table stores Stripe's own status strings/period dates verbatim for
+// operational visibility and webhook reconciliation; paidEntitlements
+// stores IncidentRank's derived access policy. Do not derive access
+// decisions from this table directly.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const stripeSubscriptions = pgTable("stripe_subscriptions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  stripeCustomerId: text("stripe_customer_id").notNull(),
+  stripeSubscriptionId: text("stripe_subscription_id").notNull(),
+  stripePriceId: text("stripe_price_id").notNull(),
+  stripeProductId: text("stripe_product_id").notNull(),
+  stripeStatus: text("stripe_status").notNull(),
+  currentPeriodStart: timestamp("current_period_start", {
+    withTimezone: true,
+  }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  uniqueIndex("stripe_subscriptions_subscription_id_idx").on(
+    table.stripeSubscriptionId,
+  ),
+  index("stripe_subscriptions_user_id_idx").on(table.userId),
+  index("stripe_subscriptions_customer_id_idx").on(table.stripeCustomerId),
+  index("stripe_subscriptions_status_idx").on(table.stripeStatus),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Stripe webhook events — the idempotency ledger (phase9.md §12). Every
+// verified webhook attempts `INSERT ... ON CONFLICT (stripe_event_id) DO
+// NOTHING` as its reservation step; zero rows returned means this exact
+// event was already seen and must be acknowledged without re-processing.
+// Stripe may legitimately deliver the same event more than once.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const stripeWebhookEvents = pgTable("stripe_webhook_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  stripeEventId: text("stripe_event_id").notNull(),
+  eventType: text("event_type").notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  processingStatus: stripeWebhookProcessingStatusEnum("processing_status")
+    .notNull()
+    .default("received"),
+  error: text("error"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  uniqueIndex("stripe_webhook_events_event_id_idx").on(table.stripeEventId),
+  index("stripe_webhook_events_processing_status_idx").on(
+    table.processingStatus,
+  ),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Founding Engineer allocations — the race-safe capacity model for the
+// first-100 cap (phase9.md §22/§23). Exactly 100 rows are pre-seeded
+// (slotNumber 1..100, userId null, status 'released') by the db:seed
+// script; a reservation claims the lowest free slot via `UPDATE ...
+// WHERE slot_number = (SELECT ... WHERE status IN ('released','expired')
+// ORDER BY slot_number LIMIT 1 FOR UPDATE SKIP LOCKED)`. This guarantees
+// at most 100 rows are ever in ('reserved','issued') simultaneously
+// without an advisory lock or a separate counter to keep in sync, and
+// gives a free, directly-queryable "N remaining" count for the pricing
+// page. Never delete or add rows outside the one-time seed — capacity
+// changes only ever move a slot between these four statuses.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const foundingEngineerAllocations = pgTable(
+  "founding_engineer_allocations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slotNumber: integer("slot_number").notNull(),
+    userId: uuid("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    status: foundingAllocationStatusEnum("status").notNull().default(
+      "released",
+    ),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    reservedAt: timestamp("reserved_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    issuedAt: timestamp("issued_at", { withTimezone: true }),
+    releasedAt: timestamp("released_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("founding_engineer_allocations_slot_number_idx").on(
+      table.slotNumber,
+    ),
+    index("founding_engineer_allocations_status_idx").on(table.status),
+    index("founding_engineer_allocations_user_id_idx").on(table.userId),
+    // A user may hold at most one active (reserved or issued) allocation
+    // at a time — the application-level "existing reservation" reuse
+    // logic (phase9.md §39) relies on this never being violated.
+    uniqueIndex("founding_engineer_allocations_one_active_per_user_idx")
+      .on(table.userId)
+      .where(sql`${table.status} IN ('reserved', 'issued')`),
+  ],
+);

@@ -1,15 +1,26 @@
 import type {
+  adminAuditEvents,
+  adminInvites,
+  adminUsers,
   assessmentCandidates,
   assessments,
   attemptActionChanges,
   attemptActionGroups,
   attemptEvents,
   attempts,
+  foundingEngineerAllocations,
+  incidentPasses,
   organizationInvitations,
   organizationMembers,
   organizations,
+  paidEntitlements,
+  promotionalInvites,
+  referrals,
   scenarios,
   scenarioVersions,
+  stripeCustomers,
+  stripeSubscriptions,
+  stripeWebhookEvents,
   users,
 } from "./schema";
 
@@ -48,3 +59,38 @@ export type NewAssessment = typeof assessments.$inferInsert;
 
 export type AssessmentCandidate = typeof assessmentCandidates.$inferSelect;
 export type NewAssessmentCandidate = typeof assessmentCandidates.$inferInsert;
+
+export type AdminUser = typeof adminUsers.$inferSelect;
+export type NewAdminUser = typeof adminUsers.$inferInsert;
+
+export type AdminInvite = typeof adminInvites.$inferSelect;
+export type NewAdminInvite = typeof adminInvites.$inferInsert;
+
+export type IncidentPass = typeof incidentPasses.$inferSelect;
+export type NewIncidentPass = typeof incidentPasses.$inferInsert;
+
+export type PromotionalInvite = typeof promotionalInvites.$inferSelect;
+export type NewPromotionalInvite = typeof promotionalInvites.$inferInsert;
+
+export type Referral = typeof referrals.$inferSelect;
+export type NewReferral = typeof referrals.$inferInsert;
+
+export type AdminAuditEvent = typeof adminAuditEvents.$inferSelect;
+export type NewAdminAuditEvent = typeof adminAuditEvents.$inferInsert;
+
+export type StripeCustomer = typeof stripeCustomers.$inferSelect;
+export type NewStripeCustomer = typeof stripeCustomers.$inferInsert;
+
+export type PaidEntitlement = typeof paidEntitlements.$inferSelect;
+export type NewPaidEntitlement = typeof paidEntitlements.$inferInsert;
+
+export type StripeSubscription = typeof stripeSubscriptions.$inferSelect;
+export type NewStripeSubscription = typeof stripeSubscriptions.$inferInsert;
+
+export type StripeWebhookEvent = typeof stripeWebhookEvents.$inferSelect;
+export type NewStripeWebhookEvent = typeof stripeWebhookEvents.$inferInsert;
+
+export type FoundingEngineerAllocation =
+  typeof foundingEngineerAllocations.$inferSelect;
+export type NewFoundingEngineerAllocation =
+  typeof foundingEngineerAllocations.$inferInsert;

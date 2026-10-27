@@ -18,6 +18,11 @@ export type FinishableAttempt = Attempt & { scenario: Scenario };
 
 export interface FinishResult extends CandidateDeclaredFinishResult {
   score: { total: number; breakdown: Record<string, number> } | null;
+  /** Same formula/value persistTerminalAttempt persists and scores
+   * against — never recomputed client-side from state.resolvedAtMs,
+   * which the engine no longer ever writes (Phase 7.1). Null whenever
+   * the attempt never reached a resolved/failed terminal state. */
+  recoveryTimeMs: number | null;
 }
 
 export type FinishAttemptResult =
@@ -114,7 +119,11 @@ export async function finishAttempt(
     const elapsedMs = lockedAttempt.lastSimulationTimeMs ?? 0;
     const { state } = replayAttempt({ scenario, elapsedMs, actionGroups: replayGroups });
 
-    const finishResult: FinishResult = { ...evaluateCandidateDeclaredFinish(scenario, state), score: null };
+    const finishResult: FinishResult = {
+      ...evaluateCandidateDeclaredFinish(scenario, state),
+      score: null,
+      recoveryTimeMs: null,
+    };
     await persistFinishResult(tx, attempt, finishResult, finishRequestId, note);
 
     return { kind: "applied" as const, result: finishResult };
@@ -152,6 +161,12 @@ async function persistFinishResult(
   // engine itself never writes one for candidate_declared completion.
   const inputs = extractFinishScoringInputs(scenario, finishResult);
 
+  finishResult.recoveryTimeMs =
+    inputs.incidentStartedAtMs !== null &&
+    (inputs.resolvedAtMs !== null || inputs.failedAtMs !== null)
+      ? (inputs.resolvedAtMs ?? inputs.failedAtMs ?? 0) - inputs.incidentStartedAtMs
+      : null;
+
   finishResult.score = await persistTerminalAttempt(tx, attempt, inputs, finishResult.state, {
     outcome: finishResult.outcome,
     completionTier: finishResult.completionTier,
@@ -187,6 +202,7 @@ function rebuildFinishResultFromRow(row: Attempt): FinishResult {
             },
           }
         : null,
+    recoveryTimeMs: row.recoveryTimeMs,
     state,
   };
 }

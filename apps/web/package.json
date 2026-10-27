@@ -20,17 +20,19 @@
     "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "server-only": "^0.0.1"
+    "resend": "^6.34.1",
+    "server-only": "^0.0.1",
+    "stripe": "^23.0.1"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@types/node": "^20",
-    "@vitejs/plugin-react": "^4.3.4",
     "@types/react": "^19",
-    "dotenv": "^16.4.7",
     "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "^16.4.7",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
     "jsdom": "^25.0.1",

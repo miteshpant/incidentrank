@@ -1,6 +1,8 @@
 import { BUILT_IN_SCENARIO_CATALOG, listBuiltInScenarioEntries } from "@incidentrank/scenarios";
 import { createDb } from "./client";
-import { scenarios } from "./schema";
+import { foundingEngineerAllocations, scenarios } from "./schema";
+
+const FOUNDING_ENGINEER_SLOT_COUNT = 100;
 
 /**
  * Seeds every scenario in BUILT_IN_SCENARIO_CATALOG — never a hardcoded
@@ -10,6 +12,13 @@ import { scenarios } from "./schema";
  * is never touched. onConflictDoNothing targets the catalog's own
  * partial unique index (slug, scoped to ownershipType="incidentrank"),
  * so re-running the seed is always safe.
+ *
+ * Also seeds exactly 100 Founding Engineer allocation slots (phase9.md
+ * §22/§23) — the race-safe capacity model's fixed inventory. Each slot
+ * starts userId=null, status='released' (i.e. "free"); reservation claims
+ * the lowest-numbered free slot under FOR UPDATE SKIP LOCKED. Idempotent
+ * via onConflictDoNothing on the unique slot_number index — re-running
+ * this seed never creates duplicate or extra slots.
  */
 async function main() {
   const db = createDb();
@@ -29,7 +38,14 @@ async function main() {
       .onConflictDoNothing();
   }
 
+  const slots = Array.from({ length: FOUNDING_ENGINEER_SLOT_COUNT }, (_, i) => ({
+    slotNumber: i + 1,
+    status: "released" as const,
+  }));
+  await db.insert(foundingEngineerAllocations).values(slots).onConflictDoNothing();
+
   console.log(`Seed complete (${entries.length} built-in scenario(s)).`);
+  console.log(`Founding Engineer slots seeded (${FOUNDING_ENGINEER_SLOT_COUNT}).`);
   process.exit(0);
 }
 

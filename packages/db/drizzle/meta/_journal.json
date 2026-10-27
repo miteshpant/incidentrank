@@ -57,6 +57,34 @@
       "when": 1792694832616,
       "tag": "0007_perfect_fabian_cortez",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1792982638240,
+      "tag": "0008_fair_the_initiative",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792982806618,
+      "tag": "0009_low_supreme_intelligence",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792987382775,
+      "tag": "0010_needy_wrecker",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793026727548,
+      "tag": "0011_wise_junta",
+      "breakpoints": true
     }
   ]
 }

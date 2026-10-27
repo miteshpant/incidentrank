@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { StateValue } from "@incidentrank/simulator";
 import {
@@ -8,9 +8,11 @@ import {
   paymentRetryStormCandidateUI,
   paymentRetryStormSimulation,
 } from "@incidentrank/scenarios";
-import { useIncidentAttempt } from "@/lib/use-incident-attempt";
+import { useIncidentAttempt, type ResumeSeed } from "@/lib/use-incident-attempt";
+import { findActiveAttempt, fetchResumeSeed } from "@/lib/attempt-persistence";
 import { formatUsd } from "@/lib/format";
 import { GenericResultScreen } from "@/components/scenario-console/result-screen";
+import { GenericResumeScreen } from "@/components/scenario-console/resume-screen";
 import { FinishIncidentDialog } from "@/components/scenario-console/finish-incident-dialog";
 import { BriefingScreen } from "./briefing-screen";
 import { IncidentHeader } from "./incident-header";
@@ -44,16 +46,68 @@ function usePreviousValues(
 
 export function IncidentConsole() {
   const { isSignedIn, isLoaded } = useAuth();
+  const [fetchedSeed, setFetchedSeed] = useState<{ seed: ResumeSeed | null } | null>(null);
+
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn) return;
+    let cancelled = false;
+    findActiveAttempt(paymentRetryStorm.slug).then((attemptId) => {
+      if (!attemptId) {
+        if (!cancelled) setFetchedSeed({ seed: null });
+        return;
+      }
+      fetchResumeSeed(attemptId).then((seed) => {
+        if (!cancelled) setFetchedSeed({ seed });
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isLoaded, isSignedIn]);
+
+  if (!isLoaded) {
+    return (
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <p className="text-sm text-muted">Loading…</p>
+      </main>
+    );
+  }
+
+  if (isSignedIn && fetchedSeed === null) {
+    return (
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
+        <p className="text-sm text-muted">Loading…</p>
+      </main>
+    );
+  }
+
+  return <IncidentConsoleActive resumeSeed={fetchedSeed?.seed ?? null} />;
+}
+
+function IncidentConsoleActive({ resumeSeed }: { resumeSeed: ResumeSeed | null }) {
+  const { isSignedIn, isLoaded } = useAuth();
   const attempt = useIncidentAttempt(
     paymentRetryStormSimulation,
     paymentRetryStorm.slug,
     Boolean(isSignedIn),
+    null,
+    resumeSeed,
   );
   const [selectedComponentId, setSelectedComponentId] = useState(
     DEFAULT_SELECTED_COMPONENT,
   );
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const previousValues = usePreviousValues(attempt.state.values);
+
+  if (attempt.phase === "paused") {
+    return (
+      <GenericResumeScreen
+        scenarioName="Payment Retry Storm"
+        elapsedMs={attempt.state.simulationTimeMs}
+        onResume={attempt.resumeClock}
+      />
+    );
+  }
 
   if (attempt.phase === "briefing") {
     return (
@@ -71,6 +125,7 @@ export function IncidentConsole() {
         actionGroups={attempt.actionGroups}
         descriptor={paymentRetryStormCandidateUI}
         serverScore={attempt.serverScore}
+        serverRecoveryTimeMs={attempt.serverRecoveryTimeMs}
         scoringError={attempt.scoringError}
         retryScoring={attempt.retryScoring}
         outcome={attempt.outcome}

@@ -204,4 +204,73 @@ describe("GenericIncidentConsole", () => {
       screen.getByText(/incident not fully stabilized/i, { selector: "span" }),
     ).toBeInTheDocument();
   });
+
+  it("Phase 7.3 regression: displays the server-provided recovery time for a resolved outcome, not the wall-clock time elapsed until Finish was clicked", async () => {
+    // The engine never writes state.resolvedAtMs for a candidate-declared
+    // completion (Phase 7.1) — the result screen must show the server's
+    // scoring-derived recoveryTimeMs (here: 12s, simulating a fix applied
+    // and sustained well before the candidate got around to clicking
+    // Finish much later), never recompute it client-side from
+    // state.simulationTimeMs, which would incorrectly show the much
+    // later wall-clock Finish-click time instead.
+    vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/finish-preview")) {
+        return new Response(
+          JSON.stringify({
+            outcome: "resolved",
+            completionTier: "optimal",
+            score: { total: 965, breakdown: {} },
+            recoveryTimeMs: 12_000,
+          }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify({ score: { total: 0, breakdown: {} } }), { status: 200 });
+    });
+
+    render(
+      <GenericIncidentConsole
+        scenario={entry.definition}
+        simulation={entry.definition.simulation}
+        candidateUI={entry.candidateUI}
+      />,
+    );
+    acknowledgeIncident();
+
+    advanceSeconds(31);
+    fireEvent.click(screen.getByRole("button", { name: /^connection pool\b/i }));
+    fireEvent.change(screen.getByLabelText("Connection Pool Size"), {
+      target: { value: "200" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /apply changes/i }));
+
+    fireEvent.click(screen.getByRole("button", { name: /^read replica\b/i }));
+    fireEvent.change(screen.getByLabelText("Read Replica Enabled"), {
+      target: { value: "true" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /apply changes/i }));
+
+    // Advance well past the server-reported 12s recovery time before
+    // declaring Finish, so a client-side wall-clock fallback would
+    // produce a visibly different (much larger) number if the bug
+    // regressed.
+    advanceSeconds(60);
+
+    fireEvent.click(screen.getByRole("button", { name: /^finish incident$/i }));
+    const dialog = screen.getByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: /^finish incident$/i }));
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/incident resolved/i, { selector: "span" })).toBeInTheDocument();
+    expect(screen.getByText("00:12")).toBeInTheDocument();
+    // The client-side wall-clock fallback (state.simulationTimeMs -
+    // incidentStartedAtMs) would show roughly 01:17-01:30+ here instead —
+    // assert the specific wrong value this regression previously showed
+    // is absent, not just that the right one is present.
+    expect(screen.queryByText(/01:1[0-9]|01:2[0-9]|01:30/)).not.toBeInTheDocument();
+  });
 });
