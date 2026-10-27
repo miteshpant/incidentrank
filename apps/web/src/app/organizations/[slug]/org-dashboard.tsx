@@ -64,6 +64,14 @@ export async function OrgDashboard({ slug }: OrgDashboardProps) {
           >
             Scenarios
           </Link>
+          {(result.membership.role === "owner" || result.membership.role === "admin") && (
+            <Link
+              href={`/organizations/${slug}/billing`}
+              className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
+            >
+              Billing
+            </Link>
+          )}
           <Link
             href={`/organizations/${slug}/assessments/new`}
             className="rounded-md border border-foreground bg-foreground px-4 py-2 font-mono text-sm font-medium text-background transition-opacity hover:opacity-90"

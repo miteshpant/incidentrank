@@ -2,6 +2,7 @@ import "server-only";
 import type Stripe from "stripe";
 import { and, eq, sql } from "drizzle-orm";
 import {
+  organizations,
   paidEntitlements,
   stripeSubscriptions,
   users,
@@ -10,6 +11,9 @@ import {
 import { db } from "../db";
 import { planForPriceId } from "./config";
 import { issueFoundingSlot } from "./founding-allocation";
+import { orgCreditPlanForPriceId, creditQuantityForPlan } from "./org-credit-config";
+import { recordOrganizationCreditPurchase } from "../organization-credits";
+import { logOrgAuditEvent } from "../organization-audit";
 
 type TxOrDb = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
@@ -59,6 +63,18 @@ export async function handleCheckoutSessionCompleted(
   });
   const priceId = lineItems.data[0]?.price?.id;
   if (!priceId) return;
+
+  // Phase 10B: organization-credit purchases are a structurally separate
+  // purchase type from personal Pro/Founding (phase10b.md §19/§20) —
+  // branch here by metadata.purchase_type before falling through to the
+  // Founding-specific logic below, which must stay untouched for
+  // personal payments. The configured Price ID, never
+  // metadata.credit_quantity, determines the credited quantity (§20/§22
+  // — "metadata is not enough").
+  if (session.metadata?.purchase_type === "organization_assessment_credits") {
+    await handleOrganizationCreditCheckoutSessionCompleted(tx, session, priceId);
+    return;
+  }
 
   const plan = planForPriceId(priceId);
   if (plan !== "founding_lifetime") return; // unrecognized/unexpected price — grant nothing
@@ -112,6 +128,81 @@ export async function handleCheckoutSessionCompleted(
       target: paidEntitlements.userId,
       where: sql`${paidEntitlements.entitlementType} = 'founding_lifetime'`,
     });
+}
+
+/**
+ * Organization assessment-credit checkout.session.completed handling
+ * (docs/implementation_plan/phase10b.md §20). Called only after the
+ * caller has confirmed session.mode === "payment" and
+ * session.payment_status === "paid" — this function performs the
+ * remaining steps: validate the configured Price ID (never trust
+ * metadata.credit_quantity), resolve the organization, confirm the
+ * organization Stripe customer mapping matches, and insert exactly one
+ * purchase ledger entry (idempotent on stripeCheckoutSessionId).
+ *
+ * Deliberately does NOT require the organization to still be active —
+ * §54: a valid payment already happened, and suspension only affects
+ * future consumption, never ownership of already-purchased credits.
+ */
+async function handleOrganizationCreditCheckoutSessionCompleted(
+  tx: TxOrDb,
+  session: Stripe.Checkout.Session,
+  priceId: string,
+): Promise<void> {
+  const plan = orgCreditPlanForPriceId(priceId);
+  if (!plan) return; // unrecognized price — grant nothing, even if metadata claims a quantity
+
+  const organizationId = session.metadata?.organization_id;
+  if (!organizationId) return;
+
+  const organization = await tx.query.organizations.findFirst({
+    where: eq(organizations.id, organizationId),
+  });
+  if (!organization) return;
+
+  const customerId =
+    typeof session.customer === "string" ? session.customer : session.customer?.id;
+  if (!customerId) return;
+
+  // Cross-validate the session's Stripe Customer against this exact
+  // organization's mapping — a mismatch means the session belongs to a
+  // different organization's customer and must never credit this one
+  // (phase10b.md §49/§67 "wrong Stripe customer/org mapping rejected").
+  const mapping = await tx.query.organizationStripeCustomers.findFirst({
+    where: (table, { eq: eqFn }) => eqFn(table.organizationId, organization.id),
+  });
+  if (!mapping || mapping.stripeCustomerId !== customerId) return;
+
+  const quantity = creditQuantityForPlan(plan);
+  const purchasingUserId =
+    typeof session.metadata?.purchasing_user_id === "string"
+      ? session.metadata.purchasing_user_id
+      : null;
+
+  const result = await recordOrganizationCreditPurchase(tx, {
+    organizationId: organization.id,
+    quantity,
+    stripeCheckoutSessionId: session.id,
+    stripePaymentIntentId:
+      typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : (session.payment_intent?.id ?? null),
+    purchasingUserId,
+  });
+  if (!result.inserted) return; // already recorded — idempotent replay, no-op
+
+  await logOrgAuditEvent(tx, {
+    organizationId: organization.id,
+    actorUserId: purchasingUserId,
+    actorType: "system",
+    action: "credits_purchased",
+    targetType: "organization_credit_ledger",
+    metadata: {
+      plan,
+      quantity,
+      stripeCheckoutSessionId: session.id,
+    },
+  });
 }
 
 /**

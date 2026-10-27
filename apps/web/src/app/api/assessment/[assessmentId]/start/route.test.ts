@@ -4,6 +4,7 @@ import {
   assessmentCandidates,
   assessments,
   attempts,
+  organizationCreditLedger,
   organizationMembers,
   organizations,
   scenarios,
@@ -13,6 +14,7 @@ import {
 import { createDb } from "@incidentrank/db";
 import { paymentRetryStorm } from "@incidentrank/scenarios";
 import { generateInviteToken, hashInviteToken, INVITE_EXPIRY_MS } from "@/lib/server/invite-token";
+import { recordOrganizationCreditPurchase } from "@/lib/server/organization-credits";
 import type { POST as PostHandler } from "./route";
 
 /**
@@ -22,6 +24,11 @@ import type { POST as PostHandler } from "./route";
  * remain resumable regardless of organization status — this is the one
  * candidate-privacy/continuity guarantee Phase 10A adds to the
  * candidate-side start route.
+ *
+ * Phase 10B note: whether ORG_CREDIT_CONSUMPTION_ENABLED is on in the
+ * ambient environment is irrelevant to what this file tests (suspension,
+ * not billing) — every fixture here grants one credit up front so this
+ * suite's assertions hold regardless of that flag's value.
  */
 
 const mockAuth = vi.hoisted(() => ({ userId: null as string | null }));
@@ -64,6 +71,7 @@ afterEach(async () => {
     for (const assessment of orgAssessments) {
       await testDb.delete(attempts).where(eq(attempts.assessmentId, assessment.id));
     }
+    await testDb.delete(organizationCreditLedger).where(eq(organizationCreditLedger.organizationId, org.id));
   }
   await testDb.delete(organizations).where(eq(organizations.slug, TEST_ORG_SLUG));
   await testDb.delete(users).where(eq(users.authProviderId, TEST_AUTH_OWNER));
@@ -122,6 +130,19 @@ async function createAssessmentWithCandidate(orgStatus: "active" | "suspended") 
     })
     .returning();
   if (!candidate) throw new Error("candidate not created");
+
+  // Grant one credit so this suite's assertions hold regardless of
+  // ORG_CREDIT_CONSUMPTION_ENABLED's ambient value — this file tests
+  // suspension/resume behavior, not billing.
+  await testDb.transaction((tx) =>
+    recordOrganizationCreditPurchase(tx, {
+      organizationId: org.id,
+      quantity: 1,
+      stripeCheckoutSessionId: `cs_test_${crypto.randomUUID()}`,
+      stripePaymentIntentId: null,
+      purchasingUserId: null,
+    }),
+  );
 
   return { org, assessment, candidateUser, candidate };
 }

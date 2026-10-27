@@ -44,3 +44,26 @@ export function isStripeCheckoutEnabled(): boolean {
 export function isStripeWebhooksEnabled(): boolean {
   return process.env.STRIPE_WEBHOOKS_ENABLED === "true";
 }
+
+/**
+ * Phase 10B feature flags (docs/implementation_plan/phase10b.md §7).
+ * Separate from the Phase 9 personal-payments flags above — organization
+ * billing has its own gate so one can be enabled without the other.
+ * UI hiding is never sufficient on its own: the checkout route, the
+ * purchase mutation, and the credit-consumption policy inside the
+ * assessment-start route each check the relevant flag themselves.
+ * Disabling purchase (isOrgCreditPurchaseEnabled -> false) must never
+ * erase existing credits or block resuming an already-started attempt.
+ */
+
+export function isOrgBillingEnabled(): boolean {
+  return process.env.ORG_BILLING_ENABLED === "true";
+}
+
+export function isOrgCreditPurchaseEnabled(): boolean {
+  return process.env.ORG_CREDIT_PURCHASE_ENABLED === "true";
+}
+
+export function isOrgCreditConsumptionEnabled(): boolean {
+  return process.env.ORG_CREDIT_CONSUMPTION_ENABLED === "true";
+}

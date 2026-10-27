@@ -11,9 +11,11 @@ import type {
   foundingEngineerAllocations,
   incidentPasses,
   organizationAuditEvents,
+  organizationCreditLedger,
   organizationInvitations,
   organizationMembers,
   organizations,
+  organizationStripeCustomers,
   paidEntitlements,
   promotionalInvites,
   referrals,
@@ -98,3 +100,13 @@ export type FoundingEngineerAllocation =
   typeof foundingEngineerAllocations.$inferSelect;
 export type NewFoundingEngineerAllocation =
   typeof foundingEngineerAllocations.$inferInsert;
+
+export type OrganizationStripeCustomer =
+  typeof organizationStripeCustomers.$inferSelect;
+export type NewOrganizationStripeCustomer =
+  typeof organizationStripeCustomers.$inferInsert;
+
+export type OrganizationCreditLedgerEntry =
+  typeof organizationCreditLedger.$inferSelect;
+export type NewOrganizationCreditLedgerEntry =
+  typeof organizationCreditLedger.$inferInsert;

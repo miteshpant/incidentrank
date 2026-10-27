@@ -212,6 +212,23 @@ export const foundingAllocationStatusEnum = pgEnum(
   ["reserved", "issued", "released", "expired"],
 );
 
+// Phase 10B — organization assessment credit ledger (docs/
+// implementation_plan/phase10b.md §10/§11). Signed-quantity transaction
+// types; balance is SUM(quantity) over an organization's rows. "expiration"
+// is listed per the spec's suggested vocabulary but never written in V1
+// (credits do not expire) — see organization-credits.ts.
+export const organizationCreditTransactionTypeEnum = pgEnum(
+  "organization_credit_transaction_type",
+  [
+    "purchase",
+    "assessment_started",
+    "admin_adjustment",
+    "refund",
+    "reversal",
+    "expiration",
+  ],
+);
+
 // ─────────────────────────────────────────────────────────────────────────
 // Users — one row per authenticated identity. No "candidate" role: a user
 // is simply a user, per docs/architecture.md principle 5.
@@ -383,7 +400,9 @@ export const organizationInvitations = pgTable("organization_invitations", {
 // member_invited, role_changed, scenario_created, scenario_updated,
 // scenario_archived, assessment_created, candidate_invited,
 // organization_suspended, organization_reactivated,
-// owner_recovery_invited.
+// owner_recovery_invited. Phase 10B adds: credits_purchased,
+// assessment_credit_consumed (see apps/web/src/lib/server/
+// organization-credits.ts).
 // ─────────────────────────────────────────────────────────────────────────
 
 export const organizationAuditEvents = pgTable("organization_audit_events", {
@@ -1311,5 +1330,117 @@ export const foundingEngineerAllocations = pgTable(
     uniqueIndex("founding_engineer_allocations_one_active_per_user_idx")
       .on(table.userId)
       .where(sql`${table.status} IN ('reserved', 'issued')`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10B — organization Stripe customer mapping. Structurally separate
+// from stripeCustomers (personal Pro/Founding mapping, keyed by userId) —
+// an organization's credit purchases must never flow through a member's
+// personal Stripe Customer (phase10b.md §8/§50/§51). Credits belong to the
+// organization record itself, never to whichever user happens to own the
+// mapping, so changing organization owners never moves or destroys
+// credits (phase10b.md §4).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const organizationStripeCustomers = pgTable(
+  "organization_stripe_customers",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    stripeCustomerId: text("stripe_customer_id").notNull(),
+    billingEmail: text("billing_email"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("organization_stripe_customers_organization_id_idx").on(
+      table.organizationId,
+    ),
+    uniqueIndex("organization_stripe_customers_stripe_customer_id_idx").on(
+      table.stripeCustomerId,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10B — the organization assessment-credit ledger: the sole
+// authoritative source of an organization's credit balance (phase10b.md
+// §10). Balance = SUM(quantity) over an organization's rows; any cached
+// balance (see organization-credits.ts) must be derived from this table,
+// never the reverse. Idempotency is enforced via the two partial unique
+// indexes below — one purchase row per Stripe Checkout Session, one
+// consumption row per attempt (phase10b.md §12) — so webhook replay and
+// duplicate/concurrent start requests can never double-credit or
+// double-consume.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const organizationCreditLedger = pgTable(
+  "organization_credit_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    transactionType: organizationCreditTransactionTypeEnum("transaction_type")
+      .notNull(),
+    // Signed: +1 single purchase, +110 pack purchase, -1 assessment
+    // started, +/-N admin adjustment.
+    quantity: integer("quantity").notNull(),
+
+    assessmentId: uuid("assessment_id").references(() => assessments.id, {
+      onDelete: "set null",
+    }),
+    attemptId: uuid("attempt_id").references(() => attempts.id, {
+      onDelete: "set null",
+    }),
+
+    // Idempotency sources — exactly one is populated depending on
+    // transactionType: stripeCheckoutSessionId for 'purchase',
+    // attemptId (above) for 'assessment_started'. sourceId is a generic
+    // escape hatch for future transaction types (e.g. reversal pointing
+    // at the original ledger row id) that don't fit either dedicated
+    // column.
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+    stripePaymentIntentId: text("stripe_payment_intent_id"),
+    sourceId: uuid("source_id"),
+
+    // Required for admin_adjustment (phase10b.md §39: "require reason");
+    // optional free-text context for other transaction types.
+    reason: text("reason"),
+
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("organization_credit_ledger_organization_id_idx").on(
+      table.organizationId,
+    ),
+    index("organization_credit_ledger_assessment_id_idx").on(
+      table.assessmentId,
+    ),
+    index("organization_credit_ledger_attempt_id_idx").on(table.attemptId),
+    index("organization_credit_ledger_created_at_idx").on(table.createdAt),
+    // One purchase ledger entry per Stripe Checkout Session — the webhook
+    // replay/duplicate-delivery backstop (phase10b.md §12/§21).
+    uniqueIndex("organization_credit_ledger_purchase_session_idx")
+      .on(table.stripeCheckoutSessionId)
+      .where(sql`${table.transactionType} = 'purchase'`),
+    // One consumption ledger entry per attempt — the duplicate-start/
+    // concurrent-start backstop (phase10b.md §12/§28).
+    uniqueIndex("organization_credit_ledger_consumption_attempt_idx")
+      .on(table.attemptId)
+      .where(sql`${table.transactionType} = 'assessment_started'`),
   ],
 );

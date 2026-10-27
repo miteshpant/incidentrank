@@ -4,6 +4,7 @@ import {
   assessmentCandidates,
   assessments,
   organizationAuditEvents,
+  organizationCreditLedger,
   organizationMembers,
   organizations,
   scenarios,
@@ -11,8 +12,19 @@ import {
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadAdminMembership } from "@/lib/server/admin-auth";
-import { isAdminPortalEnabled } from "@/lib/server/feature-flags";
+import { isAdminPortalEnabled, isOrgBillingEnabled } from "@/lib/server/feature-flags";
+import { getOrganizationCreditBalance } from "@/lib/server/organization-credits";
 import { OrganizationActions } from "./organization-actions";
+import { CreditAdjustmentForm } from "./credit-adjustment-form";
+
+const CREDIT_TRANSACTION_LABEL: Record<string, string> = {
+  purchase: "Purchase",
+  assessment_started: "Candidate started",
+  admin_adjustment: "Adjustment",
+  refund: "Refund",
+  reversal: "Reversal",
+  expiration: "Expiration",
+};
 
 /**
  * Single-organization admin detail view (docs/implementation_plan/
@@ -34,25 +46,38 @@ export async function OrganizationDetailView({ organizationId }: { organizationI
   });
   if (!organization) notFound();
 
-  const [members, scenarioCount, assessmentCount, candidateCount, auditEvents] = await Promise.all([
-    db.query.organizationMembers.findMany({
-      where: eq(organizationMembers.organizationId, organizationId),
-      with: { user: true },
-      orderBy: (table, { asc }) => [asc(table.createdAt)],
-    }),
-    db.select({ value: count() }).from(scenarios).where(eq(scenarios.organizationId, organizationId)),
-    db.select({ value: count() }).from(assessments).where(eq(assessments.organizationId, organizationId)),
-    db
-      .select({ value: count() })
-      .from(assessmentCandidates)
-      .innerJoin(assessments, eq(assessmentCandidates.assessmentId, assessments.id))
-      .where(eq(assessments.organizationId, organizationId)),
-    db.query.organizationAuditEvents.findMany({
-      where: eq(organizationAuditEvents.organizationId, organizationId),
-      orderBy: (table, { desc }) => [desc(table.createdAt)],
-      limit: 50,
-    }),
-  ]);
+  const billingEnabled = isOrgBillingEnabled();
+
+  const [members, scenarioCount, assessmentCount, candidateCount, auditEvents, creditBalance, creditLedgerRows] =
+    await Promise.all([
+      db.query.organizationMembers.findMany({
+        where: eq(organizationMembers.organizationId, organizationId),
+        with: { user: true },
+        orderBy: (table, { asc }) => [asc(table.createdAt)],
+      }),
+      db.select({ value: count() }).from(scenarios).where(eq(scenarios.organizationId, organizationId)),
+      db.select({ value: count() }).from(assessments).where(eq(assessments.organizationId, organizationId)),
+      db
+        .select({ value: count() })
+        .from(assessmentCandidates)
+        .innerJoin(assessments, eq(assessmentCandidates.assessmentId, assessments.id))
+        .where(eq(assessments.organizationId, organizationId)),
+      db.query.organizationAuditEvents.findMany({
+        where: eq(organizationAuditEvents.organizationId, organizationId),
+        orderBy: (table, { desc }) => [desc(table.createdAt)],
+        limit: 50,
+      }),
+      billingEnabled
+        ? getOrganizationCreditBalance(organizationId)
+        : Promise.resolve({ purchased: 0, consumed: 0, adjusted: 0, available: 0 }),
+      billingEnabled
+        ? db.query.organizationCreditLedger.findMany({
+            where: eq(organizationCreditLedger.organizationId, organizationId),
+            orderBy: (table, { desc }) => [desc(table.createdAt)],
+            limit: 20,
+          })
+        : Promise.resolve([]),
+    ]);
 
   return (
     <>
@@ -79,6 +104,43 @@ export async function OrganizationDetailView({ organizationId }: { organizationI
       <div className="mt-8">
         <OrganizationActions organizationId={organization.id} status={organization.status} />
       </div>
+
+      {billingEnabled && (
+        <div className="mt-10">
+          <h2 className="font-mono text-xs uppercase tracking-wide text-muted">
+            Assessment Credits
+          </h2>
+          <div className="mt-4 grid grid-cols-4 gap-4">
+            <StatCard label="Available" value={creditBalance.available} />
+            <StatCard label="Purchased" value={creditBalance.purchased} />
+            <StatCard label="Consumed" value={creditBalance.consumed} />
+            <StatCard label="Adjusted" value={creditBalance.adjusted} />
+          </div>
+
+          <div className="mt-6">
+            <CreditAdjustmentForm organizationId={organization.id} />
+          </div>
+
+          <div className="mt-6">
+            <h3 className="font-mono text-[10px] uppercase tracking-wide text-muted">
+              Recent Ledger Entries
+            </h3>
+            <ul className="mt-2 flex flex-col gap-1">
+              {creditLedgerRows.map((row) => (
+                <li key={row.id} className="font-mono text-xs text-muted">
+                  {new Date(row.createdAt).toISOString()} ·{" "}
+                  {CREDIT_TRANSACTION_LABEL[row.transactionType] ?? row.transactionType} ·{" "}
+                  {row.quantity > 0 ? `+${row.quantity}` : row.quantity}
+                  {row.reason ? ` · ${row.reason}` : ""}
+                </li>
+              ))}
+              {creditLedgerRows.length === 0 && (
+                <p className="text-sm text-muted">No credit ledger entries yet.</p>
+              )}
+            </ul>
+          </div>
+        </div>
+      )}
 
       <div className="mt-10">
         <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Members</h2>
