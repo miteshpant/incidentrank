@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { canMutate } from "@/lib/server/organization-auth";
+import { canMutate, requireActiveOrganization } from "@/lib/server/organization-auth";
 import { loadOrgScenario } from "@/lib/server/scenario-access";
 import { publishScenarioDraft } from "@/lib/server/scenario-authoring";
 
@@ -23,6 +23,11 @@ export async function POST(
   }
   if (!canMutate(result.membership.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const activeCheck = requireActiveOrganization(result.organization);
+  if (!activeCheck.ok) {
+    return NextResponse.json({ error: activeCheck.reason }, { status: activeCheck.status });
   }
 
   const publishResult = await publishScenarioDraft(result.scenario);

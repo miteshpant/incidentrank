@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { assessmentCandidates, assessments, attempts } from "@incidentrank/db";
+import { assessmentCandidates, assessments, attempts, organizations } from "@incidentrank/db";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 
@@ -12,6 +12,13 @@ import { getOrCreateCurrentUser } from "@/lib/server/current-user";
  * `assessment_candidates` row for this assessment (set by the invite
  * accept flow). A second start attempt is rejected — Phase 4 grants
  * exactly one official attempt, no "Try Again".
+ *
+ * Phase 10A §17/§18: a brand-new attempt must not start against a
+ * suspended organization's assessment, but an already-started attempt
+ * (candidate.attemptId already set) must always be resumable regardless
+ * of organization status — the early return below for that case runs
+ * BEFORE the organization-status check, so resuming is never blocked by
+ * suspension (this is the one case §18 explicitly protects).
  */
 export async function POST(
   _request: Request,
@@ -53,6 +60,17 @@ export async function POST(
   if (assessment.status !== "active") {
     return NextResponse.json(
       { error: "This assessment is not currently accepting starts" },
+      { status: 403 },
+    );
+  }
+
+  const organization = await db.query.organizations.findFirst({
+    where: eq(organizations.id, assessment.organizationId),
+    columns: { status: true },
+  });
+  if (organization?.status === "suspended") {
+    return NextResponse.json(
+      { error: "This organization is currently suspended and cannot accept new assessment starts" },
       { status: 403 },
     );
   }

@@ -3,6 +3,9 @@ import { isTransactionalEmailsEnabled } from "../feature-flags";
 import { ResendEmailService } from "./resend-email-service";
 import { TestEmailService } from "./test-email-service";
 import type {
+  SendOrganizationOwnerInviteInput,
+  SendOrganizationReactivatedNotificationInput,
+  SendOrganizationSuspendedNotificationInput,
   SendPromotionalInviteInput,
   SendReferralRewardInput,
   SendResult,
@@ -10,6 +13,9 @@ import type {
 } from "./transactional-email-service";
 
 export type {
+  SendOrganizationOwnerInviteInput,
+  SendOrganizationReactivatedNotificationInput,
+  SendOrganizationSuspendedNotificationInput,
   SendPromotionalInviteInput,
   SendReferralRewardInput,
   SendResult,
@@ -41,4 +47,22 @@ export async function sendReferralRewardEmail(
   input: SendReferralRewardInput,
 ): Promise<SendResult> {
   return getEmailService().sendReferralReward(input);
+}
+
+export async function sendOrganizationOwnerInviteEmail(
+  input: SendOrganizationOwnerInviteInput,
+): Promise<SendResult> {
+  return getEmailService().sendOrganizationOwnerInvite(input);
+}
+
+export async function sendOrganizationSuspendedNotificationEmail(
+  input: SendOrganizationSuspendedNotificationInput,
+): Promise<SendResult> {
+  return getEmailService().sendOrganizationSuspendedNotification(input);
+}
+
+export async function sendOrganizationReactivatedNotificationEmail(
+  input: SendOrganizationReactivatedNotificationInput,
+): Promise<SendResult> {
+  return getEmailService().sendOrganizationReactivatedNotification(input);
 }

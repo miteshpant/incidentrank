@@ -151,9 +151,21 @@ describe("invitation creation", () => {
     expect(asAdmin.ok).toBe(true);
   });
 
-  it("invitation directly to owner is rejected", async () => {
+  it("Phase 10A: invitation directly to owner is now permitted at the mechanical level (createOrgInvitation never authorizes WHO may issue it — see organization-auth.test.ts's canInviteRole tests for that policy)", async () => {
     const { owner, org } = await createOrgWithOwner(TEST_ORG_SLUG, "Acme Corp");
     const result = await createOrgInvitation(org.id, owner.id, "wouldbeowner@example.com", "owner");
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.invitation.role).toBe("owner");
+  });
+
+  it("invitation to a genuinely unknown role string is still rejected", async () => {
+    const { owner, org } = await createOrgWithOwner(TEST_ORG_SLUG, "Acme Corp");
+    const result = await createOrgInvitation(
+      org.id,
+      owner.id,
+      "notarole@example.com",
+      "superadmin" as unknown as "owner" | "admin" | "member",
+    );
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe("invalid_role");
   });

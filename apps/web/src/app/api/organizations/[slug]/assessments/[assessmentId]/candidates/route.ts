@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { assessmentCandidates } from "@incidentrank/db";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { canMutate } from "@/lib/server/organization-auth";
+import { canMutate, requireActiveOrganization } from "@/lib/server/organization-auth";
 import { loadOrgAssessment } from "@/lib/server/assessment-access";
 import {
   generateInviteToken,
@@ -37,6 +37,11 @@ export async function POST(
   }
   if (!canMutate(result.membership.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const activeCheck = requireActiveOrganization(result.organization);
+  if (!activeCheck.ok) {
+    return NextResponse.json({ error: activeCheck.reason }, { status: activeCheck.status });
   }
 
   const body = (await request.json().catch(() => null)) as

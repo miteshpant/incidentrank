@@ -69,6 +69,24 @@ export function canInviteMembers(role: OrganizationRole): boolean {
 }
 
 /**
+ * Phase 10A §11: invite permission now depends on the TARGET role, not
+ * just the actor's role — an owner may invite anyone (including another
+ * owner), an admin may invite an admin or member but never an owner, and
+ * a member may invite no one. This is the precise policy
+ * canInviteMembers (role-blind) cannot express; the one call site that
+ * needs target-role precision (the member-invitations route) uses this
+ * instead.
+ */
+export function canInviteRole(
+  actorRole: OrganizationRole,
+  targetRole: OrganizationRole,
+): boolean {
+  if (actorRole === "owner") return true;
+  if (actorRole === "admin") return targetRole !== "owner";
+  return false;
+}
+
+/**
  * Whether `actorRole` may remove the member currently holding
  * `targetRole` (last-owner protection is enforced separately, by the
  * caller checking remaining-owner count — this function only encodes the
@@ -103,4 +121,71 @@ export function canManageMember(
  */
 export function canChangeRole(actorRole: OrganizationRole): boolean {
   return actorRole === "owner";
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10A — organization lifecycle gating. Deliberately separate from
+// loadOrganizationMembership/canMutate above: read access (viewing
+// scenarios/assessments/reports) must keep working for a suspended
+// organization (historical data stays intact and visible — phase10a.md
+// §19/§30), while mutation routes must additionally pass
+// requireActiveOrganization. Never call this from a GET/read route.
+// ─────────────────────────────────────────────────────────────────────────
+
+export type RequireActiveOrganizationResult =
+  | { ok: true }
+  | { ok: false; status: 403; reason: "organization_suspended" }
+  | { ok: false; status: 403; reason: "organization_pending" };
+
+/**
+ * Every organization mutation route (scenario create/edit/publish,
+ * assessment create, candidate invite, member/owner invite creation,
+ * role change, member removal) must call this in addition to its
+ * existing role-based check (canMutate/canInviteRole/canChangeRole/
+ * canManageMember). Deliberately does NOT gate invitation *revocation*
+ * (DELETE .../members/invitations/[invitationId]) — revoking a pending
+ * invite reduces standing risk rather than creating new operational
+ * state, so it remains available even while suspended (documented
+ * asymmetry, see the Phase 10A completion report).
+ */
+export function requireActiveOrganization(
+  organization: Organization,
+): RequireActiveOrganizationResult {
+  if (organization.status === "suspended") {
+    return { ok: false, status: 403, reason: "organization_suspended" };
+  }
+  if (organization.status === "pending") {
+    return { ok: false, status: 403, reason: "organization_pending" };
+  }
+  return { ok: true };
+}
+
+export interface OrganizationAccess {
+  organization: Organization;
+  membership: OrganizationMember;
+  role: OrganizationRole;
+}
+
+export type LoadOrganizationAccessResult =
+  | { ok: true; access: OrganizationAccess }
+  | { ok: false; status: 404 | 403 };
+
+/**
+ * Thin wrapper over loadOrganizationMembership's result, named to make
+ * read-vs-mutation call sites self-documenting: a route that only needs
+ * loadOrganizationAccess (no requireActiveOrganization call after it) is
+ * declaring itself read-only/suspension-tolerant by construction.
+ */
+export function loadOrganizationAccess(
+  result: LoadOrganizationResult,
+): LoadOrganizationAccessResult {
+  if (!result.ok) return { ok: false, status: result.status };
+  return {
+    ok: true,
+    access: {
+      organization: result.organization,
+      membership: result.membership,
+      role: result.membership.role,
+    },
+  };
 }

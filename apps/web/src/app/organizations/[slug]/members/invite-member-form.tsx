@@ -3,14 +3,22 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
+type InviteableRole = "owner" | "admin" | "member";
+
 interface InviteMemberFormProps {
   slug: string;
+  /**
+   * The inviting member's own role — presentational only (hides the
+   * "Owner" option for non-owners). The real authorization boundary is
+   * server-side canInviteRole, enforced in the invitations route.
+   */
+  actorRole: InviteableRole;
 }
 
-export function InviteMemberForm({ slug }: InviteMemberFormProps) {
+export function InviteMemberForm({ slug, actorRole }: InviteMemberFormProps) {
   const router = useRouter();
   const [email, setEmail] = useState("");
-  const [role, setRole] = useState<"admin" | "member">("member");
+  const [role, setRole] = useState<InviteableRole>("member");
   const [error, setError] = useState<string | null>(null);
   const [inviteUrl, setInviteUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -36,6 +44,7 @@ export function InviteMemberForm({ slug }: InviteMemberFormProps) {
         }
         setInviteUrl(`${window.location.origin}/organization/invite/${data.token}`);
         setEmail("");
+        setRole("member");
         router.refresh();
       } catch {
         setError("Failed to create invitation");
@@ -72,11 +81,12 @@ export function InviteMemberForm({ slug }: InviteMemberFormProps) {
           <select
             id="invite-role"
             value={role}
-            onChange={(event) => setRole(event.target.value as "admin" | "member")}
+            onChange={(event) => setRole(event.target.value as InviteableRole)}
             className="mt-2 rounded-md border border-border bg-background px-3 py-2 text-sm outline-none focus:border-foreground/40"
           >
             <option value="member">Member</option>
             <option value="admin">Admin</option>
+            {actorRole === "owner" && <option value="owner">Owner</option>}
           </select>
         </div>
         <button

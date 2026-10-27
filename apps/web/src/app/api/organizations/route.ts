@@ -1,63 +1,27 @@
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
-import { organizationMembers, organizations } from "@incidentrank/db";
+import { organizationMembers } from "@incidentrank/db";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { slugify, randomSlugSuffix } from "@/lib/server/slug";
 
-interface CreateOrganizationBody {
-  name?: unknown;
-}
-
-export async function POST(request: Request) {
-  const user = await getOrCreateCurrentUser();
-  if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
-  const body = (await request.json().catch(() => null)) as
-    | CreateOrganizationBody
-    | null;
-  const name = typeof body?.name === "string" ? body.name.trim() : "";
-  if (name.length === 0) {
-    return NextResponse.json(
-      { error: "Organization name is required" },
-      { status: 400 },
-    );
-  }
-
-  const baseSlug = slugify(name);
-  let slug = baseSlug;
-
-  // Retry on slug collision with a short random suffix — organizations.slug
-  // is unique; collisions are expected to be rare but not impossible.
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    const existing = await db.query.organizations.findFirst({
-      where: eq(organizations.slug, slug),
-    });
-    if (!existing) break;
-    slug = `${baseSlug}-${randomSlugSuffix()}`;
-  }
-
-  const [organization] = await db
-    .insert(organizations)
-    .values({ name, slug })
-    .returning();
-
-  if (!organization) {
-    return NextResponse.json(
-      { error: "Failed to create organization" },
-      { status: 500 },
-    );
-  }
-
-  await db.insert(organizationMembers).values({
-    organizationId: organization.id,
-    userId: user.id,
-    role: "owner",
-  });
-
-  return NextResponse.json({ organization });
+/**
+ * Phase 10A §3/§33: ordinary authenticated users can no longer create
+ * organizations — this is now an IncidentRank-platform-admin-only
+ * operation (see POST /api/admin/organizations and
+ * organization-provisioning.ts's createOrganization). This handler is
+ * kept (rather than deleted) specifically so a direct API call to the
+ * old self-service endpoint fails cleanly, server-side, regardless of
+ * what the client sends — never relying on a hidden/removed UI button
+ * alone to enforce this.
+ */
+export async function POST() {
+  return NextResponse.json(
+    {
+      error:
+        "Organization creation is managed by IncidentRank. Contact support@incidentrank.com to set up a new organization.",
+    },
+    { status: 403 },
+  );
 }
 
 export async function GET() {

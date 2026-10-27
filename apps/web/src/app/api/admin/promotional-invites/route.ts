@@ -3,6 +3,7 @@ import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadAdminMembership } from "@/lib/server/admin-auth";
 import { isPromotionalInvitesEnabled } from "@/lib/server/feature-flags";
 import { logAdminAction } from "@/lib/server/admin-audit";
+import { appBaseUrl } from "@/lib/server/app-url";
 import { db } from "@/lib/server/db";
 import {
   createPromotionalInvite,
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
 
     const sendResult = await sendPromotionalInviteEmail({
       to: invite.email,
-      inviteUrl: `${process.env.NEXT_PUBLIC_APP_URL ?? ""}/invite/${token}`,
+      inviteUrl: `${appBaseUrl()}/invite/${token}`,
     });
 
     if (sendResult.ok) {

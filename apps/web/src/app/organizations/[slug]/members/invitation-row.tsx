@@ -8,13 +8,14 @@ interface InvitationRowProps {
   invitation: {
     id: string;
     email: string;
-    role: "admin" | "member";
+    role: "owner" | "admin" | "member";
     expiresAt: string;
   };
   canManage: boolean;
 }
 
-const ROLE_LABEL: Record<"admin" | "member", string> = {
+const ROLE_LABEL: Record<"owner" | "admin" | "member", string> = {
+  owner: "Owner",
   admin: "Admin",
   member: "Member",
 };

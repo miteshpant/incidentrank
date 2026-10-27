@@ -3,7 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { scenarios } from "@incidentrank/db";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { canMutate, loadOrganizationMembership } from "@/lib/server/organization-auth";
+import {
+  canMutate,
+  loadOrganizationMembership,
+  requireActiveOrganization,
+} from "@/lib/server/organization-auth";
 import { createOrgScenario } from "@/lib/server/scenario-authoring";
 import type { AuthoredScenario } from "@incidentrank/scenarios/authoring";
 
@@ -69,6 +73,11 @@ export async function POST(
   }
   if (!canMutate(membership.membership.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const activeCheck = requireActiveOrganization(membership.organization);
+  if (!activeCheck.ok) {
+    return NextResponse.json({ error: activeCheck.reason }, { status: activeCheck.status });
   }
 
   const body = (await request.json().catch(() => null)) as CreateScenarioBody | null;

@@ -5,6 +5,7 @@ import { assessments as assessmentsTable, organizationMembers } from "@incidentr
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadOrganizationMembership } from "@/lib/server/organization-auth";
+import { SuspendedOrgBanner } from "@/components/suspended-org-banner";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft",
@@ -38,6 +39,8 @@ export async function OrgDashboard({ slug }: OrgDashboardProps) {
 
   return (
     <>
+      {result.organization.status === "suspended" && <SuspendedOrgBanner />}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">

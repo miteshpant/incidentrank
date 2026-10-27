@@ -1,6 +1,7 @@
 import "server-only";
 import type { User } from "@incidentrank/db";
 import { db } from "../db";
+import { appBaseUrl } from "../app-url";
 import { getStripeClient } from "./client";
 import { getPlanPriceId, entitlementTypeForPlan, type StripePlan } from "./config";
 import { getOrCreateStripeCustomer } from "./stripe-customers";
@@ -21,10 +22,6 @@ export type CreateCheckoutSessionResult =
         | "founding_sold_out"
         | "founding_already_reserved";
     };
-
-function appBaseUrl(): string {
-  return process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-}
 
 /**
  * Server-authoritative Checkout Session creation (docs/implementation_

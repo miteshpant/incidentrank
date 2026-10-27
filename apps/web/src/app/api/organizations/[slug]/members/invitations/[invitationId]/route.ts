@@ -8,6 +8,13 @@ import { revokeOrgInvitation } from "@/lib/server/org-membership";
  * accepted invitation is rejected (revokeOrgInvitation's "not_pending"
  * reason) — once accepted, membership is authoritative and an
  * invitation must never be used as a substitute for member removal.
+ *
+ * Deliberately does NOT call requireActiveOrganization (Phase 10A §17):
+ * suspension blocks invitation *creation*, not *revocation* — revoking a
+ * pending invite reduces standing risk rather than creating new
+ * operational state, so an org owner/admin can still clean up a stale
+ * invite even while suspended. Documented asymmetry, see the Phase 10A
+ * completion report.
  */
 export async function DELETE(
   _request: Request,

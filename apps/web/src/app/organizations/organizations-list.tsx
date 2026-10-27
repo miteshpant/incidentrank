@@ -11,10 +11,8 @@ export async function OrganizationsList() {
   if (memberships.length === 0) {
     return (
       <p className="mt-10 text-sm text-muted">
-        You don&apos;t belong to any organizations yet.{" "}
-        <Link href="/organizations/new" className="underline hover:text-foreground">
-          Create one.
-        </Link>
+        You don&apos;t belong to any organizations yet. Organizations are provisioned by
+        IncidentRank — contact support@incidentrank.com to set one up.
       </p>
     );
   }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { loadOrganizationMembership } from "@/lib/server/organization-auth";
+import { loadOrganizationMembership, requireActiveOrganization } from "@/lib/server/organization-auth";
 import { changeMemberRole, removeMember } from "@/lib/server/org-membership";
 
 interface PatchMemberBody {
@@ -31,6 +31,11 @@ export async function PATCH(
       { error: result.status === 404 ? "Not found" : "Forbidden" },
       { status: result.status },
     );
+  }
+
+  const activeCheck = requireActiveOrganization(result.organization);
+  if (!activeCheck.ok) {
+    return NextResponse.json({ error: activeCheck.reason }, { status: activeCheck.status });
   }
 
   const body = (await request.json().catch(() => null)) as PatchMemberBody | null;
@@ -83,6 +88,11 @@ export async function DELETE(
       { error: result.status === 404 ? "Not found" : "Forbidden" },
       { status: result.status },
     );
+  }
+
+  const activeCheck = requireActiveOrganization(result.organization);
+  if (!activeCheck.ok) {
+    return NextResponse.json({ error: activeCheck.reason }, { status: activeCheck.status });
   }
 
   const outcome = await removeMember(result.organization.id, result.membership.role, memberId);

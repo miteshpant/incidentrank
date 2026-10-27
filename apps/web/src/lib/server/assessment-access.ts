@@ -5,6 +5,7 @@ import {
   assessments,
   type Assessment,
   type AssessmentCandidate,
+  type Organization,
   type OrganizationMember,
   type User,
 } from "@incidentrank/db";
@@ -12,7 +13,7 @@ import { db } from "./db";
 import { loadOrganizationMembership } from "./organization-auth";
 
 export type LoadOrgAssessmentResult =
-  | { ok: true; assessment: Assessment; membership: OrganizationMember }
+  | { ok: true; assessment: Assessment; membership: OrganizationMember; organization: Organization }
   | { ok: false; status: 404 | 403 };
 
 /**
@@ -37,7 +38,12 @@ export async function loadOrgAssessment(
     return { ok: false, status: 404 };
   }
 
-  return { ok: true, assessment, membership: membership.membership };
+  return {
+    ok: true,
+    assessment,
+    membership: membership.membership,
+    organization: membership.organization,
+  };
 }
 
 export type AssessmentCandidateWithUser = AssessmentCandidate & {
@@ -50,6 +56,7 @@ export type LoadOrgCandidateResult =
       assessment: Assessment;
       candidate: AssessmentCandidateWithUser;
       membership: OrganizationMember;
+      organization: Organization;
     }
   | { ok: false; status: 404 | 403 };
 
@@ -83,5 +90,6 @@ export async function loadOrgCandidate(
     assessment: assessmentResult.assessment,
     candidate,
     membership: assessmentResult.membership,
+    organization: assessmentResult.organization,
   };
 }

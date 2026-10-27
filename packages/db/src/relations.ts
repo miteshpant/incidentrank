@@ -11,6 +11,7 @@ import {
   attempts,
   foundingEngineerAllocations,
   incidentPasses,
+  organizationAuditEvents,
   organizationInvitations,
   organizationMembers,
   organizations,
@@ -94,6 +95,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   invitations: many(organizationInvitations),
   assessments: many(assessments),
   scenarios: many(scenarios),
+  auditEvents: many(organizationAuditEvents),
 }));
 
 export const organizationMembersRelations = relations(
@@ -119,6 +121,20 @@ export const organizationInvitationsRelations = relations(
     }),
     invitedBy: one(users, {
       fields: [organizationInvitations.invitedByUserId],
+      references: [users.id],
+    }),
+  }),
+);
+
+export const organizationAuditEventsRelations = relations(
+  organizationAuditEvents,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [organizationAuditEvents.organizationId],
+      references: [organizations.id],
+    }),
+    actorUser: one(users, {
+      fields: [organizationAuditEvents.actorUserId],
       references: [users.id],
     }),
   }),

@@ -10,6 +10,7 @@ import type {
   attempts,
   foundingEngineerAllocations,
   incidentPasses,
+  organizationAuditEvents,
   organizationInvitations,
   organizationMembers,
   organizations,
@@ -53,6 +54,9 @@ export type NewOrganizationMember = typeof organizationMembers.$inferInsert;
 
 export type OrganizationInvitation = typeof organizationInvitations.$inferSelect;
 export type NewOrganizationInvitation = typeof organizationInvitations.$inferInsert;
+
+export type OrganizationAuditEvent = typeof organizationAuditEvents.$inferSelect;
+export type NewOrganizationAuditEvent = typeof organizationAuditEvents.$inferInsert;
 
 export type Assessment = typeof assessments.$inferSelect;
 export type NewAssessment = typeof assessments.$inferInsert;

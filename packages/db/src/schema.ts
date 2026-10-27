@@ -66,13 +66,43 @@ export const organizationRoleEnum = pgEnum("organization_role", [
   "member",
 ]);
 
-// Invitations may only target admin/member — never owner directly. Owner
-// promotion happens only after membership already exists (see
-// apps/web/src/lib/server/org-membership.ts).
+// Phase 10A: invitations may target owner/admin/member. Owner invitations
+// are first-class — authorization over WHO may issue one (an existing
+// organization owner, or an IncidentRank platform admin provisioning a
+// new organization's initial owner) is enforced by the caller
+// (organization-auth.ts's canInviteRole / organization-provisioning.ts),
+// never by this enum itself. See apps/web/src/lib/server/
+// org-membership.ts.
 export const organizationInvitationRoleEnum = pgEnum(
   "organization_invitation_role",
-  ["admin", "member"],
+  ["owner", "admin", "member"],
 );
+
+// Phase 10A: organization lifecycle. `pending` = created by an
+// IncidentRank admin, initial-owner onboarding not yet complete (no
+// accepted owner invitation). `active` = normal functionality available.
+// `suspended` = data intact, operational mutations blocked server-side
+// (see requireActiveOrganization in organization-auth.ts); already-started
+// candidate attempts are unaffected (see docs/implementation_plan/
+// phase10a.md §18). `closed` is deliberately NOT included — Phase 10A
+// defers it; see the Phase 10A completion report.
+export const organizationStatusEnum = pgEnum("organization_status", [
+  "pending",
+  "active",
+  "suspended",
+]);
+
+// Phase 10A: who/what performed an organization_audit_events action.
+// Distinct from adminAuditEvents' implicit "always an admin" actor —
+// organization-level events can originate from a platform admin acting on
+// the org, an org owner/admin acting within it, or the system itself
+// (e.g. automatic pending->active transition on owner-invite acceptance).
+export const organizationActorTypeEnum = pgEnum("organization_actor_type", [
+  "platform_admin",
+  "organization_owner",
+  "organization_admin",
+  "system",
+]);
 
 export const assessmentStatusEnum = pgEnum("assessment_status", [
   "draft",
@@ -207,12 +237,33 @@ export const users = pgTable("users", {
 // "candidate"; candidacy is a relationship between a user, an organization,
 // and an assessment (see assessmentCandidates below), per
 // docs/architecture.md principle 5.
+//
+// Phase 10A: organizations are provisioned by an IncidentRank platform
+// admin only (apps/web/src/lib/server/organization-provisioning.ts) — an
+// ordinary authenticated user can no longer create one. `status` defaults
+// to "active" so existing (pre-Phase-10A, self-service-created) rows
+// backfill correctly with no manual migration step; new admin-provisioned
+// organizations explicitly set status: "pending" at creation, moving to
+// "active" only once the invited initial owner accepts (see
+// org-membership.ts's acceptOrgInvitation).
 // ─────────────────────────────────────────────────────────────────────────
 
 export const organizations = pgTable("organizations", {
   id: uuid("id").primaryKey().defaultRandom(),
   name: text("name").notNull(),
   slug: text("slug").notNull(),
+  status: organizationStatusEnum("status").notNull().default("active"),
+  createdByAdminUserId: uuid("created_by_admin_user_id").references(
+    () => adminUsers.id,
+    { onDelete: "set null" },
+  ),
+  suspendedAt: timestamp("suspended_at", { withTimezone: true }),
+  suspendedByAdminUserId: uuid("suspended_by_admin_user_id").references(
+    () => adminUsers.id,
+    { onDelete: "set null" },
+  ),
+  suspensionReason: text("suspension_reason"),
+  reactivatedAt: timestamp("reactivated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -221,6 +272,7 @@ export const organizations = pgTable("organizations", {
     .defaultNow(),
 }, (table) => [
   uniqueIndex("organizations_slug_idx").on(table.slug),
+  index("organizations_status_idx").on(table.status),
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -289,6 +341,14 @@ export const organizationInvitations = pgTable("organization_invitations", {
     onDelete: "set null",
   }),
 
+  // Phase 10A: marks a platform-admin-issued owner-recovery invitation
+  // (organization-provisioning.ts's inviteOwnerRecovery) — distinct from
+  // a routine initial/additional owner invite. Acceptance of a recovery
+  // invite is the one case permitted even while the organization is
+  // suspended (see acceptOrgInvitation's suspension carve-out in
+  // org-membership.ts and phase10a.md §15/§36).
+  isRecoveryInvite: boolean("is_recovery_invite").notNull().default(false),
+
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   acceptedAt: timestamp("accepted_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
@@ -303,6 +363,54 @@ export const organizationInvitations = pgTable("organization_invitations", {
     table.normalizedEmail,
   ),
   uniqueIndex("organization_invitations_token_hash_idx").on(table.tokenHash),
+]);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10A: organization-level audit trail. Mirrors adminAuditEvents'
+// shape (generic action/targetType/targetId/metadataJson, trivially
+// extensible with new action-string values, no schema change needed per
+// new event type) but adds organizationId scoping and actorType, since an
+// organization's events can originate from a platform admin acting on it,
+// an org owner/admin acting within it, or the system itself (e.g. the
+// automatic pending->active transition on initial-owner acceptance).
+// actorUserId always stores the acting users.id, never adminUsers.id —
+// actorType is what distinguishes "acted as platform admin" from "acted
+// as org owner," consistent with how every other table in this schema
+// references users for "who did this," never a role table.
+//
+// Action-string vocabulary (reuse these exactly, never invent per-caller
+// variants): owner_invited, owner_added, owner_removed, admin_invited,
+// member_invited, role_changed, scenario_created, scenario_updated,
+// scenario_archived, assessment_created, candidate_invited,
+// organization_suspended, organization_reactivated,
+// owner_recovery_invited.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const organizationAuditEvents = pgTable("organization_audit_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: uuid("organization_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  actorUserId: uuid("actor_user_id").references(() => users.id, {
+    onDelete: "set null",
+  }),
+  actorType: organizationActorTypeEnum("actor_type").notNull(),
+  action: text("action").notNull(),
+  targetType: text("target_type").notNull(),
+  targetId: uuid("target_id"),
+  metadataJson: jsonb("metadata_json"),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+}, (table) => [
+  index("organization_audit_events_organization_id_idx").on(
+    table.organizationId,
+  ),
+  index("organization_audit_events_target_idx").on(
+    table.targetType,
+    table.targetId,
+  ),
+  index("organization_audit_events_created_at_idx").on(table.createdAt),
 ]);
 
 // ─────────────────────────────────────────────────────────────────────────

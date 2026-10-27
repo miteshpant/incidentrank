@@ -7,7 +7,13 @@ import {
   type Db,
 } from "@incidentrank/db";
 import { createDb } from "@incidentrank/db";
-import { canMutate, isOwner, loadOrganizationMembership } from "./organization-auth";
+import {
+  canInviteRole,
+  canMutate,
+  isOwner,
+  loadOrganizationMembership,
+  requireActiveOrganization,
+} from "./organization-auth";
 
 /**
  * Integration tests against the local Postgres. Covers Phase 4's
@@ -138,5 +144,54 @@ describe("role authorization", () => {
     expect(canMutate("owner")).toBe(true);
     expect(canMutate("admin")).toBe(true);
     expect(canMutate("member")).toBe(false);
+  });
+});
+
+describe("canInviteRole — additional-owner invite policy (phase10a.md §63)", () => {
+  it("an owner may invite another owner, an admin, or a member", () => {
+    expect(canInviteRole("owner", "owner")).toBe(true);
+    expect(canInviteRole("owner", "admin")).toBe(true);
+    expect(canInviteRole("owner", "member")).toBe(true);
+  });
+
+  it("an admin may invite an admin or a member, but never an owner", () => {
+    expect(canInviteRole("admin", "admin")).toBe(true);
+    expect(canInviteRole("admin", "member")).toBe(true);
+    expect(canInviteRole("admin", "owner")).toBe(false);
+  });
+
+  it("a member may never invite anyone", () => {
+    expect(canInviteRole("member", "owner")).toBe(false);
+    expect(canInviteRole("member", "admin")).toBe(false);
+    expect(canInviteRole("member", "member")).toBe(false);
+  });
+});
+
+describe("requireActiveOrganization (phase10a.md §17)", () => {
+  function orgWithStatus(status: "pending" | "active" | "suspended") {
+    return { status } as Parameters<typeof requireActiveOrganization>[0];
+  }
+
+  it("permits an active organization", () => {
+    const result = requireActiveOrganization(orgWithStatus("active"));
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a suspended organization with organization_suspended", () => {
+    const result = requireActiveOrganization(orgWithStatus("suspended"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(403);
+      expect(result.reason).toBe("organization_suspended");
+    }
+  });
+
+  it("rejects a pending organization with organization_pending", () => {
+    const result = requireActiveOrganization(orgWithStatus("pending"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.status).toBe(403);
+      expect(result.reason).toBe("organization_pending");
+    }
   });
 });

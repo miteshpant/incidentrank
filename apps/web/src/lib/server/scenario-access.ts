@@ -3,6 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import {
   scenarios,
   scenarioVersions,
+  type Organization,
   type OrganizationMember,
   type Scenario,
   type ScenarioVersion,
@@ -12,7 +13,7 @@ import { db } from "./db";
 import { loadOrganizationMembership } from "./organization-auth";
 
 export type LoadOrgScenarioResult =
-  | { ok: true; scenario: Scenario; membership: OrganizationMember }
+  | { ok: true; scenario: Scenario; membership: OrganizationMember; organization: Organization }
   | { ok: false; status: 404 | 403 };
 
 /**
@@ -43,7 +44,12 @@ export async function loadOrgScenario(
     return { ok: false, status: 404 };
   }
 
-  return { ok: true, scenario, membership: membership.membership };
+  return {
+    ok: true,
+    scenario,
+    membership: membership.membership,
+    organization: membership.organization,
+  };
 }
 
 /** All versions of a scenario, newest first. Caller must have already authorized access to the scenario. */

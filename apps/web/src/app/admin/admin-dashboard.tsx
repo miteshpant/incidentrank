@@ -154,6 +154,12 @@ export async function AdminDashboard() {
         >
           Admin Users
         </Link>
+        <Link
+          href="/admin/organizations"
+          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
+        >
+          Organizations
+        </Link>
         {isPaymentsEnabled() && (
           <>
             <Link

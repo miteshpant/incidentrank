@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadOrganizationMembership, canInviteMembers } from "@/lib/server/organization-auth";
 import { listOrgMembers, listPendingInvitations } from "@/lib/server/org-membership";
+import { SuspendedOrgBanner } from "@/components/suspended-org-banner";
 import { InviteMemberForm } from "./invite-member-form";
 import { MemberRow } from "./member-row";
 import { InvitationRow } from "./invitation-row";
@@ -23,8 +24,8 @@ export async function MembersView({ slug }: MembersViewProps) {
     listPendingInvitations(result.organization.id),
   ]);
 
-  const canInvite = canInviteMembers(result.membership.role);
   const currentUserRole = result.membership.role;
+  const canInvite = canInviteMembers(currentUserRole) && result.organization.status !== "suspended";
   const ownerCount = members.filter((m) => m.role === "owner").length;
 
   return (
@@ -36,6 +37,12 @@ export async function MembersView({ slug }: MembersViewProps) {
         ← Back to organization
       </Link>
 
+      {result.organization.status === "suspended" && (
+        <div className="mt-4">
+          <SuspendedOrgBanner />
+        </div>
+      )}
+
       <h1 className="mt-4 text-2xl font-semibold tracking-tight">Members</h1>
       <p className="mt-1 font-mono text-xs text-muted">
         {members.length} member{members.length === 1 ? "" : "s"} ·{" "}
@@ -44,7 +51,7 @@ export async function MembersView({ slug }: MembersViewProps) {
 
       {canInvite && (
         <div className="mt-6">
-          <InviteMemberForm slug={slug} />
+          <InviteMemberForm slug={slug} actorRole={currentUserRole} />
         </div>
       )}
 

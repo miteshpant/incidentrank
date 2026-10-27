@@ -1,7 +1,13 @@
 import { NextResponse } from "next/server";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { canInviteMembers, loadOrganizationMembership } from "@/lib/server/organization-auth";
+import {
+  canInviteRole,
+  loadOrganizationMembership,
+  requireActiveOrganization,
+} from "@/lib/server/organization-auth";
 import { createOrgInvitation, listPendingInvitations } from "@/lib/server/org-membership";
+import { sendOrganizationOwnerInviteEmail } from "@/lib/server/email";
+import { appBaseUrl } from "@/lib/server/app-url";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -43,12 +49,16 @@ export async function GET(
 }
 
 /**
- * Creates an organization invitation. owner/admin only
- * (canInviteMembers); invitations may only target "admin" or "member" —
- * never "owner" directly, enforced inside createOrgInvitation. Returns
- * the plaintext token exactly once, here, at creation time — never
- * persisted, never retrievable again, mirroring the assessment-candidate
- * invite pattern exactly.
+ * Creates an organization invitation. Target-role-aware authorization
+ * (Phase 10A §11): an owner may invite owner/admin/member; an admin may
+ * invite admin/member only, never owner; a member may invite no one —
+ * see canInviteRole in organization-auth.ts. Suspended organizations
+ * block all invitation creation regardless of role (§17) — invitation
+ * *revocation* is deliberately exempt from this (see the DELETE handler
+ * in the sibling [invitationId] route). Returns the plaintext token
+ * exactly once, here, at creation time — never persisted, never
+ * retrievable again, mirroring the assessment-candidate invite pattern
+ * exactly.
  */
 export async function POST(
   request: Request,
@@ -67,8 +77,10 @@ export async function POST(
       { status: result.status },
     );
   }
-  if (!canInviteMembers(result.membership.role)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+  const activeCheck = requireActiveOrganization(result.organization);
+  if (!activeCheck.ok) {
+    return NextResponse.json({ error: activeCheck.reason }, { status: activeCheck.status });
   }
 
   const body = (await request.json().catch(() => null)) as CreateInvitationBody | null;
@@ -81,11 +93,15 @@ export async function POST(
       { status: 400 },
     );
   }
-  if (role !== "admin" && role !== "member") {
+  if (role !== "owner" && role !== "admin" && role !== "member") {
     return NextResponse.json(
-      { error: "Role must be admin or member" },
+      { error: "Role must be owner, admin, or member" },
       { status: 400 },
     );
+  }
+
+  if (!canInviteRole(result.membership.role, role)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const outcome = await createOrgInvitation(result.organization.id, user.id, email, role);
@@ -104,6 +120,15 @@ export async function POST(
       );
     }
     return NextResponse.json({ error: "Invalid role" }, { status: 400 });
+  }
+
+  if (role === "owner") {
+    await sendOrganizationOwnerInviteEmail({
+      to: outcome.invitation.email,
+      organizationName: result.organization.name,
+      inviteUrl: `${appBaseUrl()}/organization/invite/${outcome.token}`,
+      isAdditionalOwner: true,
+    });
   }
 
   return NextResponse.json({

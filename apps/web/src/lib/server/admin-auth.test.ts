@@ -6,6 +6,7 @@ import {
   isIncidentRankDomainEmail,
   isOwnerRole,
   loadAdminMembership,
+  requirePlatformOwner,
 } from "./admin-auth";
 import { wouldDemoteLastOwner, wouldLeaveNoOwner } from "./admin-ownership";
 
@@ -119,5 +120,46 @@ describe("owner protections", () => {
 
     const wouldLeaveZero = await wouldLeaveNoOwner("admin", admin.id);
     expect(wouldLeaveZero).toBe(false);
+  });
+});
+
+describe("requirePlatformOwner", () => {
+  it("allows the platform owner through", async () => {
+    const owner = await createUser(TEST_AUTH_OWNER, "Owner");
+    await testDb.insert(adminUsers).values({ userId: owner.id, role: "owner" });
+
+    const membership = await loadAdminMembership(owner);
+    const result = requirePlatformOwner(membership);
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a plain active admin — closes the self-escalation gap (phase10a.md §1/§48)", async () => {
+    const admin = await createUser(TEST_AUTH_NON_ADMIN, "Plain Admin");
+    await testDb.insert(adminUsers).values({ userId: admin.id, role: "admin" });
+
+    const membership = await loadAdminMembership(admin);
+    const result = requirePlatformOwner(membership);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.status).toBe(403);
+  });
+
+  it("rejects a non-admin user", async () => {
+    const user = await createUser(TEST_AUTH_NON_ADMIN, "Non Admin");
+    const membership = await loadAdminMembership(user);
+    const result = requirePlatformOwner(membership);
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects a revoked owner row", async () => {
+    const owner = await createUser(TEST_AUTH_OWNER, "Former Owner");
+    await testDb.insert(adminUsers).values({
+      userId: owner.id,
+      role: "owner",
+      revokedAt: new Date(),
+    });
+
+    const membership = await loadAdminMembership(owner);
+    const result = requirePlatformOwner(membership);
+    expect(result.ok).toBe(false);
   });
 });

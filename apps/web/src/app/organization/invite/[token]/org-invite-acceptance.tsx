@@ -7,12 +7,13 @@ import { useAuth, SignInButton } from "@clerk/nextjs";
 interface InvitePreview {
   organizationName: string;
   organizationSlug: string;
-  role: "admin" | "member";
+  role: "owner" | "admin" | "member";
   invitationState: "pending" | "accepted" | "expired" | "revoked";
   email: string;
 }
 
 const ROLE_LABEL: Record<InvitePreview["role"], string> = {
+  owner: "Owner",
   admin: "Admin",
   member: "Member",
 };

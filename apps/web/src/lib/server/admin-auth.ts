@@ -29,6 +29,26 @@ export function isOwnerRole(role: AdminRole): boolean {
   return role === "owner";
 }
 
+export type RequirePlatformOwnerResult =
+  | { ok: true; membership: AdminUser }
+  | { ok: false; status: 403 };
+
+/**
+ * Only the platform owner (mpant@incidentrank.com's bootstrapped
+ * admin_users row, role="owner") may create or invite another IncidentRank
+ * platform admin (docs/implementation_plan/phase10a.md §1/§48). A plain
+ * platform admin must never be able to self-escalate the admin roster —
+ * call this instead of the bare loadAdminMembership ok-check at the one
+ * route that creates admin invitations.
+ */
+export function requirePlatformOwner(
+  result: LoadAdminResult,
+): RequirePlatformOwnerResult {
+  if (!result.ok) return { ok: false, status: 403 };
+  if (!isOwnerRole(result.membership.role)) return { ok: false, status: 403 };
+  return { ok: true, membership: result.membership };
+}
+
 /**
  * A verified email ending in @incidentrank.com — necessary but never
  * sufficient for admin access on its own (docs/implementation_plan/

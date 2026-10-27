@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { canMutate } from "@/lib/server/organization-auth";
+import { canMutate, requireActiveOrganization } from "@/lib/server/organization-auth";
 import { loadOrgScenario, listScenarioVersions } from "@/lib/server/scenario-access";
 import { saveScenarioDraft, archiveScenario } from "@/lib/server/scenario-authoring";
 import { validateAuthoredScenario, type AuthoredScenario } from "@incidentrank/scenarios/authoring";
@@ -60,6 +60,11 @@ export async function PATCH(
   }
   if (!canMutate(result.membership.role)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  const activeCheck = requireActiveOrganization(result.organization);
+  if (!activeCheck.ok) {
+    return NextResponse.json({ error: activeCheck.reason }, { status: activeCheck.status });
   }
 
   const body = (await request.json().catch(() => null)) as PatchScenarioBody | null;

@@ -1,5 +1,8 @@
 import "server-only";
 import type {
+  SendOrganizationOwnerInviteInput,
+  SendOrganizationReactivatedNotificationInput,
+  SendOrganizationSuspendedNotificationInput,
   SendPromotionalInviteInput,
   SendReferralRewardInput,
   SendResult,
@@ -21,6 +24,33 @@ export class TestEmailService implements TransactionalEmailService {
 
   async sendReferralReward(input: SendReferralRewardInput): Promise<SendResult> {
     console.log(`[TestEmailService] referral reward -> ${input.to}: ${input.passCount} pass(es)`);
+    return { ok: true };
+  }
+
+  async sendOrganizationOwnerInvite(
+    input: SendOrganizationOwnerInviteInput,
+  ): Promise<SendResult> {
+    console.log(
+      `[TestEmailService] organization owner invite (${input.isAdditionalOwner ? "additional" : "initial"}) -> ${input.to}: ${input.organizationName} / ${input.inviteUrl}`,
+    );
+    return { ok: true };
+  }
+
+  async sendOrganizationSuspendedNotification(
+    input: SendOrganizationSuspendedNotificationInput,
+  ): Promise<SendResult> {
+    console.log(
+      `[TestEmailService] organization suspended -> ${input.to}: ${input.organizationName} (${input.reason})`,
+    );
+    return { ok: true };
+  }
+
+  async sendOrganizationReactivatedNotification(
+    input: SendOrganizationReactivatedNotificationInput,
+  ): Promise<SendResult> {
+    console.log(
+      `[TestEmailService] organization reactivated -> ${input.to}: ${input.organizationName}`,
+    );
     return { ok: true };
   }
 }

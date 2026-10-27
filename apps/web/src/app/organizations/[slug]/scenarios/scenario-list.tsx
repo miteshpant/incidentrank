@@ -5,6 +5,7 @@ import { scenarios } from "@incidentrank/db";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadOrganizationMembership, canMutate } from "@/lib/server/organization-auth";
+import { SuspendedOrgBanner } from "@/components/suspended-org-banner";
 
 const STATUS_LABEL: Record<string, string> = {
   draft: "Draft",
@@ -35,10 +36,12 @@ export async function ScenarioList({ slug }: ScenarioListProps) {
   const published = rows.filter((r) => r.status === "published");
   const archived = rows.filter((r) => r.status === "archived");
 
-  const canCreate = canMutate(result.membership.role);
+  const canCreate = canMutate(result.membership.role) && result.organization.status !== "suspended";
 
   return (
     <>
+      {result.organization.status === "suspended" && <SuspendedOrgBanner />}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Scenarios</h1>
