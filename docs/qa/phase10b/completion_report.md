@@ -23,3 +23,7 @@ Every story in `user_story_matrix.md` reflects the result of its final, correct 
 ## Validation
 
 Full validation sweep (typecheck, lint, 522/522 automated tests, production build, `db:seed` with the 100-built-in-scenario invariant held) is documented in the main completion report's "Validation" section and was re-confirmed clean after this QA pass completed.
+
+## Second independent verification pass
+
+After this QA pass was committed, the user asked for independent live confirmation that the purchase-and-consumption flow genuinely worked, rather than relying solely on the pass documented above. A second live browser pass was run against a separate test organization/identities — see the "Second independent verification pass" section at the end of `execution_log.md` for full detail. It independently re-covered: single-credit purchase, candidate consumption, invite-doesn't-consume, zero-balance denial (DB-verified no attempt/ledger row), the $5,000/110-credit pack purchase, all three suspension interactions (purchase blocked, new-start blocked, existing attempt resumable), and the platform-admin credit-adjustment tool (including re-confirming the audit-attribution fix under live use). Every result matched the first pass exactly — no discrepancies. It did not re-cover QA-02, QA-09, QA-14, QA-15, or QA-16, which remain verified only by the first pass.

@@ -172,3 +172,30 @@ Replayed the already-processed QA-03 purchase event (`cs_test_a1R6iSKXAUKLNmI5YN
 - This replay technique was incidentally also exercised twice more earlier in the session (once accidentally replaying the exact same session+event during QA-09 setup, once more at the start of this story) — all replays converged on the same single ledger row.
 
 **PASS** — no duplicate credits under any replay scenario tested.
+
+---
+
+## Second independent verification pass (post-commit, user-directed)
+
+Session date: 2026-10-27/28. Run after the above QA pass had already been committed (`a7842fc`), at the user's explicit request to personally drive the full purchase-and-consumption flow in a live browser rather than rely on the fork-produced QA pass above. Separate test organization and identities from the pass above, to avoid any possibility of reusing stale/cached state: org **QA Verify Billing Org** (`qa-verify-billing-org`, id `60e953d7-52d1-4c86-a823-16f322c63521`), owner `qa-verify-owner+clerk_test@example.com`, candidates `qa-verify-candidate+clerk_test@example.com` / `qa-verify-candidate2@example.com` (no `+clerk_test`, abandoned mid-signup — Clerk's fixed test OTP only works with the `+clerk_test` convention, left as an orphaned unverified account) / `qa-verify-candidate3+clerk_test@example.com`, admin `qa-verify-admin+clerk_test@example.com`. Same no-CLI-forwarder webhook-replay technique as above.
+
+**$50/1-credit purchase.** Real Stripe TEST MODE checkout (session `cs_test_a1FXHw...`), completed with test card, webhook replayed → ledger `+1`, UI confirmed Available `1`.
+
+**Candidate consumption.** `qa-verify-candidate+clerk_test@example.com` started the assessment — ledger `-1` keyed to the real attempt id, UI billing history showed correct "Candidate started assessment" line with assessment name and timestamp.
+
+**Invite does not consume credit** — re-confirmed at zero balance: inviting `qa-verify-candidate3+clerk_test@example.com` succeeded with Available still `0`.
+
+**Zero-balance denial, newly-onboarded candidate.** Signed up `qa-verify-candidate3+clerk_test@example.com` fresh (not reusing an identity from the first QA pass), accepted the invite (succeeded — accept doesn't check balance), clicked "Start Assessment" → `POST /api/assessment/.../start` returned `403`, UI showed the exact generic denial message. DB-verified via a one-off `tsx` script (`@incidentrank/db`'s `createDb()`, run with `--env-file=apps/web/.env.local`): candidate's row stayed `status: "invited"`, `attemptId: null`; ledger stayed at exactly 2 rows (no new row for the denial).
+
+**$5,000/110-credit pack purchase.** Real Stripe TEST MODE checkout (session `cs_test_a1qV9j...`), completed with test card, webhook replayed (confirmed `plan: "credit_pack_110"` in the session metadata before replaying) → ledger `+110`, UI confirmed Available `110`, Purchased `111`.
+
+**Suspension interactions**, using the existing active-admin identity from the first pass (`qa-verify-admin+clerk_test@example.com`, admin_users row already granted and still active at this point in the session): suspended `qa-verify-billing-org` via `/admin/organizations/[id]` with a required reason, confirmed:
+- Purchase blocked: owner's `/billing` page showed the suspended banner and "This organization must be active to purchase credits."
+- New candidate start blocked: `qa-verify-candidate3+clerk_test@example.com` (still never-started) got the same `403` generic denial as the zero-balance case.
+- Existing attempt resumable: `qa-verify-candidate+clerk_test@example.com`'s in-progress attempt resumed cleanly — full live incident simulation rendered and continued updating (system architecture panel, live metrics, incident timeline all live), with zero interruption from the org's suspended status.
+
+**Platform admin credit adjustment**, tested live while the org was still suspended (confirming admin actions aren't themselves blocked by suspension): applied `-5` with a required reason via the admin detail page's "Adjust Credits" form → "Adjustment of -5 recorded.", Available `110 → 105`, Adjusted `-5`. DB-verified both the `organization_credit_ledger` row and the `admin_audit_events` row independently — both correctly attributed to the admin's `users.id` (not `admin_users.id`), re-confirming the pre-existing audit-attribution fix holds under genuine live use, not only under the automated test that exercises it directly.
+
+**Reactivation.** Clicked "Reactivate" — status flipped back to `ACTIVE`, suspended banner cleared, "Suspend" button restored. Org left in a clean active state with 105 available credits (no cleanup/revert performed on the -5 adjustment or the remaining balance — this is test data in a QA-named organization, consistent with how the first pass's Acme/Globex orgs were also left in their post-test state).
+
+**Net result: every path independently re-tested produced identical behavior to the first QA pass** — zero discrepancies. This pass did not re-cover QA-02 (member denial), QA-05 (separately, though invite-doesn't-consume was re-confirmed as a side effect of the zero-balance-denial story above), QA-09 (concurrent start), QA-14 (cross-org isolation), QA-15 (candidate billing-field privacy), or QA-16 (webhook replay dedup) — those remain covered only by the first pass above.
