@@ -17,6 +17,7 @@ import {
   organizations,
   paidEntitlements,
   promotionalInvites,
+  rankSnapshots,
   referrals,
   scenarios,
   scenarioVersions,
@@ -39,6 +40,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   paidEntitlements: many(paidEntitlements),
   stripeSubscriptions: many(stripeSubscriptions),
   foundingEngineerAllocations: many(foundingEngineerAllocations),
+  rankSnapshots: many(rankSnapshots),
 }));
 
 export const scenariosRelations = relations(scenarios, ({ one, many }) => ({
@@ -319,6 +321,20 @@ export const stripeSubscriptionsRelations = relations(
     user: one(users, {
       fields: [stripeSubscriptions.userId],
       references: [users.id],
+    }),
+  }),
+);
+
+export const rankSnapshotsRelations = relations(
+  rankSnapshots,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [rankSnapshots.userId],
+      references: [users.id],
+    }),
+    triggerAttempt: one(attempts, {
+      fields: [rankSnapshots.triggerAttemptId],
+      references: [attempts.id],
     }),
   }),
 );

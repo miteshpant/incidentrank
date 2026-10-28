@@ -1444,3 +1444,78 @@ export const organizationCreditLedger = pgTable(
       .where(sql`${table.transactionType} = 'assessment_started'`),
   ],
 );
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10C — Engineer Rank. Append-only, history-preserving: a row is
+// inserted whenever a user's computed rank materially changes (never
+// updated in place), so "Senior → Staff → Senior Staff" progression stays
+// inspectable even after algorithmVersion changes (phase10c.md §11/§12).
+// "Current rank" for a user is simply the latest row by (userId,
+// createdAt). Band/provisional/confidence are the computed-at-the-time
+// values, never re-derived live from today's algorithm — algorithmVersion
+// pins how dimensionScoresJson/skillScoresJson should be interpreted.
+// A user with zero qualifying evidence has no row at all; absence of any
+// snapshot IS the "not enough evidence yet" state (phase10c.md §14) —
+// there is deliberately no all-zero placeholder row.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const rankBandEnum = pgEnum("rank_band", [
+  "developing",
+  "intermediate",
+  "senior",
+  "staff",
+  "senior_staff",
+  "principal",
+]);
+
+export const rankConfidenceEnum = pgEnum("rank_confidence", [
+  "low",
+  "medium",
+  "high",
+]);
+
+export const rankSnapshots = pgTable(
+  "rank_snapshots",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    algorithmVersion: text("algorithm_version").notNull(),
+    rankBand: rankBandEnum("rank_band").notNull(),
+    provisional: boolean("provisional").notNull(),
+    confidence: rankConfidenceEnum("confidence").notNull(),
+
+    normalizedScore: real("normalized_score").notNull(),
+    // Record<ScoringDimension, number> — the six canonical scoring
+    // dimensions (recovery/customerImpact/dataIntegrity/reliability/
+    // costEfficiency/operationalEfficiency), never renamed for Rank's sake.
+    dimensionScoresJson: jsonb("dimension_scores_json").notNull(),
+    // Record<ScenarioCategory, { attempts: number; avgNormalizedScore: number }>
+    skillScoresJson: jsonb("skill_scores_json").notNull(),
+
+    attemptsCount: integer("attempts_count").notNull(),
+    qualifyingAttempts: integer("qualifying_attempts").notNull(),
+    evidenceBreadth: integer("evidence_breadth").notNull(),
+    distinctSkillAreas: integer("distinct_skill_areas").notNull(),
+
+    // The attempt completion that triggered this snapshot, if any — null
+    // for rebuild-triggered snapshots. Diagnostic only, never used in
+    // authorization logic.
+    triggerAttemptId: uuid("trigger_attempt_id").references(
+      () => attempts.id,
+      { onDelete: "set null" },
+    ),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("rank_snapshots_user_id_created_at_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+  ],
+);

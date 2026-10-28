@@ -67,3 +67,16 @@ export function isOrgCreditPurchaseEnabled(): boolean {
 export function isOrgCreditConsumptionEnabled(): boolean {
   return process.env.ORG_CREDIT_CONSUMPTION_ENABLED === "true";
 }
+
+/**
+ * Phase 10C flag (docs/implementation_plan/phase10c.md §67). Gates the
+ * Engineer Rank recalculation trigger and the profile panel/global
+ * leaderboard that read from it — never scoring itself, which is always
+ * computed regardless of this flag. When off, persistRankSnapshotIfChanged
+ * is a no-op (checked once inside that function, not at every call site),
+ * EngineerRankPanel renders nothing, and the admin rebuild route and
+ * global leaderboard route both decline.
+ */
+export function isEngineerRankEnabled(): boolean {
+  return process.env.ENGINEER_RANK_ENABLED === "true";
+}

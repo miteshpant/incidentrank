@@ -18,6 +18,7 @@ import type {
   organizationStripeCustomers,
   paidEntitlements,
   promotionalInvites,
+  rankSnapshots,
   referrals,
   scenarios,
   scenarioVersions,
@@ -110,3 +111,6 @@ export type OrganizationCreditLedgerEntry =
   typeof organizationCreditLedger.$inferSelect;
 export type NewOrganizationCreditLedgerEntry =
   typeof organizationCreditLedger.$inferInsert;
+
+export type RankSnapshot = typeof rankSnapshots.$inferSelect;
+export type NewRankSnapshot = typeof rankSnapshots.$inferInsert;

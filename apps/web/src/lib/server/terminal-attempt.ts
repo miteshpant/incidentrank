@@ -5,6 +5,7 @@ import type { ScoringInputs, SimulationState } from "@incidentrank/simulator";
 import { db } from "./db";
 import { scoreAttempt, type AttemptScoreResult } from "./scoring-helper";
 import { qualifyReferralForAttempt } from "./referral-qualification";
+import { persistRankSnapshotIfChanged } from "./engineer-rank";
 
 type TxOrDb = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
@@ -129,6 +130,25 @@ export async function persistTerminalAttempt(
       outcome: fields.outcome,
       completionTier: fields.completionTier ?? null,
     });
+
+    // Phase 10C: Engineer Rank recalculation (practice attempts only —
+    // never assessment attempts, per phase10c.md §5/§6). Runs inside the
+    // same `tx` as the UPDATE above and the referral qualification call
+    // directly above — exactly the same transactional treatment referral
+    // qualification already gets at this convergence point: a genuine
+    // failure here rolls back the whole terminal-persistence transaction,
+    // same as a referral-qualification failure already can. A try/catch
+    // around a query sharing `tx` would NOT actually provide isolation
+    // (Postgres poisons the whole transaction on any statement error
+    // regardless of a JS-level catch), so no false-safety try/catch is
+    // used here. In practice this insert targets a brand-new additive
+    // table with no complex constraints, so failures are expected to be
+    // rare (connection-level issues only). Only the genuine race winner
+    // (updated is truthy) triggers this, so a losing concurrent writer
+    // never redundantly recomputes.
+    if (attempt.attemptType === "practice") {
+      await persistRankSnapshotIfChanged(tx, updated.userId, updated.id);
+    }
   }
 
   return score;
