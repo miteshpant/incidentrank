@@ -4,6 +4,7 @@ import {
   assessmentCandidates,
   assessments,
   attempts,
+  legalAcceptances,
   organizationCreditLedger,
   organizationMembers,
   organizations,
@@ -15,6 +16,7 @@ import { createDb } from "@incidentrank/db";
 import { paymentRetryStorm } from "@incidentrank/scenarios";
 import { generateInviteToken, hashInviteToken, INVITE_EXPIRY_MS } from "@/lib/server/invite-token";
 import { recordOrganizationCreditPurchase } from "@/lib/server/organization-credits";
+import { recordLegalAcceptance } from "@/lib/server/legal-acceptance";
 import type { POST as PostHandler } from "./route";
 
 /**
@@ -144,6 +146,17 @@ async function createAssessmentWithCandidate(orgStatus: "active" | "suspended") 
     }),
   );
 
+  // Phase 10D: this file tests suspension/resume/billing behavior, not
+  // assessment-notice consent — pre-acknowledge here so those unrelated
+  // assertions aren't incidentally blocked by the new notice requirement.
+  // The notice requirement itself is tested separately, below.
+  await recordLegalAcceptance(
+    candidateUser.id,
+    "candidate_assessment_notice",
+    { organizationId: org.id, assessmentId: assessment.id },
+    testDb,
+  );
+
   return { org, assessment, candidateUser, candidate };
 }
 
@@ -205,5 +218,52 @@ describe("POST /api/assessment/[assessmentId]/start — suspension guard (phase1
 
     void candidate;
     void candidateUser;
+  });
+});
+
+describe("POST /api/assessment/[assessmentId]/start — assessment notice requirement (phasse10d.md §23/§25)", () => {
+  it("blocks a brand-new start when the candidate has not acknowledged the current notice", async () => {
+    const { org, assessment, candidateUser, candidate } = await createAssessmentWithCandidate("active");
+    void candidate;
+    // Undo the pre-acknowledgment the shared fixture helper records by
+    // default, so this test exercises the real not-yet-acknowledged path.
+    await testDb.delete(legalAcceptances).where(eq(legalAcceptances.userId, candidateUser.id));
+    mockAuth.userId = TEST_AUTH_CANDIDATE;
+
+    const response = await POST(buildRequest(assessment.id), {
+      params: Promise.resolve({ assessmentId: assessment.id }),
+    });
+    expect(response.status).toBe(403);
+    void org;
+  });
+
+  it("allows a brand-new start once the candidate has acknowledged the current notice", async () => {
+    const { assessment } = await createAssessmentWithCandidate("active");
+    mockAuth.userId = TEST_AUTH_CANDIDATE;
+
+    const response = await POST(buildRequest(assessment.id), {
+      params: Promise.resolve({ assessmentId: assessment.id }),
+    });
+    expect(response.status).toBe(200);
+  });
+
+  it("an already-started attempt remains resumable even if the notice version later changes", async () => {
+    const { assessment, candidateUser } = await createAssessmentWithCandidate("active");
+    mockAuth.userId = TEST_AUTH_CANDIDATE;
+
+    const firstStart = await POST(buildRequest(assessment.id), {
+      params: Promise.resolve({ assessmentId: assessment.id }),
+    });
+    expect(firstStart.status).toBe(200);
+
+    // Simulate the notice becoming stale for this candidate — the
+    // resume-first early return in the route runs before the notice
+    // check, so this must still succeed.
+    await testDb.delete(legalAcceptances).where(eq(legalAcceptances.userId, candidateUser.id));
+
+    const resumeResponse = await POST(buildRequest(assessment.id), {
+      params: Promise.resolve({ assessmentId: assessment.id }),
+    });
+    expect(resumeResponse.status).toBe(200);
   });
 });

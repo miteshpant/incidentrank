@@ -15,15 +15,21 @@ import type {
  * false (see index.ts's factory), so dev/test never sends real email
  * unexpectedly (docs/implementation_plan/
  * phase8_admin_promotional_access_referrals.md §37.8).
+ *
+ * Phase 10D data-minimization: never logs a raw email address or a
+ * full invite URL (which embeds an unhashed, bearer-credential token)
+ * — only non-sensitive identifiers, matching admin-audit.ts's "never
+ * log raw tokens" rule.
  */
 export class TestEmailService implements TransactionalEmailService {
   async sendPromotionalInvite(input: SendPromotionalInviteInput): Promise<SendResult> {
-    console.log(`[TestEmailService] promotional invite -> ${input.to}: ${input.inviteUrl}`);
+    void input;
+    console.log("[TestEmailService] promotional invite sent");
     return { ok: true };
   }
 
   async sendReferralReward(input: SendReferralRewardInput): Promise<SendResult> {
-    console.log(`[TestEmailService] referral reward -> ${input.to}: ${input.passCount} pass(es)`);
+    console.log(`[TestEmailService] referral reward sent (${input.passCount} pass(es))`);
     return { ok: true };
   }
 
@@ -31,7 +37,7 @@ export class TestEmailService implements TransactionalEmailService {
     input: SendOrganizationOwnerInviteInput,
   ): Promise<SendResult> {
     console.log(
-      `[TestEmailService] organization owner invite (${input.isAdditionalOwner ? "additional" : "initial"}) -> ${input.to}: ${input.organizationName} / ${input.inviteUrl}`,
+      `[TestEmailService] organization owner invite sent (${input.isAdditionalOwner ? "additional" : "initial"}) for org "${input.organizationName}"`,
     );
     return { ok: true };
   }
@@ -40,7 +46,7 @@ export class TestEmailService implements TransactionalEmailService {
     input: SendOrganizationSuspendedNotificationInput,
   ): Promise<SendResult> {
     console.log(
-      `[TestEmailService] organization suspended -> ${input.to}: ${input.organizationName} (${input.reason})`,
+      `[TestEmailService] organization suspended notification sent for org "${input.organizationName}" (${input.reason})`,
     );
     return { ok: true };
   }
@@ -49,7 +55,7 @@ export class TestEmailService implements TransactionalEmailService {
     input: SendOrganizationReactivatedNotificationInput,
   ): Promise<SendResult> {
     console.log(
-      `[TestEmailService] organization reactivated -> ${input.to}: ${input.organizationName}`,
+      `[TestEmailService] organization reactivated notification sent for org "${input.organizationName}"`,
     );
     return { ok: true };
   }

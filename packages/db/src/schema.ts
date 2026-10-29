@@ -1519,3 +1519,127 @@ export const rankSnapshots = pgTable(
     ),
   ],
 );
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10D — legal/consent acceptance. Append-only, mirroring
+// rank_snapshots exactly (phasse10d.md §20/§21): a row is inserted for
+// every acceptance event, never updated in place, so "who accepted what
+// version when" stays permanently inspectable, including after a user's
+// profile is later anonymized via self-service account deletion. The
+// "current" acceptance for a (user, acceptanceType[, organizationId,
+// assessmentId]) tuple is simply the latest row by createdAt — read via
+// the same ROW_NUMBER()-over-partition CTE pattern global-leaderboard.ts
+// already established, never Drizzle orderBy+limit(1) or DISTINCT ON.
+//
+// organizationId/assessmentId are populated only for the two
+// acceptance types that are scoped to them
+// (organization_business_terms / candidate_assessment_notice
+// respectively) — null for platform_terms/privacy_policy, which are
+// scoped to the user alone. Deliberately no IP/device-fingerprint
+// column (§20's explicit default recommendation: timestamp +
+// authenticated user + version is sufficient).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const legalAcceptanceTypeEnum = pgEnum("legal_acceptance_type", [
+  "platform_terms",
+  "privacy_policy",
+  "candidate_assessment_notice",
+  "organization_business_terms",
+]);
+
+export const legalAcceptances = pgTable(
+  "legal_acceptances",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    acceptanceType: legalAcceptanceTypeEnum("acceptance_type").notNull(),
+
+    // Only one of these is populated per row, matching acceptanceType —
+    // e.g. a platform_terms row sets termsVersion only.
+    termsVersion: text("terms_version"),
+    privacyVersion: text("privacy_version"),
+    assessmentNoticeVersion: text("assessment_notice_version"),
+    orgTermsVersion: text("org_terms_version"),
+
+    // Scoping FKs — null unless acceptanceType requires them (see above).
+    organizationId: uuid("organization_id").references(() => organizations.id, {
+      onDelete: "cascade",
+    }),
+    assessmentId: uuid("assessment_id").references(() => assessments.id, {
+      onDelete: "cascade",
+    }),
+
+    acceptedAt: timestamp("accepted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    acceptanceSource: text("acceptance_source").notNull().default("web"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("legal_acceptances_user_id_created_at_idx").on(
+      table.userId,
+      table.createdAt,
+    ),
+    index("legal_acceptances_user_id_type_idx").on(
+      table.userId,
+      table.acceptanceType,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10D — privacy requests (§44). Lightweight, mutable (status
+// transitions over time, unlike the append-only legal_acceptances above)
+// record of a user's access/correction/deletion/other request. A
+// self-service deletion request (deleteOwnAccount) completes
+// synchronously and writes status="completed" at creation time; access/
+// correction/other requests are created as "pending" and routed to an
+// admin for manual handling. notes is kept minimal by design (§44: "do
+// not store unnecessary details in free-text notes") — never assessment
+// reasoning, candidate reports, or other sensitive content.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const privacyRequestTypeEnum = pgEnum("privacy_request_type", [
+  "access",
+  "correction",
+  "deletion",
+  "other",
+]);
+
+export const privacyRequestStatusEnum = pgEnum("privacy_request_status", [
+  "pending",
+  "completed",
+]);
+
+export const privacyRequests = pgTable(
+  "privacy_requests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+
+    requestType: privacyRequestTypeEnum("request_type").notNull(),
+    status: privacyRequestStatusEnum("status").notNull().default("pending"),
+
+    notes: text("notes"),
+
+    requestedAt: timestamp("requested_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("privacy_requests_user_id_requested_at_idx").on(
+      table.userId,
+      table.requestedAt,
+    ),
+    index("privacy_requests_status_idx").on(table.status),
+  ],
+);

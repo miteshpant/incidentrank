@@ -11,11 +11,13 @@ import {
   attempts,
   foundingEngineerAllocations,
   incidentPasses,
+  legalAcceptances,
   organizationAuditEvents,
   organizationInvitations,
   organizationMembers,
   organizations,
   paidEntitlements,
+  privacyRequests,
   promotionalInvites,
   rankSnapshots,
   referrals,
@@ -41,6 +43,8 @@ export const usersRelations = relations(users, ({ many }) => ({
   stripeSubscriptions: many(stripeSubscriptions),
   foundingEngineerAllocations: many(foundingEngineerAllocations),
   rankSnapshots: many(rankSnapshots),
+  legalAcceptances: many(legalAcceptances),
+  privacyRequests: many(privacyRequests),
 }));
 
 export const scenariosRelations = relations(scenarios, ({ one, many }) => ({
@@ -335,6 +339,34 @@ export const rankSnapshotsRelations = relations(
     triggerAttempt: one(attempts, {
       fields: [rankSnapshots.triggerAttemptId],
       references: [attempts.id],
+    }),
+  }),
+);
+
+export const legalAcceptancesRelations = relations(
+  legalAcceptances,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [legalAcceptances.userId],
+      references: [users.id],
+    }),
+    organization: one(organizations, {
+      fields: [legalAcceptances.organizationId],
+      references: [organizations.id],
+    }),
+    assessment: one(assessments, {
+      fields: [legalAcceptances.assessmentId],
+      references: [assessments.id],
+    }),
+  }),
+);
+
+export const privacyRequestsRelations = relations(
+  privacyRequests,
+  ({ one }) => ({
+    user: one(users, {
+      fields: [privacyRequests.userId],
+      references: [users.id],
     }),
   }),
 );

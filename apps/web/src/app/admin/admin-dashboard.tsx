@@ -166,6 +166,12 @@ export async function AdminDashboard() {
         >
           Customer &amp; Revenue Dashboard
         </Link>
+        <Link
+          href="/admin/privacy-requests"
+          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
+        >
+          Privacy Requests
+        </Link>
         {isPaymentsEnabled() && (
           <>
             <Link

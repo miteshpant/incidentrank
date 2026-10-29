@@ -72,9 +72,15 @@ export function ProfileForm({ user }: ProfileFormProps) {
         <div>
           <p className="text-sm">Show me on public leaderboards</p>
           <p className="mt-1 text-xs text-muted">
-            When off, your scores still save normally but are excluded from
-            public leaderboard queries. Your own attempt history is always
-            visible to you.
+            When on, this becomes publicly visible to anyone: your display
+            name, IncidentRank band, normalized leaderboard score,
+            qualifying-incidents count, and evidence breadth. Your email,
+            billing information, assessment reports, practice attempt
+            timelines, detailed dimension/skill breakdown, and organization
+            memberships are never shown publicly, regardless of this
+            setting. When off, your scores still save normally but are
+            excluded from public leaderboard queries — your own attempt
+            history is always visible to you either way.
           </p>
         </div>
         <button

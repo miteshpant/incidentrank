@@ -6,6 +6,7 @@ import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { isOrgCreditConsumptionEnabled } from "@/lib/server/feature-flags";
 import { consumeOrganizationCreditForAttempt } from "@/lib/server/organization-credits";
 import { logOrgAuditEvent } from "@/lib/server/organization-audit";
+import { requireCurrentAssessmentNotice } from "@/lib/server/legal-acceptance";
 
 /**
  * Starts a candidate's one official assessment attempt. Authorization here
@@ -74,6 +75,24 @@ export async function POST(
   if (assessment.status !== "active") {
     return NextResponse.json(
       { error: "This assessment is not currently accepting starts" },
+      { status: 403 },
+    );
+  }
+
+  // Phase 10D §23/§25: a brand-new attempt requires current-version
+  // acknowledgment of the candidate assessment notice, enforced
+  // server-side (never only a UI checkbox). This check runs AFTER the
+  // resume-first early return above, so an already-started attempt is
+  // never blocked by a later notice-version change (§25's explicit
+  // "do not strand an in-progress candidate").
+  const hasNotice = await requireCurrentAssessmentNotice(
+    user.id,
+    assessment.organizationId,
+    assessment.id,
+  );
+  if (!hasNotice) {
+    return NextResponse.json(
+      { error: "assessment_notice_required" },
       { status: 403 },
     );
   }

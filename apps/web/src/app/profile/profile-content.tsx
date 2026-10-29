@@ -1,4 +1,5 @@
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
+import { enforceLegalGate } from "@/lib/server/legal-gate";
 import { SignOutButton } from "@/components/sign-out-button";
 import { IncidentPassPanel } from "@/components/incident-pass-panel";
 import { EngineerRankPanel } from "@/components/engineer-rank-panel";
@@ -9,6 +10,7 @@ export async function ProfileContent() {
   if (!user) {
     return null; // middleware protects this route; unreachable in practice.
   }
+  await enforceLegalGate(user);
 
   return (
     <>

@@ -184,7 +184,9 @@ describe("acceptOrgInvitation — pending → active transition (phase10a.md §3
       .returning();
     if (!ownerUser) throw new Error("owner user not created");
 
-    const result = await acceptOrgInvitation(created.token, ownerUser, "owner-invitee@example.com");
+    const result = await acceptOrgInvitation(created.token, ownerUser, "owner-invitee@example.com", {
+      businessTermsAccepted: true,
+    });
     expect(result.ok).toBe(true);
     if (result.ok) {
       expect(result.organizationActivated).toBe(true);
@@ -365,7 +367,9 @@ describe("resendOwnerInvite (phase10a.md §10/§54)", () => {
       .values({ authProviderId: TEST_AUTH_OWNER, displayName: "New Owner" })
       .returning();
     if (!ownerUser) throw new Error("owner user not created");
-    await acceptOrgInvitation(created.token, ownerUser, "owner-invitee@example.com");
+    await acceptOrgInvitation(created.token, ownerUser, "owner-invitee@example.com", {
+      businessTermsAccepted: true,
+    });
 
     const result = await resendOwnerInvite({
       organizationId: created.organization.id,
@@ -463,7 +467,9 @@ describe("inviteOwnerRecovery (phase10a.md §15/§34/§36)", () => {
       .returning();
     if (!recoveryUser) throw new Error("recovery user not created");
 
-    const accepted = await acceptOrgInvitation(created.token, recoveryUser, "owner-invitee@example.com");
+    const accepted = await acceptOrgInvitation(created.token, recoveryUser, "owner-invitee@example.com", {
+      businessTermsAccepted: true,
+    });
     expect(accepted.ok).toBe(true);
 
     const orgAfter = await testDb.query.organizations.findFirst({

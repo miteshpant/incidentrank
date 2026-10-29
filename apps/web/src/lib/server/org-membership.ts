@@ -13,6 +13,7 @@ import {
 import { db } from "./db";
 import { canChangeRole, canManageMember, type OrganizationRole } from "./organization-auth";
 import { generateInviteToken, hashInviteToken, normalizeEmail } from "./invite-token";
+import { recordLegalAcceptance } from "./legal-acceptance";
 
 /** Same 7-day expiry convention as assessment-candidate invitations (invite-token.ts's INVITE_EXPIRY_MS). */
 export const ORG_INVITE_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000;
@@ -282,7 +283,8 @@ export type AcceptOrgInvitationResult =
   | { ok: false; reason: "revoked" }
   | { ok: false; reason: "expired" }
   | { ok: false; reason: "email_mismatch" }
-  | { ok: false; reason: "organization_suspended" };
+  | { ok: false; reason: "organization_suspended" }
+  | { ok: false; reason: "business_terms_required" };
 
 /**
  * Accepts an invitation on behalf of `user`, whose `verifiedEmail` must
@@ -314,6 +316,7 @@ export async function acceptOrgInvitation(
   token: string,
   user: User,
   verifiedEmail: string,
+  opts: { businessTermsAccepted?: boolean } = {},
 ): Promise<AcceptOrgInvitationResult> {
   const result = await loadOrgInviteByToken(token);
   if (!result.ok) return { ok: false, reason: "not_found" };
@@ -342,6 +345,15 @@ export async function acceptOrgInvitation(
   }
   if (organization.status === "suspended" && !invitation.isRecoveryInvite) {
     return { ok: false, reason: "organization_suspended" };
+  }
+
+  // Phase 10D §26/§27: every owner invitation (initial or additional)
+  // requires explicit business-terms acceptance before the membership is
+  // created — never implied, never only a UI checkbox the server trusts
+  // blindly. Non-owner (admin/member) invitations are unaffected; the
+  // spec scopes this requirement to owners only.
+  if (invitation.role === "owner" && !opts.businessTermsAccepted) {
+    return { ok: false, reason: "business_terms_required" };
   }
 
   const { membership, organizationActivated } = await db.transaction(async (tx) => {
@@ -383,6 +395,17 @@ export async function acceptOrgInvitation(
         .where(and(eq(organizations.id, invitation.organizationId), eq(organizations.status, "pending")))
         .returning({ id: organizations.id });
       organizationActivated = activated !== undefined;
+
+      // Record the business-terms acceptance already validated above —
+      // inside this same transaction, atomically with membership
+      // creation, mirroring how organizationActivated is conditionally
+      // applied only for the owner-role case.
+      await recordLegalAcceptance(
+        user.id,
+        "organization_business_terms",
+        { organizationId: invitation.organizationId },
+        tx,
+      );
     }
 
     return { membership: created, organizationActivated };

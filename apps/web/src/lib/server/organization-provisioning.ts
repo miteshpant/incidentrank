@@ -114,7 +114,10 @@ export async function createOrganization(input: {
       action: "organization_created",
       targetType: "organization",
       targetId: org.id,
-      metadata: { name, slug, ownerEmail },
+      // Phase 10D data-minimization: the owner's email is already
+      // resolvable from the linked organization_invitation row (targetId
+      // below) by email — never duplicate it into audit metadata.
+      metadata: { name, slug },
     });
     await logOrgAuditEvent(tx, {
       organizationId: org.id,
@@ -123,7 +126,7 @@ export async function createOrganization(input: {
       action: "organization_created",
       targetType: "organization",
       targetId: org.id,
-      metadata: { ownerEmail, notes: input.notes ?? null },
+      metadata: { notes: input.notes ?? null },
     });
     await logOrgAuditEvent(tx, {
       organizationId: org.id,
@@ -132,7 +135,7 @@ export async function createOrganization(input: {
       action: "owner_invited",
       targetType: "organization_invitation",
       targetId: inviteResult.invitation.id,
-      metadata: { email: ownerEmail, initial: true },
+      metadata: { initial: true },
     });
 
     return { organization: org, invitation: inviteResult.invitation, token: inviteResult.token };
@@ -360,7 +363,9 @@ export async function resendOwnerInvite(input: {
       action: "owner_invited",
       targetType: "organization_invitation",
       targetId: updated.id,
-      metadata: { resend: true, email: updated.email },
+      // Phase 10D data-minimization: updated.email is already stored on
+      // the invitation row itself (targetId) — no need to duplicate it.
+      metadata: { resend: true },
     });
     await logOrgAuditEvent(tx, {
       organizationId: input.organizationId,
@@ -369,7 +374,7 @@ export async function resendOwnerInvite(input: {
       action: "owner_invited",
       targetType: "organization_invitation",
       targetId: updated.id,
-      metadata: { resend: true, email: updated.email },
+      metadata: { resend: true },
     });
 
     return updated;
@@ -436,7 +441,9 @@ export async function inviteOwnerRecovery(input: {
       action: "owner_recovery_invited",
       targetType: "organization_invitation",
       targetId: inviteResult.invitation.id,
-      metadata: { email, reason },
+      // Phase 10D data-minimization: email is already stored on the
+      // invitation row itself (targetId) — no need to duplicate it.
+      metadata: { reason },
     });
     await logOrgAuditEvent(tx, {
       organizationId: input.organizationId,
@@ -445,7 +452,7 @@ export async function inviteOwnerRecovery(input: {
       action: "owner_recovery_invited",
       targetType: "organization_invitation",
       targetId: inviteResult.invitation.id,
-      metadata: { email, reason },
+      metadata: { reason },
     });
 
     return { invitation: inviteResult.invitation, token: inviteResult.token };

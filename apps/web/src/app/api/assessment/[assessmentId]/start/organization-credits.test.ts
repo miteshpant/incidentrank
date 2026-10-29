@@ -16,6 +16,7 @@ import { createDb } from "@incidentrank/db";
 import { paymentRetryStorm } from "@incidentrank/scenarios";
 import { generateInviteToken, hashInviteToken, INVITE_EXPIRY_MS } from "@/lib/server/invite-token";
 import { recordOrganizationCreditPurchase } from "@/lib/server/organization-credits";
+import { recordLegalAcceptance } from "@/lib/server/legal-acceptance";
 import type { POST as PostHandler } from "./route";
 
 /**
@@ -133,6 +134,17 @@ async function createAssessmentWithCandidate() {
     })
     .returning();
   if (!candidate) throw new Error("candidate not created");
+
+  // Phase 10D: this file tests credit-consumption behavior, not
+  // assessment-notice consent — pre-acknowledge so those assertions
+  // aren't incidentally blocked by the new notice requirement (tested
+  // separately in ../start/route.test.ts).
+  await recordLegalAcceptance(
+    candidateUser.id,
+    "candidate_assessment_notice",
+    { organizationId: org.id, assessmentId: assessment.id },
+    testDb,
+  );
 
   return { org, assessment, candidateUser, candidate };
 }

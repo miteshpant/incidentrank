@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { attempts } from "@incidentrank/db";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
+import { enforceLegalGate } from "@/lib/server/legal-gate";
 import { redactAttemptForCandidate } from "@/lib/server/redact-attempt-for-candidate";
 import { formatNumber } from "@/lib/format";
 
@@ -28,6 +29,7 @@ export async function AttemptsList() {
   if (!user) {
     return null; // middleware protects this route; unreachable in practice.
   }
+  await enforceLegalGate(user);
 
   const rows = await db.query.attempts.findMany({
     where: eq(attempts.userId, user.id),

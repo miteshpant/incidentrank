@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
+import { enforceLegalGate } from "@/lib/server/legal-gate";
 import { listOrganizationsForUser } from "@/lib/server/organizations-for-user";
 
 export async function OrganizationsList() {
   const user = await getOrCreateCurrentUser();
   if (!user) return null; // middleware protects this route; unreachable in practice.
+  await enforceLegalGate(user);
 
   const memberships = await listOrganizationsForUser(user.id);
 

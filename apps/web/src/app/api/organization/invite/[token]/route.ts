@@ -13,6 +13,12 @@ import { normalizeEmail } from "@/lib/server/invite-token";
  * before authentication — mirrors
  * /api/assessment/invite/[token]'s preview route exactly. Never exposes
  * the token hash or any other invitation's data.
+ *
+ * Phase 10D data-minimization: never returns the invitation's email —
+ * the client never rendered it and the actual email match happens
+ * server-side (POST below) against Clerk's own verified email, so
+ * returning it here was unnecessary exposure to anyone holding the
+ * (random, bearer) invite link before sign-in.
  */
 export async function GET(
   _request: Request,
@@ -29,7 +35,6 @@ export async function GET(
     organizationSlug: result.organization.slug,
     role: result.invitation.role,
     invitationState: invitationState(result.invitation),
-    email: result.invitation.email,
   });
 }
 
@@ -40,8 +45,12 @@ export async function GET(
  * invitations, reused rather than reinvented. See
  * acceptOrgInvitation for the atomic membership-creation transaction.
  */
+interface AcceptInviteBody {
+  businessTermsAccepted?: unknown;
+}
+
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ token: string }> },
 ) {
   const user = await getOrCreateCurrentUser();
@@ -65,7 +74,12 @@ export async function POST(
     );
   }
 
-  const outcome = await acceptOrgInvitation(token, user, normalizeEmail(verifiedEmail));
+  const body = (await request.json().catch(() => null)) as AcceptInviteBody | null;
+  const businessTermsAccepted = body?.businessTermsAccepted === true;
+
+  const outcome = await acceptOrgInvitation(token, user, normalizeEmail(verifiedEmail), {
+    businessTermsAccepted,
+  });
 
   if (!outcome.ok) {
     if (outcome.reason === "not_found") {
@@ -76,6 +90,12 @@ export async function POST(
     }
     if (outcome.reason === "expired") {
       return NextResponse.json({ error: "This invitation has expired" }, { status: 410 });
+    }
+    if (outcome.reason === "business_terms_required") {
+      return NextResponse.json(
+        { error: "business_terms_required" },
+        { status: 403 },
+      );
     }
     return NextResponse.json(
       {

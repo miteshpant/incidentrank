@@ -10,7 +10,9 @@ import type {
   attempts,
   foundingEngineerAllocations,
   incidentPasses,
+  legalAcceptances,
   organizationAuditEvents,
+  privacyRequests,
   organizationCreditLedger,
   organizationInvitations,
   organizationMembers,
@@ -114,3 +116,9 @@ export type NewOrganizationCreditLedgerEntry =
 
 export type RankSnapshot = typeof rankSnapshots.$inferSelect;
 export type NewRankSnapshot = typeof rankSnapshots.$inferInsert;
+
+export type LegalAcceptance = typeof legalAcceptances.$inferSelect;
+export type NewLegalAcceptance = typeof legalAcceptances.$inferInsert;
+
+export type PrivacyRequest = typeof privacyRequests.$inferSelect;
+export type NewPrivacyRequest = typeof privacyRequests.$inferInsert;

@@ -753,3 +753,96 @@ describe("assessment/scenario integration", () => {
     expect(canInviteMembers(plainMember.role)).toBe(false);
   });
 });
+
+describe("organization business terms acceptance (phasse10d.md §26/§27/§71)", () => {
+  it("1. initial owner invitation cannot be accepted without businessTermsAccepted", async () => {
+    const [org] = await testDb.insert(organizations).values({ name: "Acme Corp", slug: TEST_ORG_SLUG, status: "pending" }).returning();
+    if (!org) throw new Error("org not created");
+    const newOwner = await createUser(TEST_AUTH_INVITEE, "New Owner");
+    const invited = await createOrgInvitation(org.id, newOwner.id, "newowner@example.com", "owner");
+    if (!invited.ok) throw new Error("invite not created");
+
+    const result = await acceptOrgInvitation(invited.token, newOwner, normalizeEmail("newowner@example.com"));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("business_terms_required");
+
+    const membership = await testDb.query.organizationMembers.findFirst({
+      where: (table, { and: andFn, eq: eqFn }) =>
+        andFn(eqFn(table.organizationId, org.id), eqFn(table.userId, newOwner.id)),
+    });
+    expect(membership).toBeUndefined();
+  });
+
+  it("2. initial owner invitation succeeds and records acceptance once businessTermsAccepted is true", async () => {
+    const [org] = await testDb.insert(organizations).values({ name: "Acme Corp", slug: TEST_ORG_SLUG, status: "pending" }).returning();
+    if (!org) throw new Error("org not created");
+    const newOwner = await createUser(TEST_AUTH_INVITEE, "New Owner");
+    const invited = await createOrgInvitation(org.id, newOwner.id, "newowner@example.com", "owner");
+    if (!invited.ok) throw new Error("invite not created");
+
+    const result = await acceptOrgInvitation(invited.token, newOwner, normalizeEmail("newowner@example.com"), {
+      businessTermsAccepted: true,
+    });
+    expect(result.ok).toBe(true);
+
+    const acceptanceRows = await testDb.query.legalAcceptances.findMany({
+      where: (table, { eq: eqFn }) => eqFn(table.userId, newOwner.id),
+    });
+    expect(acceptanceRows.length).toBe(1);
+    expect(acceptanceRows[0]?.acceptanceType).toBe("organization_business_terms");
+    expect(acceptanceRows[0]?.organizationId).toBe(org.id);
+  });
+
+  it("3. an additional owner (joining an already-active org) must also accept business terms", async () => {
+    const { org, owner } = await createOrgWithOwner(TEST_ORG_SLUG, "Acme Corp");
+    await testDb.update(organizations).set({ status: "active" }).where(eq(organizations.id, org.id));
+    const additionalOwner = await createUser(TEST_AUTH_OTHER, "Additional Owner");
+    const invited = await createOrgInvitation(org.id, owner.id, "additionalowner@example.com", "owner");
+    if (!invited.ok) throw new Error("invite not created");
+
+    const blocked = await acceptOrgInvitation(invited.token, additionalOwner, normalizeEmail("additionalowner@example.com"));
+    expect(blocked.ok).toBe(false);
+    if (!blocked.ok) expect(blocked.reason).toBe("business_terms_required");
+
+    const accepted = await acceptOrgInvitation(
+      invited.token,
+      additionalOwner,
+      normalizeEmail("additionalowner@example.com"),
+      { businessTermsAccepted: true },
+    );
+    expect(accepted.ok).toBe(true);
+  });
+
+  it("4. a non-owner (member) invitation never requires business-terms acceptance", async () => {
+    const { org, owner } = await createOrgWithOwner(TEST_ORG_SLUG, "Acme Corp");
+    const newMember = await createUser(TEST_AUTH_MEMBER, "New Member");
+    const invited = await createOrgInvitation(org.id, owner.id, "newmember@example.com", "member");
+    if (!invited.ok) throw new Error("invite not created");
+
+    const result = await acceptOrgInvitation(invited.token, newMember, normalizeEmail("newmember@example.com"));
+    expect(result.ok).toBe(true);
+
+    const acceptanceRows = await testDb.query.legalAcceptances.findMany({
+      where: (table, { eq: eqFn }) => eqFn(table.userId, newMember.id),
+    });
+    expect(acceptanceRows.length).toBe(0);
+  });
+
+  it("5. a different (wrong) user's claimed acceptance never grants another user's invitation", async () => {
+    const [org] = await testDb.insert(organizations).values({ name: "Acme Corp", slug: TEST_ORG_SLUG, status: "pending" }).returning();
+    if (!org) throw new Error("org not created");
+    const invitedOwner = await createUser(TEST_AUTH_INVITEE, "Invited Owner");
+    const wrongUser = await createUser(TEST_AUTH_OTHER, "Wrong User");
+    const invited = await createOrgInvitation(org.id, invitedOwner.id, "newowner@example.com", "owner");
+    if (!invited.ok) throw new Error("invite not created");
+
+    // Wrong user's email never matches the invitation's email, regardless
+    // of businessTermsAccepted — email-mismatch is checked before the
+    // business-terms check, so a forged acceptance flag never helps.
+    const result = await acceptOrgInvitation(invited.token, wrongUser, normalizeEmail("someone-else@example.com"), {
+      businessTermsAccepted: true,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe("email_mismatch");
+  });
+});

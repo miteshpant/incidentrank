@@ -70,7 +70,9 @@ export async function POST(request: Request) {
     action: "admin_invited",
     targetType: "admin_invite",
     targetId: result.invite.id,
-    metadata: { email: result.invite.email, role: result.invite.role },
+    // Phase 10D data-minimization: the invited email is already stored
+    // on the admin_invite row itself (targetId) — no need to duplicate it.
+    metadata: { role: result.invite.role },
   });
 
   return NextResponse.json({ token: result.token });

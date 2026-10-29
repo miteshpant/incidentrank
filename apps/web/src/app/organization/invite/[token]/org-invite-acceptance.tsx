@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useAuth, SignInButton } from "@clerk/nextjs";
 
 interface InvitePreview {
@@ -9,7 +10,6 @@ interface InvitePreview {
   organizationSlug: string;
   role: "owner" | "admin" | "member";
   invitationState: "pending" | "accepted" | "expired" | "revoked";
-  email: string;
 }
 
 const ROLE_LABEL: Record<InvitePreview["role"], string> = {
@@ -29,6 +29,7 @@ export function OrgInviteAcceptance({ token }: OrgInviteAcceptanceProps) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [acceptError, setAcceptError] = useState<string | null>(null);
   const [isAccepting, setIsAccepting] = useState(false);
+  const [businessTermsAccepted, setBusinessTermsAccepted] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,7 +54,11 @@ export function OrgInviteAcceptance({ token }: OrgInviteAcceptanceProps) {
   const handleAccept = () => {
     setAcceptError(null);
     setIsAccepting(true);
-    fetch(`/api/organization/invite/${token}`, { method: "POST" })
+    fetch(`/api/organization/invite/${token}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ businessTermsAccepted }),
+    })
       .then(async (response) => {
         const data = (await response.json()) as {
           organizationSlug?: string | null;
@@ -63,7 +68,9 @@ export function OrgInviteAcceptance({ token }: OrgInviteAcceptanceProps) {
           setAcceptError(
             response.status === 410
               ? "This invitation is no longer valid."
-              : (data.error ?? "Failed to accept invitation"),
+              : data.error === "business_terms_required"
+                ? "Please accept the organization business terms to continue."
+                : (data.error ?? "Failed to accept invitation"),
           );
           setIsAccepting(false);
           return;
@@ -124,10 +131,28 @@ export function OrgInviteAcceptance({ token }: OrgInviteAcceptanceProps) {
         </div>
       ) : (
         <div className="mt-8">
+          {preview.role === "owner" && (
+            <label className="mb-4 flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={businessTermsAccepted}
+                onChange={(event) => setBusinessTermsAccepted(event.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>
+                I agree to IncidentRank&apos;s{" "}
+                <Link href="/terms" target="_blank" className="underline">
+                  organization business terms
+                </Link>{" "}
+                on behalf of {preview.organizationName}, including responsibility for lawful
+                assessment use and compliance with applicable employment and privacy law.
+              </span>
+            </label>
+          )}
           {acceptError && <p className="mb-3 text-sm text-[#dc2626]">{acceptError}</p>}
           <button
             type="button"
-            disabled={isAccepting}
+            disabled={isAccepting || (preview.role === "owner" && !businessTermsAccepted)}
             onClick={handleAccept}
             className="rounded-md border border-foreground bg-foreground px-4 py-2 font-mono text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
           >

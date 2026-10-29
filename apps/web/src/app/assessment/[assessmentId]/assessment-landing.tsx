@@ -51,6 +51,7 @@ export function AssessmentLanding({ assessmentId }: AssessmentLandingProps) {
   const [startedAttemptId, setStartedAttemptId] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
   const [isStarting, setIsStarting] = useState(false);
+  const [noticeAcknowledged, setNoticeAcknowledged] = useState(false);
   const [scenarioPayload, setScenarioPayload] = useState<ScenarioPayload | null>(null);
   const [scenarioError, setScenarioError] = useState<string | null>(null);
 
@@ -107,26 +108,40 @@ export function AssessmentLanding({ assessmentId }: AssessmentLandingProps) {
     };
   }, [assessmentId]);
 
-  const handleStart = () => {
+  const handleStart = async () => {
     setStartError(null);
     setIsStarting(true);
-    startAssessmentAttempt(assessmentId).then((result) => {
-      if ("error" in result) {
-        setStartError(result.error);
-        setIsStarting(false);
-        return;
-      }
-      // The candidate has already seen the briefing/disclosure on this
-      // page — resume the server runtime clock immediately so the
-      // console mounts straight into "active" rather than a redundant
-      // paused state requiring a second click.
-      void fetch(`/api/attempts/${result.attemptId}/pause`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "resume" }),
-      }).finally(() => {
-        setStartedAttemptId(result.attemptId);
-      });
+
+    // Phase 10D §23/§25: record the candidate's acknowledgment before
+    // attempting to start — the start route itself still enforces this
+    // server-side regardless (never relies on the UI checkbox alone),
+    // but recording it first means a candidate who already acknowledged
+    // on a prior visit never sees this step block them unnecessarily.
+    const noticeResponse = await fetch(`/api/assessment/${assessmentId}/notice/accept`, {
+      method: "POST",
+    });
+    if (!noticeResponse.ok) {
+      setStartError("Could not record your acknowledgment. Please try again.");
+      setIsStarting(false);
+      return;
+    }
+
+    const result = await startAssessmentAttempt(assessmentId);
+    if ("error" in result) {
+      setStartError(result.error);
+      setIsStarting(false);
+      return;
+    }
+    // The candidate has already seen the briefing/disclosure on this
+    // page — resume the server runtime clock immediately so the
+    // console mounts straight into "active" rather than a redundant
+    // paused state requiring a second click.
+    await fetch(`/api/attempts/${result.attemptId}/pause`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "resume" }),
+    }).finally(() => {
+      setStartedAttemptId(result.attemptId);
     });
   };
 
@@ -231,16 +246,37 @@ export function AssessmentLanding({ assessmentId }: AssessmentLandingProps) {
           </div>
         )}
 
-        <p className="mt-6 rounded-md border border-border bg-background p-4 text-sm text-muted">
-          Your actions, reasoning, result, and incident timeline will be
-          shared with {preview.organizationName} as part of this assessment.
-        </p>
+        <div className="mt-6 rounded-md border border-border bg-background p-4 text-sm text-muted">
+          <p>
+            You were invited by <strong className="text-foreground">{preview.organizationName}</strong> to
+            complete this assessment. By starting, you acknowledge that:
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            <li>Your actions and reasoning during the assessment will be recorded.</li>
+            <li>IncidentRank will calculate your results and performance metrics.</li>
+            <li>{preview.organizationName} will be able to review your assessment report.</li>
+            <li>
+              This assessment is separate from your private practice profile and Engineer
+              Rank — {preview.organizationName} will never see those.
+            </li>
+          </ul>
+        </div>
+
+        <label className="mt-4 flex items-start gap-3 text-sm">
+          <input
+            type="checkbox"
+            checked={noticeAcknowledged}
+            onChange={(event) => setNoticeAcknowledged(event.target.checked)}
+            className="mt-0.5 h-4 w-4"
+          />
+          <span>I understand and agree to start this assessment under the terms above.</span>
+        </label>
 
         {startError && <p className="mt-4 text-sm text-[#dc2626]">{startError}</p>}
 
         <button
           type="button"
-          disabled={isStarting || !scenarioPayload}
+          disabled={isStarting || !scenarioPayload || !noticeAcknowledged}
           onClick={handleStart}
           className="mt-8 w-full rounded-md border border-foreground bg-foreground px-4 py-3 font-mono text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
         >
