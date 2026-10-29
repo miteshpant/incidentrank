@@ -84,7 +84,7 @@ We may update these Terms from time to time. Material changes will require you t
 
 ## 15. Contact
 
-Questions about these Terms can be sent to [SUPPORT CONTACT PLACEHOLDER].
+Questions about these Terms can be sent to support@incidentrank.com.
 `.trim();
 
 /**

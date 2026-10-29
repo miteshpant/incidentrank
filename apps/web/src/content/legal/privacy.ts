@@ -89,7 +89,7 @@ See Section 6 above — this is the only way your information becomes publicly v
 
 ## 15. Your privacy rights
 
-You may request access to, correction of, or deletion of your personal information by contacting [PRIVACY CONTACT PLACEHOLDER] or by using the in-product privacy request tools where available. Some information may need to be retained for financial, legal, audit, or organizational-integrity reasons even after a deletion request — see our account deletion behavior below.
+You may request access to, correction of, or deletion of your personal information by contacting support@incidentrank.com or by using the in-product privacy request tools where available. Some information may need to be retained for financial, legal, audit, or organizational-integrity reasons even after a deletion request — see our account deletion behavior below.
 
 ## 16. Account deletion
 
@@ -109,7 +109,7 @@ We may update this Privacy Policy. Material changes will be reflected in a new v
 
 ## 20. Contact
 
-Questions about this Privacy Policy can be sent to [PRIVACY CONTACT PLACEHOLDER].
+Questions about this Privacy Policy can be sent to support@incidentrank.com.
 `.trim();
 
 /**
