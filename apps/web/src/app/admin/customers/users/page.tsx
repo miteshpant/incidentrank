@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { SiteHeader } from "@/components/site-header";
 import { CustomersUsersView } from "./customers-users-view";
 import type { CustomerSort } from "@/lib/server/platform-metrics";
 
@@ -21,14 +20,10 @@ export default async function AdminCustomersUsersPage({
     params.plan === "free" || params.plan === "pro" || params.plan === "founding" ? params.plan : undefined;
 
   return (
-    <main className="flex flex-1 flex-col">
-      <SiteHeader />
-
-      <section className="mx-auto w-full max-w-5xl flex-1 px-6 py-16">
-        <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
-          <CustomersUsersView page={page} sort={sort} q={params.q} plan={plan} />
-        </Suspense>
-      </section>
-    </main>
+    <section className="mx-auto w-full max-w-5xl flex-1 px-6 py-16">
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
+        <CustomersUsersView page={page} sort={sort} q={params.q} plan={plan} />
+      </Suspense>
+    </section>
   );
 }

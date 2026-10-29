@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { eq, isNull } from "drizzle-orm";
 import {
   promotionalInvites,
@@ -128,79 +127,6 @@ export async function AdminDashboard() {
           <StatCard label="Founding Remaining" value={foundingCapacity?.remaining ?? 0} />
         </div>
       )}
-
-      <div className="mt-10 flex flex-wrap gap-3">
-        <Link
-          href="/admin/promotional-invites"
-          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-        >
-          Promotional Invites
-        </Link>
-        <Link
-          href="/admin/incident-passes"
-          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-        >
-          Incident Passes
-        </Link>
-        <Link
-          href="/admin/referrals"
-          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-        >
-          Referrals
-        </Link>
-        <Link
-          href="/admin/admin-users"
-          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-        >
-          Admin Users
-        </Link>
-        <Link
-          href="/admin/organizations"
-          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-        >
-          Organizations
-        </Link>
-        <Link
-          href="/admin/dashboard"
-          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-        >
-          Customer &amp; Revenue Dashboard
-        </Link>
-        <Link
-          href="/admin/privacy-requests"
-          className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-        >
-          Privacy Requests
-        </Link>
-        {isPaymentsEnabled() && (
-          <>
-            <Link
-              href="/admin/paid-entitlements"
-              className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-            >
-              Paid Entitlements
-            </Link>
-            <Link
-              href="/admin/stripe-subscriptions"
-              className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-            >
-              Stripe Subscriptions
-            </Link>
-            <Link
-              href="/admin/founding-allocations"
-              className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-            >
-              Founding Allocations
-            </Link>
-            <Link
-              href="/admin/webhook-events"
-              className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
-            >
-              Webhook Events
-            </Link>
-          </>
-        )}
-      </div>
 
       <div className="mt-10">
         <h2 className="font-mono text-xs uppercase tracking-wide text-muted">

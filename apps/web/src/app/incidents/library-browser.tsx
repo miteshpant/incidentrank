@@ -401,16 +401,28 @@ function CheckboxOption({
 function ScenarioCard({ entry, isSignedIn }: { entry: LibraryEntry; isSignedIn: boolean }) {
   const { definition, progress } = entry;
   const lib = definition.library;
+  const completed = isSignedIn && (progress?.completed ?? false);
 
   return (
     <article className="flex flex-col rounded-lg border border-border bg-surface p-6">
       <div className="flex items-start justify-between gap-4">
         <h2 className="text-lg font-semibold tracking-tight">{definition.name}</h2>
-        {!definition.isFree && (
-          <span className="shrink-0 rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted">
-            🔒 Paid
-          </span>
-        )}
+        <div className="flex shrink-0 items-center gap-2">
+          {!definition.isFree && (
+            <span className="rounded border border-border px-2 py-0.5 font-mono text-[10px] uppercase tracking-wide text-muted">
+              🔒 Paid
+            </span>
+          )}
+          {completed && (
+            <span
+              title="Completed"
+              aria-label="Completed"
+              className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-green-600 text-[11px] leading-none text-white"
+            >
+              ✓
+            </span>
+          )}
+        </div>
       </div>
 
       <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs text-muted">

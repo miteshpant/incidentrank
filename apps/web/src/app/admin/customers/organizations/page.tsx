@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import { SiteHeader } from "@/components/site-header";
 import { CustomersOrganizationsView } from "./customers-organizations-view";
 import type { CustomerSort } from "@/lib/server/platform-metrics";
 
@@ -19,19 +18,15 @@ export default async function AdminCustomersOrganizationsPage({
     : "newest";
 
   return (
-    <main className="flex flex-1 flex-col">
-      <SiteHeader />
-
-      <section className="mx-auto w-full max-w-5xl flex-1 px-6 py-16">
-        <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
-          <CustomersOrganizationsView
-            page={page}
-            sort={sort}
-            q={params.q}
-            suspendedOnly={params.status === "suspended"}
-          />
-        </Suspense>
-      </section>
-    </main>
+    <section className="mx-auto w-full max-w-5xl flex-1 px-6 py-16">
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
+        <CustomersOrganizationsView
+          page={page}
+          sort={sort}
+          q={params.q}
+          suspendedOnly={params.status === "suspended"}
+        />
+      </Suspense>
+    </section>
   );
 }

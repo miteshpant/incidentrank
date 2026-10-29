@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { SiteHeader } from "@/components/site-header";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadAdminMembership } from "@/lib/server/admin-auth";
 import { isAdminPortalEnabled } from "@/lib/server/feature-flags";
@@ -40,14 +39,10 @@ export const instant = false;
 
 export default function AdminCustomersPage() {
   return (
-    <main className="flex flex-1 flex-col">
-      <SiteHeader />
-
-      <section className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
-        <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
-          <CustomersIndex />
-        </Suspense>
-      </section>
-    </main>
+    <section className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">
+      <Suspense fallback={<p className="text-sm text-muted">Loading…</p>}>
+        <CustomersIndex />
+      </Suspense>
+    </section>
   );
 }
