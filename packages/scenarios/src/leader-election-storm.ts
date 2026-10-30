@@ -36,6 +36,7 @@ export const leaderElectionStorm: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: leaderElectionStormSimulation,
   library: {
     category: "Distributed Systems",

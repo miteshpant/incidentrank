@@ -34,6 +34,7 @@ export const globalFeatureRolloutIncident: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: globalFeatureRolloutIncidentSimulation,
   library: {
     category: "Deployments & Reliability",

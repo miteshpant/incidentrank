@@ -29,6 +29,7 @@ export const consumerRebalanceStorm: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: consumerRebalanceStormSimulation,
   library: {
     category: "Messaging & Streaming",

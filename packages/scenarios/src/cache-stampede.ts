@@ -28,6 +28,7 @@ export const cacheStampede: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: cacheStampedeSimulation,
   library: {
     category: "Caching",

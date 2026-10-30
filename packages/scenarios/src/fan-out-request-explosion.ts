@@ -40,6 +40,7 @@ export const fanOutRequestExplosion: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: fanOutRequestExplosionSimulation,
   library: {
     category: "Microservices & Dependencies",

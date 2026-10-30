@@ -30,6 +30,7 @@ export const hotDatabasePartition: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: hotDatabasePartitionSimulation,
   library: {
     category: "Databases & Storage",

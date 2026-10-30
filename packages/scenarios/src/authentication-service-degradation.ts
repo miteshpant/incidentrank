@@ -26,6 +26,7 @@ export const authenticationServiceDegradation: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: authenticationServiceDegradationSimulation,
   library: {
     category: "Security & Identity",

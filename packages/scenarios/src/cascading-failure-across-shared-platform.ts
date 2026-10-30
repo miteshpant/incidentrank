@@ -67,6 +67,7 @@ export const cascadingFailureAcrossSharedPlatform: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 35,
   isFree: false,
+  structure: "linear",
   simulation: cascadingFailureAcrossSharedPlatformSimulation,
   library: {
     category: "Distributed Systems",

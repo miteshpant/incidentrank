@@ -34,6 +34,7 @@ export const duplicateRequestProcessing: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: duplicateRequestProcessingSimulation,
   library: {
     category: "Distributed Systems",

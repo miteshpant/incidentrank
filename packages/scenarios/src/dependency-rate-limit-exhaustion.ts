@@ -35,6 +35,7 @@ export const dependencyRateLimitExhaustion: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: dependencyRateLimitExhaustionSimulation,
   library: {
     category: "Microservices & Dependencies",

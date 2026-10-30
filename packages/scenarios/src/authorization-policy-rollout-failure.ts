@@ -32,6 +32,7 @@ export const authorizationPolicyRolloutFailure: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: authorizationPolicyRolloutFailureSimulation,
   library: {
     category: "Security & Identity",

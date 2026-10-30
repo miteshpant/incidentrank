@@ -28,6 +28,7 @@ export const dbConnectionSaturation: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: true,
+  structure: "linear",
   simulation: dbConnectionSaturationSimulation,
   library: {
     category: "Databases & Storage",

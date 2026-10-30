@@ -40,6 +40,7 @@ export const consistencyVsAvailabilityIncident: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: consistencyVsAvailabilityIncidentSimulation,
   library: {
     category: "Distributed Systems",

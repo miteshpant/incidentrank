@@ -31,6 +31,7 @@ export const privilegeEscalationViaStaleAuthorizationCache: ScenarioDefinition =
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: privilegeEscalationViaStaleAuthorizationCacheSimulation,
   library: {
     category: "Security & Identity",

@@ -39,6 +39,7 @@ export const crossServiceRetryAmplification: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: crossServiceRetryAmplificationSimulation,
   library: {
     category: "Microservices & Dependencies",

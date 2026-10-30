@@ -27,6 +27,7 @@ export const kafkaConsumerLag: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 12,
   isFree: true,
+  structure: "linear",
   simulation: kafkaConsumerLagSimulation,
   library: {
     category: "Messaging & Streaming",

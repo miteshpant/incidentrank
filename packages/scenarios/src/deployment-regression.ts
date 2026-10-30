@@ -27,6 +27,7 @@ export const deploymentRegression: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: deploymentRegressionSimulation,
   library: {
     category: "Deployments & Reliability",

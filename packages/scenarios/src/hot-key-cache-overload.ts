@@ -34,6 +34,7 @@ export const hotKeyCacheOverload: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: hotKeyCacheOverloadSimulation,
   library: {
     category: "Caching",

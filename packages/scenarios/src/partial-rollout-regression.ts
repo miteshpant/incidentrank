@@ -35,6 +35,7 @@ export const partialRolloutRegression: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: partialRolloutRegressionSimulation,
   library: {
     category: "Deployments & Reliability",

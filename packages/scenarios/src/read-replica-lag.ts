@@ -29,6 +29,7 @@ export const readReplicaLag: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 14,
   isFree: false,
+  structure: "linear",
   simulation: readReplicaLagSimulation,
   library: {
     category: "Databases & Storage",

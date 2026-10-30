@@ -33,6 +33,7 @@ export const dataRetentionPolicyMisconfiguration: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: dataRetentionPolicyMisconfigurationSimulation,
   library: {
     category: "Data Pipelines",

@@ -36,6 +36,7 @@ export const apiGatewaySaturation: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 16,
   isFree: false,
+  structure: "linear",
   simulation: apiGatewaySaturationSimulation,
   library: {
     category: "API & Traffic",

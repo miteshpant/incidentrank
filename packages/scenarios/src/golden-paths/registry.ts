@@ -19,6 +19,7 @@ import { cacheStampedeGoldenPath } from "./cache-stampede";
 import { capacityExhaustionDuringPeakEventGoldenPath } from "./capacity-exhaustion-during-peak-event";
 import { cascadingFailureAcrossSharedPlatformGoldenPath } from "./cascading-failure-across-shared-platform";
 import { cascadingServiceFailureGoldenPath } from "./cascading-service-failure";
+import { checkoutPaymentInventoryRedisContentionGoldenPath } from "./checkout-payment-inventory-redis-contention";
 import { certificateExpiryAcrossLargeFleetGoldenPath } from "./certificate-expiry-across-large-fleet";
 import { consistencyVsAvailabilityIncidentGoldenPath } from "./consistency-vs-availability-incident";
 import { consumerRebalanceStormGoldenPath } from "./consumer-rebalance-storm";
@@ -206,4 +207,6 @@ export const GOLDEN_PATHS: Record<string, ScenarioGoldenPath> = {
   [trainingPipelineProducesCorruptedModelArtifactGoldenPath.scenarioSlug]: trainingPipelineProducesCorruptedModelArtifactGoldenPath,
   [unevenTenantTrafficGoldenPath.scenarioSlug]: unevenTenantTrafficGoldenPath,
   [webhookDeliveryStormGoldenPath.scenarioSlug]: webhookDeliveryStormGoldenPath,
+  [checkoutPaymentInventoryRedisContentionGoldenPath.scenarioSlug]:
+    checkoutPaymentInventoryRedisContentionGoldenPath,
 };

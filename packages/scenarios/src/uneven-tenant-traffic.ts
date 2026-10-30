@@ -35,6 +35,7 @@ export const unevenTenantTraffic: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: unevenTenantTrafficSimulation,
   library: {
     category: "API & Traffic",

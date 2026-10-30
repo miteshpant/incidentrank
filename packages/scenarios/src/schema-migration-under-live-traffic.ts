@@ -49,6 +49,7 @@ export const schemaMigrationUnderLiveTraffic: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: schemaMigrationUnderLiveTrafficSimulation,
   library: {
     category: "Databases & Storage",

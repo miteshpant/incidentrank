@@ -12,6 +12,7 @@ export const paymentRetryStorm: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 20,
   isFree: true,
+  structure: "linear",
   simulation: paymentRetryStormSimulation,
   library: {
     category: "Microservices & Dependencies",

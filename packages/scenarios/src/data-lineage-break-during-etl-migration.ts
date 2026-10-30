@@ -32,6 +32,7 @@ export const dataLineageBreakDuringEtlMigration: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: dataLineageBreakDuringEtlMigrationSimulation,
   library: {
     category: "Data Pipelines",

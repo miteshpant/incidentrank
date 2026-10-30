@@ -45,6 +45,7 @@ export const enterpriseWideDependencyDeprecation: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 30,
   isFree: false,
+  structure: "linear",
   simulation: enterpriseWideDependencyDeprecationSimulation,
   library: {
     category: "Deployments & Reliability",

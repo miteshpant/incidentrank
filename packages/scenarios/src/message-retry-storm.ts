@@ -38,6 +38,7 @@ export const messageRetryStorm: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: messageRetryStormSimulation,
   library: {
     category: "Messaging & Streaming",

@@ -31,6 +31,7 @@ export const partialRegionalDependencyFailure: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: partialRegionalDependencyFailureSimulation,
   library: {
     category: "Microservices & Dependencies",

@@ -33,6 +33,7 @@ export const botTrafficSurge: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: botTrafficSurgeSimulation,
   library: {
     category: "API & Traffic",

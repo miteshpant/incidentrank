@@ -34,6 +34,7 @@ export const apiTrafficSpike: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: apiTrafficSpikeSimulation,
   library: {
     category: "API & Traffic",

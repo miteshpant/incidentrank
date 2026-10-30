@@ -57,6 +57,7 @@ export const fraudControlDegradationDuringPaymentSurge: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 22,
   isFree: false,
+  structure: "linear",
   simulation: fraudControlDegradationSimulation,
   library: {
     category: "Security & Identity",

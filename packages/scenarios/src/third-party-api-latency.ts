@@ -28,6 +28,7 @@ export const thirdPartyApiLatency: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: thirdPartyApiLatencySimulation,
   library: {
     category: "API & Traffic",

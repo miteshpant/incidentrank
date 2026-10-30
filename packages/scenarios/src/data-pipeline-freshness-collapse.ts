@@ -33,6 +33,7 @@ export const dataPipelineFreshnessCollapse: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: dataPipelineFreshnessCollapseSimulation,
   library: {
     category: "Data Pipelines",

@@ -34,6 +34,7 @@ export const ledgerReconciliationDivergence: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: ledgerReconciliationDivergenceSimulation,
   library: {
     category: "Data Pipelines",

@@ -31,6 +31,7 @@ export const mlInferenceCostVsQualityIncident: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: mlInferenceCostVsQualityIncidentSimulation,
   library: {
     category: "Data Pipelines",

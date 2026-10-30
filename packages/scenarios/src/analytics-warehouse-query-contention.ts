@@ -34,6 +34,7 @@ export const analyticsWarehouseQueryContention: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: analyticsWarehouseQueryContentionSimulation,
   library: {
     category: "Data Pipelines",

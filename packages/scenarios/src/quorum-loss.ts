@@ -40,6 +40,7 @@ export const quorumLoss: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: quorumLossSimulation,
   library: {
     category: "Distributed Systems",

@@ -32,6 +32,7 @@ export const rateLimitMisconfiguration: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 16,
   isFree: false,
+  structure: "linear",
   simulation: rateLimitMisconfigurationSimulation,
   library: {
     category: "API & Traffic",

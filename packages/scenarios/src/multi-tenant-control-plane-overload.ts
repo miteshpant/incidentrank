@@ -32,6 +32,7 @@ export const multiTenantControlPlaneOverload: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: multiTenantControlPlaneOverloadSimulation,
   library: {
     category: "Distributed Systems",

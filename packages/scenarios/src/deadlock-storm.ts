@@ -43,6 +43,7 @@ export const deadlockStorm: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 16,
   isFree: false,
+  structure: "linear",
   simulation: deadlockStormSimulation,
   library: {
     category: "Databases & Storage",

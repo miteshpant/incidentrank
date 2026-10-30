@@ -40,6 +40,7 @@ export const idempotencyFailure: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: idempotencyFailureSimulation,
   library: {
     category: "Distributed Systems",

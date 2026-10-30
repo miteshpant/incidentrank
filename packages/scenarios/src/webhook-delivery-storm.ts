@@ -36,6 +36,7 @@ export const webhookDeliveryStorm: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: webhookDeliveryStormSimulation,
   library: {
     category: "API & Traffic",

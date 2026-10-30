@@ -37,6 +37,7 @@ export const cacheRevalidationHerd: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: cacheRevalidationHerdSimulation,
   library: {
     category: "API & Traffic",

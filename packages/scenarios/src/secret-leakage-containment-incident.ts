@@ -64,6 +64,7 @@ export const secretLeakageContainmentIncident: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: secretLeakageContainmentIncidentSimulation,
   library: {
     category: "Security & Identity",

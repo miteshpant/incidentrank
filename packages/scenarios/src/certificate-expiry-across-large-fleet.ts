@@ -44,6 +44,7 @@ export const certificateExpiryAcrossLargeFleet: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: certificateExpiryAcrossLargeFleetSimulation,
   library: {
     category: "Security & Identity",

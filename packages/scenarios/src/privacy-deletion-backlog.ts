@@ -32,6 +32,7 @@ export const privacyDeletionBacklog: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 22,
   isFree: false,
+  structure: "linear",
   simulation: privacyDeletionBacklogSimulation,
   library: {
     category: "Data Pipelines",

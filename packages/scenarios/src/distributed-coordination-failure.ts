@@ -41,6 +41,7 @@ export const distributedCoordinationFailure: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: distributedCoordinationFailureSimulation,
   library: {
     category: "Distributed Systems",

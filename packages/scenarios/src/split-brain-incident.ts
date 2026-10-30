@@ -37,6 +37,7 @@ export const splitBrainIncident: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: splitBrainIncidentSimulation,
   library: {
     category: "Distributed Systems",

@@ -59,6 +59,7 @@ export const cacheInvalidationAcrossRegions: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: cacheInvalidationAcrossRegionsSimulation,
   library: {
     category: "Caching",

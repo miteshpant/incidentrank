@@ -33,6 +33,7 @@ export const serviceToServiceCredentialRotationFailure: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: serviceToServiceCredentialRotationFailureSimulation,
   library: {
     category: "Security & Identity",

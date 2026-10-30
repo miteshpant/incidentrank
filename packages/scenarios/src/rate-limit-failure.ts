@@ -28,6 +28,7 @@ export const rateLimitFailure: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: rateLimitFailureSimulation,
   library: {
     category: "API & Traffic",

@@ -57,6 +57,7 @@ export const identityPlatformDegradation: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 22,
   isFree: false,
+  structure: "linear",
   simulation: identityPlatformDegradationSimulation,
   library: {
     category: "Security & Identity",

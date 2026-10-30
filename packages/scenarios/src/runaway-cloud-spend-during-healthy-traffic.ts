@@ -54,6 +54,7 @@ export const runawayCloudSpendDuringHealthyTraffic: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: runawayCloudSpendDuringHealthyTrafficSimulation,
   library: {
     category: "Infrastructure & Capacity",

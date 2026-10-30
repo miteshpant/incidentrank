@@ -35,6 +35,7 @@ export const dependencyTimeoutCascade: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: dependencyTimeoutCascadeSimulation,
   library: {
     category: "Microservices & Dependencies",

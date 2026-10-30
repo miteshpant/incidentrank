@@ -59,6 +59,7 @@ export const apiMigrationDualWriteFailure: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 30,
   isFree: false,
+  structure: "linear",
   simulation: apiMigrationDualWriteFailureSimulation,
   library: {
     category: "Distributed Systems",

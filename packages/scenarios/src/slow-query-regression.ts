@@ -28,6 +28,7 @@ export const slowQueryRegression: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 14,
   isFree: false,
+  structure: "linear",
   simulation: slowQueryRegressionSimulation,
   library: {
     category: "Databases & Storage",

@@ -40,6 +40,7 @@ export const requestTimeoutCascade: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: requestTimeoutCascadeSimulation,
   library: {
     category: "API & Traffic",

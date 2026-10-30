@@ -28,6 +28,7 @@ export const cascadingServiceFailure: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: cascadingServiceFailureSimulation,
   library: {
     category: "Distributed Systems",

@@ -35,6 +35,7 @@ export const deadLetterQueueExplosion: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: deadLetterQueueExplosionSimulation,
   library: {
     category: "Messaging & Streaming",

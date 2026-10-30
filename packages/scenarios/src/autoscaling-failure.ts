@@ -29,6 +29,7 @@ export const autoscalingFailure: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 14,
   isFree: false,
+  structure: "linear",
   simulation: autoscalingFailureSimulation,
   library: {
     category: "Infrastructure & Capacity",

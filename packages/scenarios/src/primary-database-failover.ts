@@ -34,6 +34,7 @@ export const primaryDatabaseFailover: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   description:
     "The primary database's health is degrading and will become fully unavailable if nothing changes. Application services read and write through a DB Proxy sitting in front of a Primary and a Replica. Order and account data must remain correct above all else: a write that is silently lost, or a write accepted by a node that should no longer be authoritative, is a critical data-integrity incident, not a performance blip. Restore write availability to a durable, sustainable state.",
   simulation: primaryDatabaseFailoverSimulation,

@@ -35,6 +35,7 @@ export const loadBalancerImbalance: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 16,
   isFree: false,
+  structure: "linear",
   simulation: loadBalancerImbalanceSimulation,
   library: {
     category: "API & Traffic",

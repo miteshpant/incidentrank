@@ -34,6 +34,7 @@ export const storageIopsSaturation: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: storageIopsSaturationSimulation,
   library: {
     category: "Databases & Storage",

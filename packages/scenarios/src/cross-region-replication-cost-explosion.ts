@@ -38,6 +38,7 @@ export const crossRegionReplicationCostExplosion: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: crossRegionReplicationCostExplosionSimulation,
   library: {
     category: "Infrastructure & Capacity",

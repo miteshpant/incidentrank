@@ -29,6 +29,7 @@ export const thunderingHerd: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: thunderingHerdSimulation,
   library: {
     category: "API & Traffic",

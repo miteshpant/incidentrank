@@ -48,6 +48,7 @@ export const searchPlatformCascade: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: searchPlatformCascadeSimulation,
   library: {
     category: "Distributed Systems",

@@ -28,6 +28,7 @@ export const downstreamDependencyFailure: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: downstreamDependencyFailureSimulation,
   library: {
     category: "Microservices & Dependencies",

@@ -32,6 +32,7 @@ export const cacheNodeFailure: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 10,
   isFree: false,
+  structure: "linear",
   simulation: cacheNodeFailureSimulation,
   library: {
     category: "Caching",

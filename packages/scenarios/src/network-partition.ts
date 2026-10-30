@@ -41,6 +41,7 @@ export const networkPartition: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: networkPartitionSimulation,
   library: {
     category: "Distributed Systems",

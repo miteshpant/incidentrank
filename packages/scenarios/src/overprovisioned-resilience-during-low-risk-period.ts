@@ -38,6 +38,7 @@ export const overprovisionedResilienceDuringLowRiskPeriod: ScenarioDefinition = 
   difficulty: "staff",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: overprovisionedResilienceDuringLowRiskPeriodSimulation,
   library: {
     category: "Infrastructure & Capacity",

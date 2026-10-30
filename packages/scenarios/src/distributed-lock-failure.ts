@@ -36,6 +36,7 @@ export const distributedLockFailure: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: distributedLockFailureSimulation,
   library: {
     category: "Distributed Systems",

@@ -31,6 +31,7 @@ export const regionalFailoverCausesGlobalOverload: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: regionalFailoverSimulation,
   library: {
     category: "Distributed Systems",

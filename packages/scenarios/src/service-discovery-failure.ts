@@ -32,6 +32,7 @@ export const serviceDiscoveryFailure: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: serviceDiscoveryFailureSimulation,
   library: {
     category: "Microservices & Dependencies",

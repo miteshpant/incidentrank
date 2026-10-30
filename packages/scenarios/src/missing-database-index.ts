@@ -33,6 +33,7 @@ export const missingDatabaseIndex: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: missingDatabaseIndexSimulation,
   library: {
     category: "Databases & Storage",

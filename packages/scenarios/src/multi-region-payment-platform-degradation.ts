@@ -50,6 +50,7 @@ export const multiRegionPaymentPlatformDegradation: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: multiRegionPaymentPlatformDegradationSimulation,
   library: {
     category: "Distributed Systems",

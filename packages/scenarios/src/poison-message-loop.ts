@@ -29,6 +29,7 @@ export const poisonMessageLoop: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 12,
   isFree: false,
+  structure: "linear",
   simulation: poisonMessageLoopSimulation,
   library: {
     category: "Messaging & Streaming",

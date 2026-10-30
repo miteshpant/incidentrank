@@ -31,6 +31,7 @@ export const badConfigurationRollout: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 10,
   isFree: false,
+  structure: "linear",
   simulation: badConfigurationRolloutSimulation,
   library: {
     category: "Deployments & Reliability",

@@ -35,6 +35,7 @@ export const crossRegionLatencySpike: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: crossRegionLatencySpikeSimulation,
   library: {
     category: "Distributed Systems",

@@ -33,6 +33,7 @@ export const emergencyCapacityReservationDecision: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: emergencyCapacityReservationDecisionSimulation,
   library: {
     category: "Infrastructure & Capacity",

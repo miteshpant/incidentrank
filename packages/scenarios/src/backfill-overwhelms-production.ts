@@ -34,6 +34,7 @@ export const backfillOverwhelmsProduction: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: backfillOverwhelmsProductionSimulation,
   library: {
     category: "Databases & Storage",

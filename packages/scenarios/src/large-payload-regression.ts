@@ -33,6 +33,7 @@ export const largePayloadRegression: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: largePayloadRegressionSimulation,
   library: {
     category: "API & Traffic",

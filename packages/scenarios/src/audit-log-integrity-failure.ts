@@ -46,6 +46,7 @@ export const auditLogIntegrityFailure: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: auditLogIntegrityFailureSimulation,
   library: {
     category: "Security & Identity",

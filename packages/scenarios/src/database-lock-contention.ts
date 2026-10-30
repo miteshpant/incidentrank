@@ -29,6 +29,7 @@ export const databaseLockContention: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 14,
   isFree: false,
+  structure: "linear",
   simulation: databaseLockContentionSimulation,
   library: {
     category: "Databases & Storage",

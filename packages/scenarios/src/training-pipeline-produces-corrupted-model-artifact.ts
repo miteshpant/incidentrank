@@ -34,6 +34,7 @@ export const trainingPipelineProducesCorruptedModelArtifact: ScenarioDefinition 
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: trainingPipelineProducesCorruptedModelArtifactSimulation,
   library: {
     category: "Data Pipelines",

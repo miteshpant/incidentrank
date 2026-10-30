@@ -29,6 +29,7 @@ export const kafkaPartitionSkew: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: kafkaPartitionSkewSimulation,
   library: {
     category: "Messaging & Streaming",

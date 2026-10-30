@@ -38,6 +38,7 @@ export const outOfOrderEvents: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: outOfOrderEventsSimulation,
   library: {
     category: "Messaging & Streaming",

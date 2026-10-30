@@ -35,6 +35,7 @@ export const cacheEvictionStorm: ScenarioDefinition = {
   difficulty: "senior",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: cacheEvictionStormSimulation,
   library: {
     category: "Caching",

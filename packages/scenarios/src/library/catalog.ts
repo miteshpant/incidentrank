@@ -487,6 +487,11 @@ import {
   enterpriseWideDependencyDeprecationCandidateUI,
   ENTERPRISE_WIDE_DEPENDENCY_DEPRECATION_SCORING,
 } from "../enterprise-wide-dependency-deprecation";
+import {
+  checkoutPaymentInventoryRedisContention,
+  checkoutPaymentInventoryRedisContentionCandidateUI,
+  CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING,
+} from "../checkout-payment-inventory-redis-contention";
 import type { BuiltInScenarioCatalog } from "./types";
 
 /**
@@ -1018,5 +1023,14 @@ export const BUILT_IN_SCENARIO_CATALOG: BuiltInScenarioCatalog = {
     definition: enterpriseWideDependencyDeprecation,
     candidateUI: enterpriseWideDependencyDeprecationCandidateUI,
     scoring: ENTERPRISE_WIDE_DEPENDENCY_DEPRECATION_SCORING,
+  },
+  // Phase 10F reference incident — the first scenario deliberately
+  // structured "parallel" (docs/implementation_plan/phase10f.md §17),
+  // validating the structure/domain/isFree/roleInIncident infrastructure
+  // end to end.
+  [checkoutPaymentInventoryRedisContention.slug]: {
+    definition: checkoutPaymentInventoryRedisContention,
+    candidateUI: checkoutPaymentInventoryRedisContentionCandidateUI,
+    scoring: CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING,
   },
 };

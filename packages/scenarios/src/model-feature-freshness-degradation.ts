@@ -33,6 +33,7 @@ export const modelFeatureFreshnessDegradation: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 25,
   isFree: false,
+  structure: "linear",
   simulation: modelFeatureFreshnessDegradationSimulation,
   library: {
     category: "Data Pipelines",

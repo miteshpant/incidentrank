@@ -38,6 +38,7 @@ export const capacityExhaustionDuringPeakEvent: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 30,
   isFree: false,
+  structure: "linear",
   simulation: capacityExhaustionDuringPeakEventSimulation,
   library: {
     category: "Infrastructure & Capacity",

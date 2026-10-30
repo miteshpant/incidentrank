@@ -50,6 +50,7 @@ export const hotShardReplicaLagFailoverRisk: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 22,
   isFree: false,
+  structure: "linear",
   simulation: hotShardReplicaLagFailoverRiskSimulation,
   library: {
     category: "Distributed Systems",

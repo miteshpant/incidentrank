@@ -28,6 +28,7 @@ export const memoryLeak: ScenarioDefinition = {
   difficulty: "intermediate",
   estimatedMinutes: 15,
   isFree: false,
+  structure: "linear",
   simulation: memoryLeakSimulation,
   library: {
     category: "Infrastructure & Capacity",

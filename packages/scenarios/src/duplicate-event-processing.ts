@@ -30,6 +30,7 @@ export const duplicateEventProcessing: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: duplicateEventProcessingSimulation,
   library: {
     category: "Messaging & Streaming",

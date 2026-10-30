@@ -35,6 +35,7 @@ export const replicationBacklog: ScenarioDefinition = {
   difficulty: "staff",
   estimatedMinutes: 18,
   isFree: false,
+  structure: "linear",
   simulation: replicationBacklogSimulation,
   library: {
     category: "Distributed Systems",

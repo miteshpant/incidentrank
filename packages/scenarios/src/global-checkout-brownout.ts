@@ -42,6 +42,7 @@ export const globalCheckoutBrownout: ScenarioDefinition = {
   difficulty: "principal",
   estimatedMinutes: 20,
   isFree: false,
+  structure: "linear",
   simulation: globalCheckoutBrownoutSimulation,
   library: {
     category: "Distributed Systems",

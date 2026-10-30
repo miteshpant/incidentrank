@@ -55,6 +55,7 @@ export const eventPlatformPartialOutage: ScenarioDefinition = {
   difficulty: "senior_staff",
   estimatedMinutes: 22,
   isFree: false,
+  structure: "linear",
   simulation: eventPlatformPartialOutageSimulation,
   library: {
     category: "Messaging & Streaming",
