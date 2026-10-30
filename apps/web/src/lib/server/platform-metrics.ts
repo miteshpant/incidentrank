@@ -3,6 +3,7 @@ import { and, eq, gte, inArray, lt, sql } from "drizzle-orm";
 import {
   foundingEngineerAllocations,
   organizationCreditLedger,
+  organizationLaunchDiscountClaims,
   organizationMembers,
   organizations,
   organizationStripeCustomers,
@@ -151,10 +152,23 @@ export function resolveDateRangeBounds(range: DateRange, now: Date = new Date())
 // ─────────────────────────────────────────────────────────────────────────
 
 export interface RevenueSummary {
+  /** Still a run-rate ESTIMATE from active-subscription counts × list price — Stripe does not expose a single authoritative "current MRR" figure to read back. */
   mrrUsdCents: number;
+  /** Sum of paidEntitlements.amountTotalUsdCents for issued Founding in range — real collected amounts only; rows with no captured amount are excluded, never estimated. */
   foundingGrossUsdCents: number;
+  /** Sum of organizationCreditLedger.amountTotalUsdCents for purchases in range — same exclusion rule. */
   orgCreditGrossUsdCents: number;
   totalGrossCollectedUsdCents: number;
+  /** Sum of discountAmountUsdCents across the same in-range rows — what the launch promotion actually cost in forgone revenue. */
+  discountsGrantedUsdCents: number;
+  /** Count of in-range Founding/org-credit rows with amountTotalUsdCents still NULL (pre-Phase-10E data) — excluded from the gross totals above, surfaced so the admin is never misled by an artificially-low number. */
+  legacyRecordsWithoutCapturedAmount: number;
+  promotionsRedeemed: {
+    monthly: number;
+    annual: number;
+    founding: number;
+    orgFirstPurchase: number;
+  };
 }
 
 /**
@@ -166,6 +180,22 @@ export interface RevenueSummary {
  * Founding and org credits are structurally absent from the MRR query —
  * no join to paidEntitlements/organizationCreditLedger at all, a
  * stronger guarantee than a runtime filter (phase10c.md §25/§44).
+ *
+ * Phase 10E correction (phase10e.md §14/§16/§41): foundingGrossUsdCents
+ * and orgCreditGrossUsdCents previously multiplied
+ * count/quantity × static list price — a launch-discounted purchase made
+ * that number wrong the moment any real discounted transaction existed.
+ * Both now sum the REAL amountTotalUsdCents persisted by the webhook
+ * handler at purchase time (see webhook-handlers.ts). A row created
+ * before this migration has no captured amount (NULL) and is excluded
+ * from the gross total rather than estimated — surfaced via
+ * legacyRecordsWithoutCapturedAmount so this is never silently
+ * misleading. MRR itself remains a list-price-based run-rate estimate —
+ * Stripe has no single "current MRR" field to read back, and a
+ * subscription's actual per-period amount is reconciled onto
+ * stripeSubscriptions as invoices arrive (see
+ * lastInvoiceAmountPaidUsdCents) rather than summed here as a historical
+ * total.
  */
 export async function getRevenueSummary(range: DateRange, tx: TxOrDb = db): Promise<RevenueSummary> {
   const { from, to } = resolveDateRangeBounds(range);
@@ -188,29 +218,127 @@ export async function getRevenueSummary(range: DateRange, tx: TxOrDb = db): Prom
   const foundingConditions = [eq(foundingEngineerAllocations.status, "issued")];
   if (from) foundingConditions.push(gte(foundingEngineerAllocations.issuedAt, from));
   foundingConditions.push(lt(foundingEngineerAllocations.issuedAt, to));
-  const [foundingIssuedRow] = await tx
-    .select({ count: sql<string>`count(*)` })
+  const foundingIssuedRows = await tx
+    .select({
+      stripeCheckoutSessionId: foundingEngineerAllocations.stripeCheckoutSessionId,
+    })
     .from(foundingEngineerAllocations)
     .where(and(...foundingConditions));
-  const foundingGrossUsdCents = Number(foundingIssuedRow?.count ?? 0) * FOUNDING_LIFETIME_PRICE_USD_CENTS;
+  const foundingSessionIds = foundingIssuedRows
+    .map((r) => r.stripeCheckoutSessionId)
+    .filter((id): id is string => id !== null);
+  const foundingAmountRows =
+    foundingSessionIds.length > 0
+      ? await tx
+          .select({
+            amountTotalUsdCents: paidEntitlements.amountTotalUsdCents,
+            discountAmountUsdCents: paidEntitlements.discountAmountUsdCents,
+          })
+          .from(paidEntitlements)
+          .where(
+            and(
+              eq(paidEntitlements.entitlementType, "founding_lifetime"),
+              inArray(paidEntitlements.stripeCheckoutSessionId, foundingSessionIds),
+            ),
+          )
+      : [];
+  const foundingGrossUsdCents = foundingAmountRows.reduce(
+    (sum, row) => sum + (row.amountTotalUsdCents ?? 0),
+    0,
+  );
+  const foundingDiscountUsdCents = foundingAmountRows.reduce(
+    (sum, row) => sum + (row.discountAmountUsdCents ?? 0),
+    0,
+  );
+  const foundingLegacyCount = foundingAmountRows.filter((r) => r.amountTotalUsdCents === null).length;
 
   const orgCreditConditions = [eq(organizationCreditLedger.transactionType, "purchase")];
   if (from) orgCreditConditions.push(gte(organizationCreditLedger.createdAt, from));
   orgCreditConditions.push(lt(organizationCreditLedger.createdAt, to));
   const orgCreditPurchaseRows = await tx
-    .select({ quantity: organizationCreditLedger.quantity })
+    .select({
+      amountTotalUsdCents: organizationCreditLedger.amountTotalUsdCents,
+      discountAmountUsdCents: organizationCreditLedger.discountAmountUsdCents,
+    })
     .from(organizationCreditLedger)
     .where(and(...orgCreditConditions));
   const orgCreditGrossUsdCents = orgCreditPurchaseRows.reduce(
-    (sum, row) => sum + orgCreditPurchaseUsdCentsForQuantity(row.quantity),
+    (sum, row) => sum + (row.amountTotalUsdCents ?? 0),
     0,
   );
+  const orgCreditDiscountUsdCents = orgCreditPurchaseRows.reduce(
+    (sum, row) => sum + (row.discountAmountUsdCents ?? 0),
+    0,
+  );
+  const orgCreditLegacyCount = orgCreditPurchaseRows.filter((r) => r.amountTotalUsdCents === null).length;
+
+  const promotionsRedeemed = await getPromotionsRedeemed(range, tx);
 
   return {
     mrrUsdCents,
     foundingGrossUsdCents,
     orgCreditGrossUsdCents,
     totalGrossCollectedUsdCents: foundingGrossUsdCents + orgCreditGrossUsdCents,
+    discountsGrantedUsdCents: foundingDiscountUsdCents + orgCreditDiscountUsdCents,
+    legacyRecordsWithoutCapturedAmount: foundingLegacyCount + orgCreditLegacyCount,
+    promotionsRedeemed,
+  };
+}
+
+/**
+ * Launch-offer redemption counts (phase10e.md §17). A discount is
+ * considered "redeemed" when discountAmountUsdCents > 0 on a real
+ * captured purchase row — never inferred from coupon-ID matching, since
+ * the discount amount itself is the authoritative signal that a launch
+ * offer actually applied to this specific transaction. Org
+ * first-purchase redemptions are read from organization_launch_discount_
+ * claims.status='redeemed' instead, since that table is this phase's own
+ * authoritative tracker for that specific offer.
+ */
+async function getPromotionsRedeemed(
+  range: DateRange,
+  tx: TxOrDb,
+): Promise<RevenueSummary["promotionsRedeemed"]> {
+  const { from, to } = resolveDateRangeBounds(range);
+  const monthlyPriceId = getPlanPriceId("pro_monthly");
+  const annualPriceId = getPlanPriceId("pro_annual");
+
+  const subConditions = [sql`${stripeSubscriptions.lastInvoiceDiscountAmountUsdCents} > 0`];
+  if (from) subConditions.push(gte(stripeSubscriptions.updatedAt, from));
+  subConditions.push(lt(stripeSubscriptions.updatedAt, to));
+  const [monthlyRedeemedRow] = await tx
+    .select({ count: sql<string>`count(*)` })
+    .from(stripeSubscriptions)
+    .where(and(eq(stripeSubscriptions.stripePriceId, monthlyPriceId), ...subConditions));
+  const [annualRedeemedRow] = await tx
+    .select({ count: sql<string>`count(*)` })
+    .from(stripeSubscriptions)
+    .where(and(eq(stripeSubscriptions.stripePriceId, annualPriceId), ...subConditions));
+
+  const foundingConditions = [
+    eq(paidEntitlements.entitlementType, "founding_lifetime"),
+    sql`${paidEntitlements.discountAmountUsdCents} > 0`,
+  ];
+  if (from) foundingConditions.push(gte(paidEntitlements.createdAt, from));
+  foundingConditions.push(lt(paidEntitlements.createdAt, to));
+  const [foundingRedeemedRow] = await tx
+    .select({ count: sql<string>`count(*)` })
+    .from(paidEntitlements)
+    .where(and(...foundingConditions));
+
+  const orgConditions = [eq(organizationLaunchDiscountClaims.status, "redeemed")];
+  if (from) orgConditions.push(gte(organizationLaunchDiscountClaims.redeemedAt, from));
+  orgConditions.push(lt(organizationLaunchDiscountClaims.redeemedAt, to));
+  const [orgRedeemedRow] = await tx
+    .select({ count: sql<string>`count(*)` })
+    .from(organizationLaunchDiscountClaims)
+    .where(and(...orgConditions));
+
+  return {
+    monthly: Number(monthlyRedeemedRow?.count ?? 0),
+    annual: Number(annualRedeemedRow?.count ?? 0),
+    founding: Number(foundingRedeemedRow?.count ?? 0),
+    orgFirstPurchase: Number(orgRedeemedRow?.count ?? 0),
   };
 }
 

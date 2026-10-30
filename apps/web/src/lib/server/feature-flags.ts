@@ -80,3 +80,14 @@ export function isOrgCreditConsumptionEnabled(): boolean {
 export function isEngineerRankEnabled(): boolean {
   return process.env.ENGINEER_RANK_ENABLED === "true";
 }
+
+/**
+ * Phase 10E flag (docs/implementation_plan/phase10e.md §11). Gates
+ * whether a NEW checkout receives the configured launch-discount coupon.
+ * Default false/off: normal list pricing. Never tie entitlement validity
+ * to this flag after purchase — disabling it only stops future discounted
+ * checkouts, it never revokes an already-granted entitlement or credit.
+ */
+export function isLaunchDiscountsEnabled(): boolean {
+  return process.env.LAUNCH_DISCOUNTS_ENABLED === "true";
+}

@@ -6,6 +6,12 @@ import { appBaseUrl } from "../app-url";
 import { getStripeClient } from "./client";
 import { getOrgCreditPlanPriceId, type OrgCreditPlan } from "./org-credit-config";
 import { getOrCreateOrganizationStripeCustomer } from "./organization-stripe-customers";
+import { getOrgFirstPurchaseLaunchCouponId } from "./discount-config";
+import {
+  releaseOrgLaunchDiscountClaim,
+  reserveOrgLaunchDiscountClaim,
+  setOrgLaunchDiscountClaimCheckoutSession,
+} from "../org-discount-claims";
 
 /**
  * Resolves the purchasing user's email via Clerk for use as the
@@ -51,12 +57,23 @@ export async function createOrganizationCreditCheckoutSession(
     getOrCreateOrganizationStripeCustomer(tx, organization, billingEmail),
   );
 
+  // docs/implementation_plan/phase10e.md §6-§9: server-selected only, one
+  // lifetime discount per organization. A losing/ineligible reservation
+  // simply proceeds without a coupon — it is never an error that blocks
+  // the purchase itself.
+  const maybeCouponId = getOrgFirstPurchaseLaunchCouponId();
+  const claimReservation = maybeCouponId
+    ? await db.transaction((tx) => reserveOrgLaunchDiscountClaim(tx, organization.id))
+    : null;
+  const couponId = claimReservation?.ok ? maybeCouponId : null;
+
   try {
     const session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer: customer.stripeCustomerId,
       client_reference_id: organization.id,
       line_items: [{ price: priceId, quantity: 1 }],
+      discounts: couponId ? [{ coupon: couponId }] : undefined,
       metadata: {
         application: "incidentrank",
         purchase_type: "organization_assessment_credits",
@@ -78,12 +95,27 @@ export async function createOrganizationCreditCheckoutSession(
     if (!session.url) {
       throw new Error("Stripe did not return a Checkout Session URL");
     }
+
+    if (claimReservation?.ok) {
+      await db.transaction((tx) =>
+        setOrgLaunchDiscountClaimCheckoutSession(tx, claimReservation.claim.id, session.id),
+      );
+    }
+
     return { ok: true, url: session.url };
   } catch {
     // Checkout Session creation failure grants no credits and leaves no
     // dangling business state beyond the Stripe customer mapping, which
     // is safe to keep and reuse on a subsequent attempt (phase10b.md
-    // §58). No reservation exists for purchases, unlike Founding.
+    // §58). No purchase reservation exists, unlike Founding — but a
+    // discount-claim reservation DOES exist by this point if one was
+    // taken above, and must be released so a transient Stripe/network
+    // failure never permanently burns the organization's one discount.
+    if (claimReservation?.ok) {
+      await db.transaction((tx) =>
+        releaseOrgLaunchDiscountClaim(tx, claimReservation.claim.id),
+      );
+    }
     return { ok: false, reason: "checkout_session_failed" };
   }
 }

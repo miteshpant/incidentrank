@@ -95,17 +95,40 @@ export async function DashboardView({ range }: { range: DateRange }) {
         </div>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatCard label="MRR (now)" value={usd(revenue.mrrUsdCents)} />
+        <StatCard label="MRR (now, est.)" value={usd(revenue.mrrUsdCents)} />
         <StatCard label={`Founding Gross (${RANGE_LABEL[range]})`} value={usd(revenue.foundingGrossUsdCents)} />
         <StatCard label={`Org Credit Gross (${RANGE_LABEL[range]})`} value={usd(revenue.orgCreditGrossUsdCents)} />
         <StatCard label={`Total Gross Collected (${RANGE_LABEL[range]})`} value={usd(revenue.totalGrossCollectedUsdCents)} />
       </div>
       <p className="mt-3 text-xs text-muted">
-        MRR is a recurring run-rate computed from currently-active Pro subscriptions — always &quot;right now,&quot;
-        never scoped by the date range above. Founding and organization-credit gross are exact one-time totals for
-        the selected range. Gross collected figures are not refund-adjusted (automated refund reconciliation remains
-        deferred); do not read as net revenue.
+        MRR is a recurring run-rate estimate from currently-active Pro subscription counts × list price — always
+        &quot;right now,&quot; never scoped by the date range above. Founding and organization-credit gross are the
+        real amounts Stripe actually collected (persisted from each purchase&apos;s Checkout Session/invoice), not a
+        list-price estimate — a discounted purchase is reflected at its discounted amount. Gross collected figures
+        are not refund-adjusted (automated refund reconciliation remains deferred); do not read as net revenue.
+        {revenue.legacyRecordsWithoutCapturedAmount > 0 && (
+          <>
+            {" "}
+            <span className="text-foreground">
+              {revenue.legacyRecordsWithoutCapturedAmount} record
+              {revenue.legacyRecordsWithoutCapturedAmount === 1 ? "" : "s"} in this range predate amount capture and
+              are excluded from the totals above
+            </span>
+            , rather than estimated.
+          </>
+        )}
       </p>
+
+      <h2 className="mt-8 font-mono text-[10px] uppercase tracking-wide text-muted">
+        Launch promotion ({RANGE_LABEL[range]})
+      </h2>
+      <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <StatCard label="Monthly offers redeemed" value={revenue.promotionsRedeemed.monthly} />
+        <StatCard label="Annual offers redeemed" value={revenue.promotionsRedeemed.annual} />
+        <StatCard label="Founding offers redeemed" value={revenue.promotionsRedeemed.founding} />
+        <StatCard label="Org first-purchase offers redeemed" value={revenue.promotionsRedeemed.orgFirstPurchase} />
+        <StatCard label="Discounts granted" value={usd(revenue.discountsGrantedUsdCents)} />
+      </div>
     </>
   );
 }

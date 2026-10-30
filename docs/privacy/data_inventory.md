@@ -66,6 +66,28 @@ Phase 10D (`docs/implementation_plan/phasse10d.md` §2/§10). Field-by-field inv
 | Legal acceptance record | user accepted Terms v2026-10-v1 at time T | `legal_acceptances` | Proof of consent, re-gating on version change | Self, platform admin | Permanent, append-only (never deleted, including after account deletion — see `data_retention.md`) | `plaintext_required` | — | Required |
 | Privacy request record | deletion/access/correction request + status | `privacy_requests` | Track and resolve user privacy requests | Self (own requests), platform admin | Per `data_retention.md` | `plaintext_required`, free-text notes minimized (§44 — no unnecessary detail stored) | — | Required |
 
+## Benchmark data (new in Phase 10E)
+
+| Data category | Example | Where stored | Purpose | Who can access | Retention | Protection method | External processor | Required? |
+|---|---|---|---|---|---|---|---|---|
+| Pseudonymous benchmark subject | a random id, created lazily on first qualifying practice attempt | `benchmark_subjects` (`id`, `userId` FK, `createdAt` only — no displayName/email/Clerk id duplicated) | Lets analytical fact tables reference the user without re-exposing identity | No direct access (never surfaced in any UI); platform admin only indirectly via aggregate benchmark dashboards | Life of account; survives account anonymization (see `data_retention.md`) | `tokenized_external_reference` (the FK itself is the only identity link) | — | Required for the feature |
+| Benchmark attempt fact | scenario, difficulty, category, scoring/rank/projection versions, timing, terminal outcome, score + dimension breakdown, first-vs-repeat, rank before/after | `benchmark_attempt_facts` | Scenario calibration, future cross-engineer benchmark research | Platform admin only, in aggregate form (`/admin/benchmark/*`) — never a per-engineer drill-down UI | Life of the underlying attempt; a projection-version bump creates a new row set rather than deleting old evidence | `plaintext_required` (no identity fields present to protect beyond the subject FK) | — | Required for the feature |
+| Benchmark action fact | ordered action sequence, elapsed time, allowlisted control-value diff | `benchmark_action_facts` | Decision-sequence calibration (never scored/judged, purely descriptive) | Same as benchmark attempt facts | Same as benchmark attempt facts | `plaintext_required`; deliberately excludes free-text `reasoning` and the full `finalStateJson` blob — only the structured control-key/value diff is copied | — | Required for the feature |
+| Benchmark projection failure log | attempt id + error message | `benchmark_projection_failures` | Operational visibility into materialization bugs; retry queue for `rebuildBenchmarkAttempt` | Platform admin only | Until resolved/cleared (no automated expiry yet — see `data_retention.md`) | `plaintext_required` | — | Required for the feature |
+
+**V1 scope boundary** (phase10e.md §24): only `attemptType='practice'` AND `scenario.ownershipType='incidentrank'` attempts are ever materialized — enforced inside `materializeBenchmarkAttemptFact` itself, not only at the caller's trigger point. Employer assessment data and organization-private scenarios are structurally excluded, confirmed by `materialize.test.ts`'s dedicated exclusion tests.
+
+**No demographic data collected** (§35): race, ethnicity, religion, gender, sexual orientation, health, disability, and political affiliation are never collected for benchmark purposes — confirmed by grep across the benchmark schema and materialization code; no such columns or fields exist anywhere in this data model.
+
+## Launch discount data (new in Phase 10E)
+
+| Data category | Example | Where stored | Purpose | Who can access | Retention | Protection method | External processor | Required? |
+|---|---|---|---|---|---|---|---|---|
+| Organization launch-discount claim | reserved/redeemed/released/expired status for one org's lifetime first-purchase offer | `organization_launch_discount_claims` | Race-safe enforcement of the one-per-organization launch discount | Org owner/admin (indirectly, via billing page copy), platform admin | Life of organization | `plaintext_required` | — | Required for the feature |
+| Actual collected payment amount | real `amount_total`/`currency`/`discount_amount` from a Checkout Session or invoice | New nullable columns on `paidEntitlements`, `organizationCreditLedger`, `stripeSubscriptions` | Accurate "gross collected" revenue reporting (replaces the prior count × list-price estimate) | Platform admin (revenue dashboard) | Life of the underlying purchase/subscription record | `plaintext_required` (these are scalar amounts/currency codes, not payment credentials) | Stripe (source of the amount) | Required for accurate revenue reporting |
+
+No raw Stripe Checkout Session, Invoice, or Coupon objects are persisted — only the three scalar fields above, matching the existing Phase 10D minimization doctrine already applied to all other Stripe-derived tables.
+
 ## Summary of `must_not_store` items (confirmed absent, not merely avoided going forward)
 
 - Raw card PAN/CVC/bank credentials — never received by IncidentRank's servers (Stripe-hosted collection only)

@@ -15,6 +15,11 @@ import type {
   privacyRequests,
   organizationCreditLedger,
   organizationInvitations,
+  organizationLaunchDiscountClaims,
+  benchmarkSubjects,
+  benchmarkAttemptFacts,
+  benchmarkActionFacts,
+  benchmarkProjectionFailures,
   organizationMembers,
   organizations,
   organizationStripeCustomers,
@@ -122,3 +127,22 @@ export type NewLegalAcceptance = typeof legalAcceptances.$inferInsert;
 
 export type PrivacyRequest = typeof privacyRequests.$inferSelect;
 export type NewPrivacyRequest = typeof privacyRequests.$inferInsert;
+
+export type OrganizationLaunchDiscountClaim =
+  typeof organizationLaunchDiscountClaims.$inferSelect;
+export type NewOrganizationLaunchDiscountClaim =
+  typeof organizationLaunchDiscountClaims.$inferInsert;
+
+export type BenchmarkSubject = typeof benchmarkSubjects.$inferSelect;
+export type NewBenchmarkSubject = typeof benchmarkSubjects.$inferInsert;
+
+export type BenchmarkAttemptFact = typeof benchmarkAttemptFacts.$inferSelect;
+export type NewBenchmarkAttemptFact = typeof benchmarkAttemptFacts.$inferInsert;
+
+export type BenchmarkActionFact = typeof benchmarkActionFacts.$inferSelect;
+export type NewBenchmarkActionFact = typeof benchmarkActionFacts.$inferInsert;
+
+export type BenchmarkProjectionFailure =
+  typeof benchmarkProjectionFailures.$inferSelect;
+export type NewBenchmarkProjectionFailure =
+  typeof benchmarkProjectionFailures.$inferInsert;

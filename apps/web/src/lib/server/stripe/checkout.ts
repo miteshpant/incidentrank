@@ -4,6 +4,7 @@ import { db } from "../db";
 import { appBaseUrl } from "../app-url";
 import { getStripeClient } from "./client";
 import { getPlanPriceId, entitlementTypeForPlan, type StripePlan } from "./config";
+import { getLaunchCouponId } from "./discount-config";
 import { getOrCreateStripeCustomer } from "./stripe-customers";
 import { hasActivePaidEntitlement } from "./entitlements";
 import {
@@ -60,6 +61,11 @@ export async function createCheckoutSession(
   const priceId = getPlanPriceId(plan);
   const stripe = getStripeClient();
   const base = appBaseUrl();
+  // docs/implementation_plan/phase10e.md §9: server-selected only — the
+  // client never sends a coupon/discount value, and none is ever read
+  // from the request. null (flag off, or coupon unset) means no discount
+  // param is sent at all, which is always a safe no-op for Stripe.
+  const couponId = getLaunchCouponId(plan);
 
   if (plan === "founding_lifetime") {
     return db.transaction(async (tx) => {
@@ -82,6 +88,7 @@ export async function createCheckoutSession(
           customer: customer.stripeCustomerId,
           client_reference_id: user.id,
           line_items: [{ price: priceId, quantity: 1 }],
+          discounts: couponId ? [{ coupon: couponId }] : undefined,
           metadata: { incidentrank_user_id: user.id, plan },
           success_url: `${base}/billing/success?session_id={CHECKOUT_SESSION_ID}`,
           cancel_url: `${base}/billing/canceled`,
@@ -116,6 +123,7 @@ export async function createCheckoutSession(
     customer: customer.stripeCustomerId,
     client_reference_id: user.id,
     line_items: [{ price: priceId, quantity: 1 }],
+    discounts: couponId ? [{ coupon: couponId }] : undefined,
     metadata: {
       incidentrank_user_id: user.id,
       plan,

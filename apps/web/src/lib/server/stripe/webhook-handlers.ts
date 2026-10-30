@@ -13,6 +13,7 @@ import { planForPriceId } from "./config";
 import { issueFoundingSlot } from "./founding-allocation";
 import { orgCreditPlanForPriceId, creditQuantityForPlan } from "./org-credit-config";
 import { recordOrganizationCreditPurchase } from "../organization-credits";
+import { redeemOrgLaunchDiscountClaim } from "../org-discount-claims";
 import { logOrgAuditEvent } from "../organization-audit";
 
 type TxOrDb = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
@@ -118,6 +119,11 @@ export async function handleCheckoutSessionCompleted(
       stripePriceId: priceId,
       startsAt: new Date(),
       currentPeriodEnd: null,
+      // phase10e.md §15: the real amount actually collected for this
+      // one-time Founding purchase — never estimated from list price.
+      amountTotalUsdCents: session.amount_total,
+      currency: session.currency,
+      discountAmountUsdCents: session.total_details?.amount_discount ?? null,
     })
     // Must exactly match paid_entitlements_one_founding_per_user_idx's
     // own partial predicate (packages/db/src/schema.ts) — a
@@ -188,8 +194,18 @@ async function handleOrganizationCreditCheckoutSessionCompleted(
         ? session.payment_intent
         : (session.payment_intent?.id ?? null),
     purchasingUserId,
+    amountTotalUsdCents: session.amount_total,
+    currency: session.currency,
+    discountAmountUsdCents: session.total_details?.amount_discount ?? null,
   });
   if (!result.inserted) return; // already recorded — idempotent replay, no-op
+
+  // phase10e.md §8: redeem the organization's launch-discount claim (if
+  // any was reserved for this exact session) now that the purchase is
+  // confirmed. A safe no-op for an organization that never had one
+  // reserved — the WHERE clause inside redeemOrgLaunchDiscountClaim only
+  // matches a `reserved` row for this session id.
+  await redeemOrgLaunchDiscountClaim(tx, organization.id, session.id);
 
   await logOrgAuditEvent(tx, {
     organizationId: organization.id,
@@ -214,9 +230,16 @@ async function handleOrganizationCreditCheckoutSessionCompleted(
  * but never creates/activates a Pro entitlement (phase9.md §29's "Unknown
  * Price IDs must not silently grant Pro").
  */
+export interface InvoiceAmountInfo {
+  amountPaidUsdCents: number;
+  currency: string;
+  discountAmountUsdCents: number;
+}
+
 export async function handleSubscriptionEvent(
   tx: TxOrDb,
   subscription: Stripe.Subscription,
+  invoiceAmount: InvoiceAmountInfo | null = null,
 ): Promise<void> {
   const customerId =
     typeof subscription.customer === "string"
@@ -256,6 +279,12 @@ export async function handleSubscriptionEvent(
         ? new Date(subscription.canceled_at * 1000)
         : null,
       endedAt: subscription.ended_at ? new Date(subscription.ended_at * 1000) : null,
+      // phase10e.md §15: reconciled from the triggering invoice, if this
+      // call originated from an invoice event — null for a plain
+      // subscription.* event with no associated invoice amount known yet.
+      lastInvoiceAmountPaidUsdCents: invoiceAmount?.amountPaidUsdCents ?? null,
+      lastInvoiceCurrency: invoiceAmount?.currency ?? null,
+      lastInvoiceDiscountAmountUsdCents: invoiceAmount?.discountAmountUsdCents ?? null,
     })
     .onConflictDoUpdate({
       target: stripeSubscriptions.stripeSubscriptionId,
@@ -270,6 +299,18 @@ export async function handleSubscriptionEvent(
           ? new Date(subscription.canceled_at * 1000)
           : null,
         endedAt: subscription.ended_at ? new Date(subscription.ended_at * 1000) : null,
+        // Only overwrite the last-known invoice amount when THIS call
+        // actually came from an invoice event — a plain
+        // subscription.updated event (e.g. cancel_at_period_end toggled)
+        // must never clobber the most recently reconciled amount with
+        // null.
+        ...(invoiceAmount
+          ? {
+              lastInvoiceAmountPaidUsdCents: invoiceAmount.amountPaidUsdCents,
+              lastInvoiceCurrency: invoiceAmount.currency,
+              lastInvoiceDiscountAmountUsdCents: invoiceAmount.discountAmountUsdCents,
+            }
+          : {}),
         updatedAt: new Date(),
       },
     });
@@ -363,5 +404,20 @@ export async function handleInvoiceEvent(
   if (!subscriptionId) return;
 
   const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  await handleSubscriptionEvent(tx, subscription);
+  // phase10e.md §15: only a genuinely paid invoice reflects a real
+  // collected amount — an unpaid/draft/voided invoice must never
+  // overwrite the last-known-good collected amount with a misleading
+  // figure.
+  const invoiceAmount: InvoiceAmountInfo | null =
+    invoice.status === "paid"
+      ? {
+          amountPaidUsdCents: invoice.amount_paid,
+          currency: invoice.currency,
+          discountAmountUsdCents: (invoice.total_discount_amounts ?? []).reduce(
+            (sum, d) => sum + d.amount,
+            0,
+          ),
+        }
+      : null;
+  await handleSubscriptionEvent(tx, subscription, invoiceAmount);
 }

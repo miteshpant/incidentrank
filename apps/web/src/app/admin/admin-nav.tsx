@@ -13,6 +13,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/admin/referrals", label: "Referrals" },
   { href: "/admin/admin-users", label: "Admin Users" },
   { href: "/admin/privacy-requests", label: "Privacy Requests" },
+  { href: "/admin/benchmark", label: "Benchmark" },
   { href: "/admin/paid-entitlements", label: "Paid Entitlements", paymentsOnly: true },
   { href: "/admin/stripe-subscriptions", label: "Stripe Subscriptions", paymentsOnly: true },
   { href: "/admin/founding-allocations", label: "Founding Allocations", paymentsOnly: true },

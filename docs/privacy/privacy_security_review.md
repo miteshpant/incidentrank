@@ -63,3 +63,51 @@ Single write path end-to-end: `POST /api/privacy-requests` truncates `notes` to 
 | `privacy_requests.notes` hygiene | FIXED — truncated, never carries sensitive content |
 
 **No BLOCKER-level findings.** No items are deferred from this sweep.
+
+---
+
+# Addendum — Phase 10E (Benchmark Data Foundation & Launch Discounts)
+
+Fresh grep sweep against the same keyword list, scoped to the new `apps/web/src/lib/server/benchmark/`, `apps/web/src/lib/server/org-discount-claims.ts`, `apps/web/src/lib/server/stripe/discount-config.ts`, and `apps/web/src/app/admin/benchmark/` code added this phase.
+
+## 1. Console/log leakage in new code
+
+Zero `console.*` calls anywhere in the new benchmark or discount-claim modules. **NOT_AN_ISSUE**.
+
+## 2. PII in benchmark fact tables
+
+`benchmark_attempt_facts`/`benchmark_action_facts` were inspected column-by-column against the schema: no `displayName`, `authProviderId`, or email field exists anywhere in either table — only the `benchmarkSubjectId` FK, which is itself a random id with no identity-derivable structure. `materialize.test.ts`'s test #17 asserts this directly (`expect(fact).not.toHaveProperty("displayName")` etc.), not merely documented. Action facts deliberately exclude the source action group's free-text `reasoning` field and the full `finalStateJson` blob — only the structured `controlKey`/`previousValueJson`/`newValueJson` diff is copied (§22's "allowlisted system state," confirmed by direct code inspection of `materializeBenchmarkAttemptFact`). **NOT_AN_ISSUE**.
+
+## 3. Scope enforcement — assessment/org-private exclusion
+
+`materializeBenchmarkAttemptFact` hard-filters `attemptType === "practice"` AND `scenario.ownershipType === "incidentrank"` inside the function itself, not only at the three call sites that trigger it — confirmed by `materialize.test.ts`'s tests #2 and #3, which insert a real assessment attempt and a real organization-private scenario and assert neither materializes. **FIXED** (built correctly from the start, verified by test rather than assumed).
+
+## 4. Demographic data collection
+
+Grepped the full benchmark schema and materialization/calibration code for race, ethnicity, religion, gender, sexual orientation, health, disability, and political-affiliation fields — zero matches. §35's prohibition is satisfied by absence, not a filter. **NOT_AN_ISSUE**.
+
+## 5. Launch-discount coupon ID exposure
+
+`STRIPE_*_LAUNCH_COUPON_ID` values are read only server-side (`discount-config.ts`, `webhook-handlers.ts`) and passed directly into `stripe.checkout.sessions.create()`'s `discounts` parameter — never rendered into any client component, confirmed by grep across `apps/web/src/app/pricing` and `apps/web/src/app/organizations/[slug]/billing`. The client never sends a coupon/discount value in any request body either (confirmed by `route.test.ts`'s "arbitrary coupon supplied by client ignored" test — the route's typed request body has no such field to read). **NOT_AN_ISSUE**.
+
+## 6. Actual-amount persistence — no raw Stripe object leakage
+
+The three new nullable amount columns (`amountTotalUsdCents`/`currency`/`discountAmountUsdCents` and their `stripeSubscriptions` equivalents) are populated from individually-read scalar fields off the Checkout Session/Invoice object (`session.amount_total`, `session.currency`, `session.total_details?.amount_discount`, `invoice.amount_paid`, `invoice.currency`, `invoice.total_discount_amounts`) — never a serialized copy of the object itself. Confirmed by direct inspection of every write site in `webhook-handlers.ts`; matches the existing Phase 10D "no raw Stripe objects" doctrine exactly. **NOT_AN_ISSUE**.
+
+## 7. Admin benchmark dashboard — no engineer identity exposed
+
+`/admin/benchmark`, `/admin/benchmark/scenarios`, `/admin/benchmark/scenarios/[scenarioId]` render only aggregate counts/percentages/medians and rank-band distribution counts — no per-engineer row, no `benchmarkSubjectId` ever rendered as a clickable/searchable identifier, no join back to `users` anywhere in `calibration.ts` or the three view components. Confirmed by direct code review of all three page components. **NOT_AN_ISSUE**.
+
+## Summary (addendum)
+
+| Area | Verdict |
+|---|---|
+| Console/log leakage (new code) | NOT_AN_ISSUE |
+| Benchmark fact table PII | NOT_AN_ISSUE — verified by test, not just documented |
+| Practice/incidentrank-only scope enforcement | FIXED — verified by test |
+| Demographic data collection | NOT_AN_ISSUE — absent |
+| Coupon ID exposure | NOT_AN_ISSUE |
+| Actual-amount persistence raw-object leakage | NOT_AN_ISSUE |
+| Admin benchmark dashboard identity exposure | NOT_AN_ISSUE |
+
+**No BLOCKER-level findings in this addendum.** No items are deferred from this sweep.

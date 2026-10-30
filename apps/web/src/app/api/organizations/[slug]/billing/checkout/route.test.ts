@@ -3,6 +3,8 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { eq, like } from "drizzle-orm";
 import {
   createDb,
+  organizationCreditLedger,
+  organizationLaunchDiscountClaims,
   organizationMembers,
   organizations,
   organizationStripeCustomers,
@@ -78,6 +80,12 @@ afterEach(async () => {
     where: like(organizations.slug, `${TEST_ORG_SLUG_PREFIX}%`),
   });
   for (const org of orgs) {
+    await testDb
+      .delete(organizationLaunchDiscountClaims)
+      .where(eq(organizationLaunchDiscountClaims.organizationId, org.id));
+    await testDb
+      .delete(organizationCreditLedger)
+      .where(eq(organizationCreditLedger.organizationId, org.id));
     await testDb
       .delete(organizationStripeCustomers)
       .where(eq(organizationStripeCustomers.organizationId, org.id));
@@ -298,5 +306,168 @@ describe("POST /api/organizations/[slug]/billing/checkout", () => {
 
     expect(response.status).toBe(502);
     spy.mockRestore();
+  });
+});
+
+// docs/implementation_plan/phase10e.md §37 (required discount tests
+// 9-16, organization first-purchase scope).
+describe("POST /api/organizations/[slug]/billing/checkout — launch discounts", () => {
+  beforeEach(() => {
+    vi.stubEnv("LAUNCH_DISCOUNTS_ENABLED", "true");
+    vi.stubEnv("STRIPE_ORG_FIRST_PURCHASE_COUPON_ID", "ir_test_org_coupon");
+  });
+
+  it("a new organization's first purchase gets the configured 50% discount", async () => {
+    const org = await createOrg();
+    const user = await createUser();
+    await addMember(org.id, user.id, "owner");
+
+    const response = await withTestUser(user, () => postAsParams(org.slug, "single_credit"));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateArgs?.discounts).toEqual([{ coupon: "ir_test_org_coupon" }]);
+    const claim = await testDb.query.organizationLaunchDiscountClaims.findFirst({
+      where: eq(organizationLaunchDiscountClaims.organizationId, org.id),
+    });
+    expect(claim?.status).toBe("reserved");
+  });
+
+  it("applies equally whether the first purchase is a single credit or the 110-credit pack", async () => {
+    const org = await createOrg();
+    const user = await createUser();
+    await addMember(org.id, user.id, "owner");
+
+    const response = await withTestUser(user, () => postAsParams(org.slug, "credit_pack_110"));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateArgs?.discounts).toEqual([{ coupon: "ir_test_org_coupon" }]);
+  });
+
+  it("an organization with an existing successful purchase gets no discount on its second purchase", async () => {
+    const org = await createOrg();
+    const user = await createUser();
+    await addMember(org.id, user.id, "owner");
+    await testDb.insert(organizationCreditLedger).values({
+      organizationId: org.id,
+      transactionType: "purchase",
+      quantity: 1,
+      stripeCheckoutSessionId: `cs_prior_${org.id}`,
+    });
+
+    const response = await withTestUser(user, () => postAsParams(org.slug, "single_credit"));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateArgs?.discounts).toBeUndefined();
+  });
+
+  it("the discount is organization-scoped, not user-scoped — the same user managing two orgs gets it separately for each", async () => {
+    const orgA = await createOrg();
+    const orgB = await createOrg();
+    const user = await createUser();
+    await addMember(orgA.id, user.id, "owner");
+    await addMember(orgB.id, user.id, "owner");
+
+    const responseA = await withTestUser(user, () => postAsParams(orgA.slug, "single_credit"));
+    expect(lastSessionCreateArgs?.discounts).toEqual([{ coupon: "ir_test_org_coupon" }]);
+    expect(responseA.status).toBe(200);
+
+    const responseB = await withTestUser(user, () => postAsParams(orgB.slug, "single_credit"));
+    expect(responseB.status).toBe(200);
+    expect(lastSessionCreateArgs?.discounts).toEqual([{ coupon: "ir_test_org_coupon" }]);
+  });
+
+  it("Org A completing its first purchase does not disqualify Org B's first-purchase discount", async () => {
+    const orgA = await createOrg();
+    const orgB = await createOrg();
+    const userA = await createUser();
+    const userB = await createUser();
+    await addMember(orgA.id, userA.id, "owner");
+    await addMember(orgB.id, userB.id, "owner");
+    await testDb.insert(organizationCreditLedger).values({
+      organizationId: orgA.id,
+      transactionType: "purchase",
+      quantity: 1,
+      stripeCheckoutSessionId: `cs_prior_${orgA.id}`,
+    });
+
+    const responseA = await withTestUser(userA, () => postAsParams(orgA.slug, "single_credit"));
+    expect(lastSessionCreateArgs?.discounts).toBeUndefined();
+    expect(responseA.status).toBe(200);
+
+    const responseB = await withTestUser(userB, () => postAsParams(orgB.slug, "single_credit"));
+    expect(responseB.status).toBe(200);
+    expect(lastSessionCreateArgs?.discounts).toEqual([{ coupon: "ir_test_org_coupon" }]);
+  });
+
+  it("a Checkout Session creation failure releases the claim rather than permanently burning the organization's discount", async () => {
+    const stripeModule = await import("@/lib/server/stripe/client");
+    const spy = vi
+      .spyOn(stripeModule, "getStripeClient")
+      .mockReturnValue({
+        customers: { create: async () => ({ id: `cus_mock_${crypto.randomUUID().slice(0, 8)}` }) },
+        checkout: {
+          sessions: {
+            create: async () => {
+              throw new Error("stripe is down");
+            },
+          },
+        },
+      } as unknown as ReturnType<typeof stripeModule.getStripeClient>);
+
+    const org = await createOrg();
+    const user = await createUser();
+    await addMember(org.id, user.id, "owner");
+    const response = await withTestUser(user, () => postAsParams(org.slug, "single_credit"));
+    expect(response.status).toBe(502);
+    spy.mockRestore();
+
+    // The claim row must not remain `reserved` forever after the failure —
+    // releaseOrgLaunchDiscountClaim deletes it outright.
+    const claim = await testDb.query.organizationLaunchDiscountClaims.findFirst({
+      where: eq(organizationLaunchDiscountClaims.organizationId, org.id),
+    });
+    expect(claim).toBeUndefined();
+
+    // A subsequent retry must still receive the discount — the earlier
+    // failure did not burn it.
+    const retry = await withTestUser(user, () => postAsParams(org.slug, "single_credit"));
+    expect(retry.status).toBe(200);
+    expect(lastSessionCreateArgs?.discounts).toEqual([{ coupon: "ir_test_org_coupon" }]);
+  });
+
+  it("concurrent first-purchase checkouts for the same organization: only one reserves the claim, the other proceeds without a discount", async () => {
+    const org = await createOrg();
+    const userA = await createUser();
+    const userB = await createUser();
+    await addMember(org.id, userA.id, "owner");
+    await addMember(org.id, userB.id, "owner");
+
+    const [responseA, responseB] = await Promise.all([
+      withTestUser(userA, () => postAsParams(org.slug, "single_credit")),
+      withTestUser(userB, () => postAsParams(org.slug, "single_credit")),
+    ]);
+
+    expect(responseA.status).toBe(200);
+    expect(responseB.status).toBe(200);
+
+    const claims = await testDb.query.organizationLaunchDiscountClaims.findMany({
+      where: eq(organizationLaunchDiscountClaims.organizationId, org.id),
+    });
+    // The UNIQUE index on organization_id guarantees at most one claim row
+    // ever exists for this organization, regardless of how many checkouts
+    // raced for it.
+    expect(claims.length).toBe(1);
+  });
+
+  it("missing org coupon config fails safe to no discount, never blocks checkout", async () => {
+    vi.stubEnv("STRIPE_ORG_FIRST_PURCHASE_COUPON_ID", "");
+    const org = await createOrg();
+    const user = await createUser();
+    await addMember(org.id, user.id, "owner");
+
+    const response = await withTestUser(user, () => postAsParams(org.slug, "single_credit"));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateArgs?.discounts).toBeUndefined();
   });
 });

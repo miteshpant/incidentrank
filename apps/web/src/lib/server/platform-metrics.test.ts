@@ -123,30 +123,55 @@ async function grantProAnnual(userId: string) {
   });
 }
 
-async function grantFounding(userId: string, issuedAt: Date = new Date()) {
+// Phase 10E (phase10e.md §15): a Founding/org-credit row with no
+// captured amountTotalUsdCents is treated as "legacy, no real amount
+// known" and excluded from gross-collected totals — these fixtures pass
+// a real amount by default (full list price, no discount) so existing
+// revenue-summary assertions exercise the corrected real-amount path,
+// not the legacy-exclusion path. amountTotalUsdCents: null is used
+// explicitly where a test is specifically covering legacy-row exclusion.
+async function grantFounding(
+  userId: string,
+  issuedAt: Date = new Date(),
+  amountTotalUsdCents: number | null = 9900,
+) {
+  counter += 1;
+  const sessionId = `cs_test_founding_${counter}_${crypto.randomUUID().slice(0, 8)}`;
   await testDb.insert(paidEntitlements).values({
     userId,
     entitlementType: "founding_lifetime",
     status: "active",
     source: "stripe",
+    stripeCheckoutSessionId: sessionId,
     startsAt: new Date(),
+    amountTotalUsdCents,
+    currency: amountTotalUsdCents !== null ? "usd" : null,
+    discountAmountUsdCents: amountTotalUsdCents !== null ? 9900 - amountTotalUsdCents : null,
   });
-  counter += 1;
   await testDb.insert(foundingEngineerAllocations).values({
     slotNumber: 900000 + counter,
     userId,
     status: "issued",
     issuedAt,
+    stripeCheckoutSessionId: sessionId,
   });
 }
 
-async function recordOrgCreditPurchase(organizationId: string, quantity: 1 | 110, createdAt: Date = new Date()) {
+async function recordOrgCreditPurchase(
+  organizationId: string,
+  quantity: 1 | 110,
+  createdAt: Date = new Date(),
+  amountTotalUsdCents: number | null = quantity === 1 ? 5000 : 500_000,
+) {
   await testDb.insert(organizationCreditLedger).values({
     organizationId,
     transactionType: "purchase",
     quantity,
     stripeCheckoutSessionId: `cs_test_${crypto.randomUUID()}`,
     createdAt,
+    amountTotalUsdCents,
+    currency: amountTotalUsdCents !== null ? "usd" : null,
+    discountAmountUsdCents: 0,
   });
 }
 
@@ -245,7 +270,7 @@ describe("getRevenueSummary", () => {
     expect(after.orgCreditGrossUsdCents).toBeGreaterThan(before.orgCreditGrossUsdCents);
   });
 
-  it("13. gross collected category totals — all three present, each line and the sum correct", async () => {
+  it("13. gross collected category totals — all three present, each line and the sum correct, from REAL persisted amounts", async () => {
     const before = await getRevenueSummary("all", testDb);
     const foundingUser = await createUser();
     await grantFounding(foundingUser.id);
@@ -261,6 +286,53 @@ describe("getRevenueSummary", () => {
     expect(foundingDelta).toBe(9900);
     expect(orgCreditDelta).toBe(5000 + 500_000);
     expect(totalDelta).toBe(foundingDelta + orgCreditDelta);
+  });
+
+  it("phase10e: a discounted Founding purchase is reflected at its REAL discounted amount, never list price", async () => {
+    const before = await getRevenueSummary("all", testDb);
+    const user = await createUser();
+    await grantFounding(user.id, new Date(), 4950); // 50% off $99
+
+    const after = await getRevenueSummary("all", testDb);
+    expect(after.foundingGrossUsdCents - before.foundingGrossUsdCents).toBe(4950);
+    expect(after.discountsGrantedUsdCents - before.discountsGrantedUsdCents).toBe(4950);
+  });
+
+  it("phase10e: a discounted org-credit purchase is reflected at its REAL discounted amount, never list price", async () => {
+    const before = await getRevenueSummary("all", testDb);
+    const org = await createOrg();
+    await recordOrgCreditPurchase(org.id, 1, new Date(), 2500); // 50% off $50
+
+    const after = await getRevenueSummary("all", testDb);
+    expect(after.orgCreditGrossUsdCents - before.orgCreditGrossUsdCents).toBe(2500);
+  });
+
+  it("phase10e: a legacy row with no captured amount is excluded from gross collected, never estimated from list price", async () => {
+    const before = await getRevenueSummary("all", testDb);
+    const foundingUser = await createUser();
+    await grantFounding(foundingUser.id, new Date(), null); // legacy row, amount unknown
+    const org = await createOrg();
+    await recordOrgCreditPurchase(org.id, 1, new Date(), null); // legacy row, amount unknown
+
+    const after = await getRevenueSummary("all", testDb);
+    // Both legacy rows are excluded — the totals do not move at all,
+    // which is the correct behavior (never a silent $9900/$50 estimate).
+    expect(after.foundingGrossUsdCents).toBe(before.foundingGrossUsdCents);
+    expect(after.orgCreditGrossUsdCents).toBe(before.orgCreditGrossUsdCents);
+    expect(after.legacyRecordsWithoutCapturedAmount).toBe(
+      before.legacyRecordsWithoutCapturedAmount + 2,
+    );
+  });
+
+  it("phase10e: promotion-redeemed counts reflect rows with a real captured discount", async () => {
+    const before = await getRevenueSummary("all", testDb);
+    const discountedUser = await createUser();
+    await grantFounding(discountedUser.id, new Date(), 4950); // discounted
+    const fullPriceUser = await createUser();
+    await grantFounding(fullPriceUser.id, new Date(), 9900); // not discounted
+
+    const after = await getRevenueSummary("all", testDb);
+    expect(after.promotionsRedeemed.founding - before.promotionsRedeemed.founding).toBe(1);
   });
 
   it("date range correctly excludes purchases outside the window", async () => {

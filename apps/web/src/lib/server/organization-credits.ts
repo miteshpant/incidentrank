@@ -71,6 +71,9 @@ export async function recordOrganizationCreditPurchase(
     stripeCheckoutSessionId: string;
     stripePaymentIntentId: string | null;
     purchasingUserId: string | null;
+    amountTotalUsdCents?: number | null;
+    currency?: string | null;
+    discountAmountUsdCents?: number | null;
   },
 ): Promise<RecordOrganizationCreditPurchaseResult> {
   const [inserted] = await tx
@@ -82,6 +85,11 @@ export async function recordOrganizationCreditPurchase(
       stripeCheckoutSessionId: input.stripeCheckoutSessionId,
       stripePaymentIntentId: input.stripePaymentIntentId,
       createdByUserId: input.purchasingUserId,
+      // phase10e.md §15: the real amount actually collected for this
+      // purchase — never estimated from list price.
+      amountTotalUsdCents: input.amountTotalUsdCents ?? null,
+      currency: input.currency ?? null,
+      discountAmountUsdCents: input.discountAmountUsdCents ?? null,
     })
     .onConflictDoNothing({
       target: organizationCreditLedger.stripeCheckoutSessionId,

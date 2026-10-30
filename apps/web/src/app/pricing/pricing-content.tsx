@@ -1,5 +1,5 @@
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { isPaymentsEnabled } from "@/lib/server/feature-flags";
+import { isLaunchDiscountsEnabled, isPaymentsEnabled } from "@/lib/server/feature-flags";
 import { evaluatePaidPracticeEntitlement } from "@/lib/server/stripe/entitlements";
 import { getFoundingCapacity } from "@/lib/server/stripe/founding-allocation";
 import { CheckoutButton } from "@/components/checkout-button";
@@ -31,6 +31,14 @@ export async function PricingContent() {
 
   const isFounding = entitlement === "founding_lifetime";
   const isPro = entitlement === "pro";
+  // docs/implementation_plan/phase10e.md §3/§4/§5/§42: only an eligible,
+  // not-yet-entitled visitor sees launch-offer copy — an existing Pro
+  // subscriber or Founding holder is already ineligible for a NEW
+  // discounted checkout (their checkout buttons are disabled below
+  // regardless), so showing "launch offer" copy to them would be
+  // misleading. Never implies the discount lasts forever; always states
+  // the exact renewal/base price in the same sentence.
+  const showLaunchOffers = isLaunchDiscountsEnabled() && !isFounding && !isPro;
 
   return (
     <div className="mt-10 grid gap-6 sm:grid-cols-2">
@@ -38,6 +46,18 @@ export async function PricingContent() {
         <h2 className="font-mono text-xs uppercase tracking-wide text-muted">Pro</h2>
         <p className="mt-2 text-2xl font-semibold">$9.99/mo</p>
         <p className="mt-1 text-sm text-muted">or $79/yr — all premium incidents, while active.</p>
+        {showLaunchOffers && (
+          <div className="mt-3 flex flex-col gap-1 rounded border border-border bg-surface px-3 py-2 font-mono text-[11px] text-muted">
+            <p>
+              <span className="text-foreground">Launch offer:</span> 75% off your first 3 months.
+              Then $9.99/month.
+            </p>
+            <p>
+              <span className="text-foreground">Launch offer:</span> 50% off your first year.
+              Then $79/year.
+            </p>
+          </div>
+        )}
 
         <div className="mt-6 flex flex-col gap-2">
           <CheckoutButton
@@ -67,6 +87,12 @@ export async function PricingContent() {
         </h2>
         <p className="mt-2 text-2xl font-semibold">$99 one-time</p>
         <p className="mt-1 text-sm text-muted">Lifetime access to every premium incident.</p>
+        {showLaunchOffers && (
+          <p className="mt-3 rounded border border-border bg-surface px-3 py-2 font-mono text-[11px] text-muted">
+            <span className="text-foreground">Launch offer:</span> 50% off the one-time price —
+            pay roughly half of $99 at checkout. First 100 only.
+          </p>
+        )}
         <p className="mt-3 text-xs text-muted">
           {capacity.soldOut
             ? "Sold out — all 100 Founding Engineer spots have been claimed."

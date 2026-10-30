@@ -8,7 +8,11 @@ import { SiteHeader } from "@/components/site-header";
 import { SuspendedOrgBanner } from "@/components/suspended-org-banner";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { canMutate, loadOrganizationMembership } from "@/lib/server/organization-auth";
-import { isOrgBillingEnabled, isOrgCreditPurchaseEnabled } from "@/lib/server/feature-flags";
+import {
+  isLaunchDiscountsEnabled,
+  isOrgBillingEnabled,
+  isOrgCreditPurchaseEnabled,
+} from "@/lib/server/feature-flags";
 import { getOrganizationCreditBalance } from "@/lib/server/organization-credits";
 import { OrgCheckoutButton } from "./org-checkout-button";
 
@@ -83,6 +87,14 @@ async function BillingContent({ slug }: { slug: string }) {
       })
     : [];
 
+  // docs/implementation_plan/phase10e.md §6/§42: only an organization
+  // that has never completed a successful purchase is eligible for the
+  // first-purchase launch offer — reusing the same ledger rows already
+  // fetched above, never a second query. Never implies the discount
+  // applies to a second purchase.
+  const hasEverPurchased = ledgerRows.some((row) => row.transactionType === "purchase");
+  const showOrgLaunchOffer = isLaunchDiscountsEnabled() && !hasEverPurchased;
+
   const assessmentIds = Array.from(
     new Set(ledgerRows.map((row) => row.assessmentId).filter((id): id is string => Boolean(id))),
   );
@@ -146,22 +158,31 @@ async function BillingContent({ slug }: { slug: string }) {
                 This organization must be active to purchase credits.
               </p>
             ) : (
-              <div className="mt-4 grid grid-cols-2 gap-4">
-                <div className="rounded-md border border-border bg-surface p-4">
-                  <p className="text-sm font-medium">1 Assessment Credit</p>
-                  <p className="mt-1 font-mono text-xs text-muted">$50</p>
-                  <div className="mt-3">
-                    <OrgCheckoutButton slug={slug} plan="single_credit" label="Buy 1 Credit" />
+              <>
+                {showOrgLaunchOffer && (
+                  <p className="mt-4 rounded border border-border bg-surface px-3 py-2 font-mono text-[11px] text-muted">
+                    <span className="text-foreground">Launch offer:</span> 50% off your
+                    organization&apos;s first assessment-credit purchase only. Normal pricing
+                    applies after that.
+                  </p>
+                )}
+                <div className="mt-4 grid grid-cols-2 gap-4">
+                  <div className="rounded-md border border-border bg-surface p-4">
+                    <p className="text-sm font-medium">1 Assessment Credit</p>
+                    <p className="mt-1 font-mono text-xs text-muted">$50</p>
+                    <div className="mt-3">
+                      <OrgCheckoutButton slug={slug} plan="single_credit" label="Buy 1 Credit" />
+                    </div>
+                  </div>
+                  <div className="rounded-md border border-border bg-surface p-4">
+                    <p className="text-sm font-medium">110 Assessment Credits</p>
+                    <p className="mt-1 font-mono text-xs text-muted">$5,000</p>
+                    <div className="mt-3">
+                      <OrgCheckoutButton slug={slug} plan="credit_pack_110" label="Buy 110 Credits" />
+                    </div>
                   </div>
                 </div>
-                <div className="rounded-md border border-border bg-surface p-4">
-                  <p className="text-sm font-medium">110 Assessment Credits</p>
-                  <p className="mt-1 font-mono text-xs text-muted">$5,000</p>
-                  <div className="mt-3">
-                    <OrgCheckoutButton slug={slug} plan="credit_pack_110" label="Buy 110 Credits" />
-                  </div>
-                </div>
-              </div>
+              </>
             )}
           </div>
 

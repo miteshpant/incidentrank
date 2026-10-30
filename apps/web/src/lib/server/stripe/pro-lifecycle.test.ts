@@ -250,6 +250,161 @@ describe("handleInvoiceEvent", () => {
 
     await expect(testDb.transaction((tx) => handleInvoiceEvent(tx, invoice, fakeStripe))).resolves.not.toThrow();
   });
+
+  // docs/implementation_plan/phase10e.md §15/§37 — actual collected
+  // amount persistence from invoice.payment_succeeded (paid) events.
+  it("a paid invoice persists the real amount/currency/discount onto stripeSubscriptions", async () => {
+    const { stripeCustomerId } = await createUserWithCustomer("invoice-amount");
+    const subId = `sub_test_${crypto.randomUUID()}`;
+    const subscription = fakeSubscription({
+      id: subId,
+      customerId: stripeCustomerId,
+      priceId: PRO_MONTHLY_PRICE_ID,
+      status: "active",
+    });
+    const fakeStripe = {
+      subscriptions: { retrieve: async () => subscription },
+    } as unknown as Stripe;
+    const invoice = {
+      status: "paid",
+      amount_paid: 250, // 75% off $9.99 ≈ $2.50
+      currency: "usd",
+      total_discount_amounts: [{ amount: 749, discount: "di_test" }],
+      parent: { subscription_details: { subscription: subId } },
+    } as unknown as Stripe.Invoice;
+
+    await testDb.transaction((tx) => handleInvoiceEvent(tx, invoice, fakeStripe));
+
+    const row = await testDb.query.stripeSubscriptions.findFirst({
+      where: eq(stripeSubscriptions.stripeSubscriptionId, subId),
+    });
+    expect(row?.lastInvoiceAmountPaidUsdCents).toBe(250);
+    expect(row?.lastInvoiceCurrency).toBe("usd");
+    expect(row?.lastInvoiceDiscountAmountUsdCents).toBe(749);
+  });
+
+  it("an unpaid invoice never writes an amount — never misrepresents a failed/draft invoice as collected", async () => {
+    const { stripeCustomerId } = await createUserWithCustomer("invoice-unpaid");
+    const subId = `sub_test_${crypto.randomUUID()}`;
+    const subscription = fakeSubscription({
+      id: subId,
+      customerId: stripeCustomerId,
+      priceId: PRO_MONTHLY_PRICE_ID,
+      status: "active",
+    });
+    const fakeStripe = {
+      subscriptions: { retrieve: async () => subscription },
+    } as unknown as Stripe;
+    const invoice = {
+      status: "open",
+      amount_paid: 0,
+      currency: "usd",
+      total_discount_amounts: null,
+      parent: { subscription_details: { subscription: subId } },
+    } as unknown as Stripe.Invoice;
+
+    await testDb.transaction((tx) => handleInvoiceEvent(tx, invoice, fakeStripe));
+
+    const row = await testDb.query.stripeSubscriptions.findFirst({
+      where: eq(stripeSubscriptions.stripeSubscriptionId, subId),
+    });
+    expect(row?.lastInvoiceAmountPaidUsdCents).toBeNull();
+  });
+
+  it("a later paid invoice (normal-price renewal) overwrites the earlier discounted amount", async () => {
+    const { stripeCustomerId } = await createUserWithCustomer("invoice-renewal");
+    const subId = `sub_test_${crypto.randomUUID()}`;
+    const subscription = fakeSubscription({
+      id: subId,
+      customerId: stripeCustomerId,
+      priceId: PRO_MONTHLY_PRICE_ID,
+      status: "active",
+    });
+    const fakeStripe = {
+      subscriptions: { retrieve: async () => subscription },
+    } as unknown as Stripe;
+
+    await testDb.transaction((tx) =>
+      handleInvoiceEvent(
+        tx,
+        {
+          status: "paid",
+          amount_paid: 250,
+          currency: "usd",
+          total_discount_amounts: [{ amount: 749, discount: "di_test" }],
+          parent: { subscription_details: { subscription: subId } },
+        } as unknown as Stripe.Invoice,
+        fakeStripe,
+      ),
+    );
+    await testDb.transaction((tx) =>
+      handleInvoiceEvent(
+        tx,
+        {
+          status: "paid",
+          amount_paid: 999,
+          currency: "usd",
+          total_discount_amounts: null,
+          parent: { subscription_details: { subscription: subId } },
+        } as unknown as Stripe.Invoice,
+        fakeStripe,
+      ),
+    );
+
+    const row = await testDb.query.stripeSubscriptions.findFirst({
+      where: eq(stripeSubscriptions.stripeSubscriptionId, subId),
+    });
+    expect(row?.lastInvoiceAmountPaidUsdCents).toBe(999);
+    expect(row?.lastInvoiceDiscountAmountUsdCents).toBe(0);
+  });
+
+  it("a plain subscription.updated event (no invoice) never clobbers the last-known invoice amount with null", async () => {
+    const { stripeCustomerId } = await createUserWithCustomer("invoice-preserve");
+    const subId = `sub_test_${crypto.randomUUID()}`;
+    const subscription = fakeSubscription({
+      id: subId,
+      customerId: stripeCustomerId,
+      priceId: PRO_MONTHLY_PRICE_ID,
+      status: "active",
+    });
+    const fakeStripe = {
+      subscriptions: { retrieve: async () => subscription },
+    } as unknown as Stripe;
+
+    await testDb.transaction((tx) =>
+      handleInvoiceEvent(
+        tx,
+        {
+          status: "paid",
+          amount_paid: 250,
+          currency: "usd",
+          total_discount_amounts: [{ amount: 749, discount: "di_test" }],
+          parent: { subscription_details: { subscription: subId } },
+        } as unknown as Stripe.Invoice,
+        fakeStripe,
+      ),
+    );
+    // A plain subscription.updated webhook (e.g. cancel_at_period_end
+    // toggled) — no invoiceAmount, handleSubscriptionEvent's default null.
+    await testDb.transaction((tx) =>
+      handleSubscriptionEvent(
+        tx,
+        fakeSubscription({
+          id: subId,
+          customerId: stripeCustomerId,
+          priceId: PRO_MONTHLY_PRICE_ID,
+          status: "active",
+          cancelAtPeriodEnd: true,
+        }),
+      ),
+    );
+
+    const row = await testDb.query.stripeSubscriptions.findFirst({
+      where: eq(stripeSubscriptions.stripeSubscriptionId, subId),
+    });
+    expect(row?.lastInvoiceAmountPaidUsdCents).toBe(250);
+    expect(row?.cancelAtPeriodEnd).toBe(true);
+  });
 });
 
 describe("hasActivePaidEntitlement", () => {

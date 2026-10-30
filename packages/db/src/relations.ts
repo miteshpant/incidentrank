@@ -9,11 +9,15 @@ import {
   attemptActionGroups,
   attemptEvents,
   attempts,
+  benchmarkActionFacts,
+  benchmarkAttemptFacts,
+  benchmarkSubjects,
   foundingEngineerAllocations,
   incidentPasses,
   legalAcceptances,
   organizationAuditEvents,
   organizationInvitations,
+  organizationLaunchDiscountClaims,
   organizationMembers,
   organizations,
   paidEntitlements,
@@ -45,6 +49,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   rankSnapshots: many(rankSnapshots),
   legalAcceptances: many(legalAcceptances),
   privacyRequests: many(privacyRequests),
+  benchmarkSubject: many(benchmarkSubjects),
 }));
 
 export const scenariosRelations = relations(scenarios, ({ one, many }) => ({
@@ -102,6 +107,7 @@ export const organizationsRelations = relations(organizations, ({ many }) => ({
   assessments: many(assessments),
   scenarios: many(scenarios),
   auditEvents: many(organizationAuditEvents),
+  launchDiscountClaims: many(organizationLaunchDiscountClaims),
 }));
 
 export const organizationMembersRelations = relations(
@@ -367,6 +373,56 @@ export const privacyRequestsRelations = relations(
     user: one(users, {
       fields: [privacyRequests.userId],
       references: [users.id],
+    }),
+  }),
+);
+
+export const organizationLaunchDiscountClaimsRelations = relations(
+  organizationLaunchDiscountClaims,
+  ({ one }) => ({
+    organization: one(organizations, {
+      fields: [organizationLaunchDiscountClaims.organizationId],
+      references: [organizations.id],
+    }),
+  }),
+);
+
+export const benchmarkSubjectsRelations = relations(
+  benchmarkSubjects,
+  ({ one, many }) => ({
+    user: one(users, {
+      fields: [benchmarkSubjects.userId],
+      references: [users.id],
+    }),
+    attemptFacts: many(benchmarkAttemptFacts),
+  }),
+);
+
+export const benchmarkAttemptFactsRelations = relations(
+  benchmarkAttemptFacts,
+  ({ one, many }) => ({
+    attempt: one(attempts, {
+      fields: [benchmarkAttemptFacts.attemptId],
+      references: [attempts.id],
+    }),
+    benchmarkSubject: one(benchmarkSubjects, {
+      fields: [benchmarkAttemptFacts.benchmarkSubjectId],
+      references: [benchmarkSubjects.id],
+    }),
+    scenario: one(scenarios, {
+      fields: [benchmarkAttemptFacts.scenarioId],
+      references: [scenarios.id],
+    }),
+    actionFacts: many(benchmarkActionFacts),
+  }),
+);
+
+export const benchmarkActionFactsRelations = relations(
+  benchmarkActionFacts,
+  ({ one }) => ({
+    attemptFact: one(benchmarkAttemptFacts, {
+      fields: [benchmarkActionFacts.benchmarkAttemptFactId],
+      references: [benchmarkAttemptFacts.id],
     }),
   }),
 );

@@ -1196,6 +1196,19 @@ export const paidEntitlements = pgTable("paid_entitlements", {
   // whose period end is not yet known.
   currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
   endedAt: timestamp("ended_at", { withTimezone: true }),
+
+  // Phase 10E (docs/implementation_plan/phase10e.md §15) — the real
+  // amount Stripe actually collected for this one-time purchase (Founding
+  // only — Pro is a subscription, tracked on stripeSubscriptions below).
+  // Populated from the Checkout Session's amount_total/currency/
+  // total_details.amount_discount at webhook-handling time. Nullable: a
+  // row created before this migration has no captured amount and must be
+  // excluded from "gross collected" reporting, never estimated from list
+  // price (the exact anti-pattern this phase corrects).
+  amountTotalUsdCents: integer("amount_total_usd_cents"),
+  currency: text("currency"),
+  discountAmountUsdCents: integer("discount_amount_usd_cents"),
+
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1241,6 +1254,18 @@ export const stripeSubscriptions = pgTable("stripe_subscriptions", {
   cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
   canceledAt: timestamp("canceled_at", { withTimezone: true }),
   endedAt: timestamp("ended_at", { withTimezone: true }),
+
+  // Phase 10E (phase10e.md §15) — reconciled from the most recent
+  // successful invoice.payment_succeeded event for this subscription
+  // (amount_paid/currency), so a discounted first invoice and later
+  // normal-price renewal invoices are both reflected over time as they
+  // occur. Nullable for the same reason as paidEntitlements above.
+  lastInvoiceAmountPaidUsdCents: integer("last_invoice_amount_paid_usd_cents"),
+  lastInvoiceCurrency: text("last_invoice_currency"),
+  lastInvoiceDiscountAmountUsdCents: integer(
+    "last_invoice_discount_amount_usd_cents",
+  ),
+
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -1418,6 +1443,16 @@ export const organizationCreditLedger = pgTable(
     createdByUserId: uuid("created_by_user_id").references(() => users.id, {
       onDelete: "set null",
     }),
+
+    // Phase 10E (phase10e.md §15) — populated only for
+    // transactionType='purchase' rows, from the Checkout Session's
+    // amount_total/currency/total_details.amount_discount. Never
+    // populated for 'assessment_started'/'admin_adjustment'/etc, which
+    // are credit-quantity movements, not payment events. Nullable for the
+    // same legacy-row reason as paidEntitlements above.
+    amountTotalUsdCents: integer("amount_total_usd_cents"),
+    currency: text("currency"),
+    discountAmountUsdCents: integer("discount_amount_usd_cents"),
 
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -1642,4 +1677,217 @@ export const privacyRequests = pgTable(
     ),
     index("privacy_requests_status_idx").on(table.status),
   ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10E — organization launch-discount first-purchase claims. One
+// lifetime claim per organization (never per user — the organization is
+// the commercial customer, docs/implementation_plan/phase10e.md §6). A
+// UNIQUE index on organizationId (not partial) enforces "at most one claim
+// row, ever, per organization" at the database level: checkout creation
+// does INSERT ... ON CONFLICT (organization_id) DO NOTHING, so a losing
+// concurrent request simply proceeds without a discount rather than
+// erroring. `reserved` rows older than `expiresAt` with no matching
+// successful organization_credit_ledger purchase are treated as
+// reclaimable by a fresh checkout attempt (never a cron job) — this is
+// what prevents an abandoned Checkout Session from permanently burning
+// the organization's one discount (§8).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const organizationLaunchDiscountClaimStatusEnum = pgEnum(
+  "organization_launch_discount_claim_status",
+  ["reserved", "redeemed", "released", "expired"],
+);
+
+export const organizationLaunchDiscountClaims = pgTable(
+  "organization_launch_discount_claims",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: uuid("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+
+    status: organizationLaunchDiscountClaimStatusEnum("status")
+      .notNull()
+      .default("reserved"),
+    stripeCheckoutSessionId: text("stripe_checkout_session_id"),
+
+    reservedAt: timestamp("reserved_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    redeemedAt: timestamp("redeemed_at", { withTimezone: true }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("organization_launch_discount_claims_org_id_idx").on(
+      table.organizationId,
+    ),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10E Part B — benchmark data foundation (docs/implementation_plan/
+// phase10e.md §18-§36). A rebuildable, derived projection over authoritative
+// attempt/action data — never the source of truth for anything, never
+// touched by scoring/ranking logic itself. V1 scope is IncidentRank-owned
+// completed PRACTICE attempts only (§24): never assessment attempts,
+// never organization-owned scenarios. Benchmark subject uses a separate
+// random pseudonymous id rather than userId directly so analytical tables
+// never need to duplicate/join through displayName, email, or Clerk
+// identity (§20) — only the FK to users.id, which itself survives account
+// anonymization unchanged (account-deletion.ts never mutates users.id).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const benchmarkSubjects = pgTable(
+  "benchmark_subjects",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [uniqueIndex("benchmark_subjects_user_id_idx").on(table.userId)],
+);
+
+export const benchmarkAttemptFacts = pgTable(
+  "benchmark_attempt_facts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => attempts.id, { onDelete: "cascade" }),
+    benchmarkSubjectId: uuid("benchmark_subject_id")
+      .notNull()
+      .references(() => benchmarkSubjects.id, { onDelete: "cascade" }),
+
+    scenarioId: uuid("scenario_id")
+      .notNull()
+      .references(() => scenarios.id, { onDelete: "cascade" }),
+    scenarioVersion: integer("scenario_version").notNull(),
+    scenarioSlug: text("scenario_slug").notNull(),
+
+    // Snapshotted from the scenario catalog AT THE TIME of materialization
+    // (phase10e.md §26 "difficulty-at-attempt") — never re-derived live
+    // from today's catalog, which could have since changed the scenario's
+    // difficulty/category.
+    difficulty: text("difficulty").notNull(),
+    category: text("category"),
+
+    scoringVersion: text("scoring_version").notNull(),
+    rankAlgorithmVersion: text("rank_algorithm_version").notNull(),
+    benchmarkProjectionVersion: text("benchmark_projection_version").notNull(),
+
+    attemptNumberForScenario: integer("attempt_number_for_scenario").notNull(),
+    isFirstAttempt: boolean("is_first_attempt").notNull(),
+
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+    completedAt: timestamp("completed_at", { withTimezone: true }).notNull(),
+    durationSeconds: integer("duration_seconds").notNull(),
+
+    terminalOutcome: attemptOutcomeEnum("terminal_outcome").notNull(),
+    rawScore: real("raw_score"),
+    normalizedScore: real("normalized_score"),
+
+    recoveryScore: real("recovery_score"),
+    customerImpactScore: real("customer_impact_score"),
+    dataIntegrityScore: real("data_integrity_score"),
+    reliabilityScore: real("reliability_score"),
+    costEfficiencyScore: real("cost_efficiency_score"),
+    operationalEfficiencyScore: real("operational_efficiency_score"),
+
+    // The user's rank band immediately before/after this attempt, if a
+    // rank snapshot exists for each side — null when Engineer Rank has no
+    // evidence yet at that point in time. Purely descriptive context, never
+    // used to recompute rank.
+    rankBefore: rankBandEnum("rank_before"),
+    rankAfter: rankBandEnum("rank_after"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Idempotent rematerialization target (phase10e.md §28) — rebuild
+    // always upserts against this exact pair, never duplicates a fact row
+    // for the same attempt at the same projection version. A projection
+    // version bump naturally creates a parallel new-version row rather
+    // than overwriting/discarding the old version's evidence.
+    uniqueIndex("benchmark_attempt_facts_attempt_version_idx").on(
+      table.attemptId,
+      table.benchmarkProjectionVersion,
+    ),
+    index("benchmark_attempt_facts_scenario_id_idx").on(table.scenarioId),
+    index("benchmark_attempt_facts_subject_id_idx").on(table.benchmarkSubjectId),
+    index("benchmark_attempt_facts_is_first_attempt_idx").on(table.isFirstAttempt),
+  ],
+);
+
+export const benchmarkActionFacts = pgTable(
+  "benchmark_action_facts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    benchmarkAttemptFactId: uuid("benchmark_attempt_fact_id")
+      .notNull()
+      .references(() => benchmarkAttemptFacts.id, { onDelete: "cascade" }),
+    sequenceNumber: integer("sequence_number").notNull(),
+
+    // Mirrors the source attemptActionGroups row this fact was derived
+    // from — actionId is that group's own id; actionGroupId is kept as a
+    // distinct, explicitly-named field per phase10e.md §22's shape even
+    // though both currently point at the same source row (never collapsed
+    // into one column, since a future capture model could legitimately
+    // separate them).
+    actionId: uuid("action_id").notNull(),
+    actionGroupId: uuid("action_group_id").notNull(),
+    // Derived from the dominant/first controlKey among that action
+    // group's changes — never an invented subjective label (§22 "do not
+    // invent subjective labels unsupported by simulator metadata").
+    actionType: text("action_type"),
+
+    elapsedSeconds: integer("elapsed_seconds").notNull(),
+
+    // Allowlisted system-state snapshots — deliberately NOT the full
+    // finalStateJson blob (§22's "allowlisted system state before/after"),
+    // populated only with fields the simulator already exposes as
+    // structured control/severity data, never free-text reasoning.
+    systemStateBeforeJson: jsonb("system_state_before_json"),
+    systemStateAfterJson: jsonb("system_state_after_json"),
+
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("benchmark_action_facts_fact_sequence_idx").on(
+      table.benchmarkAttemptFactId,
+      table.sequenceNumber,
+    ),
+  ],
+);
+
+// Materialization-failure log (phase10e.md §27/§32) — a benchmark
+// projection bug must be visible operationally but can never destroy or
+// block the underlying completed attempt. Written only from the
+// post-commit, best-effort materialization call; never written inside the
+// same transaction as the attempt's own terminal persistence.
+export const benchmarkProjectionFailures = pgTable(
+  "benchmark_projection_failures",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    attemptId: uuid("attempt_id")
+      .notNull()
+      .references(() => attempts.id, { onDelete: "cascade" }),
+    error: text("error").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("benchmark_projection_failures_attempt_id_idx").on(table.attemptId)],
 );

@@ -31,6 +31,10 @@ async function withTestUser<T>(user: User, fn: () => Promise<T>): Promise<T> {
 }
 
 let mockSessionCounter = 0;
+// Captures the params of the most recent checkout.sessions.create() call so
+// discount tests can assert exactly what was (or wasn't) sent to Stripe,
+// without needing a real Stripe API round-trip.
+let lastSessionCreateParams: { discounts?: unknown } | undefined;
 vi.mock("@/lib/server/stripe/client", () => ({
   getStripeClient: () => ({
     customers: {
@@ -38,10 +42,13 @@ vi.mock("@/lib/server/stripe/client", () => ({
     },
     checkout: {
       sessions: {
-        create: async () => ({
-          id: `cs_mock_${++mockSessionCounter}_${crypto.randomUUID().slice(0, 8)}`,
-          url: `https://checkout.stripe.com/mock/${mockSessionCounter}`,
-        }),
+        create: async (params: { discounts?: unknown }) => {
+          lastSessionCreateParams = params;
+          return {
+            id: `cs_mock_${++mockSessionCounter}_${crypto.randomUUID().slice(0, 8)}`,
+            url: `https://checkout.stripe.com/mock/${mockSessionCounter}`,
+          };
+        },
       },
     },
   }),
@@ -282,5 +289,91 @@ describe("POST /api/stripe/checkout", () => {
 
     const statuses = responses.map((r) => r.status).sort();
     expect(statuses).toEqual([200, 409]);
+  });
+});
+
+// docs/implementation_plan/phase10e.md §37 (required discount tests
+// 1-8, personal-plan scope). Org first-purchase discount tests live
+// separately with the org checkout route.
+describe("POST /api/stripe/checkout — launch discounts", () => {
+  it("launch flag off -> no discount is sent to Stripe at all", async () => {
+    vi.stubEnv("LAUNCH_DISCOUNTS_ENABLED", "false");
+    const user = await createUser("discount-flag-off");
+
+    const response = await withTestUser(user, () => POST(postBody("pro_monthly")));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateParams?.discounts).toBeUndefined();
+  });
+
+  it("monthly eligible checkout gets the configured monthly launch coupon", async () => {
+    vi.stubEnv("LAUNCH_DISCOUNTS_ENABLED", "true");
+    vi.stubEnv("STRIPE_PRO_MONTHLY_LAUNCH_COUPON_ID", "ir_test_monthly_coupon");
+    const user = await createUser("discount-monthly");
+
+    const response = await withTestUser(user, () => POST(postBody("pro_monthly")));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateParams?.discounts).toEqual([{ coupon: "ir_test_monthly_coupon" }]);
+  });
+
+  it("annual eligible checkout gets the configured annual launch coupon", async () => {
+    vi.stubEnv("LAUNCH_DISCOUNTS_ENABLED", "true");
+    vi.stubEnv("STRIPE_PRO_ANNUAL_LAUNCH_COUPON_ID", "ir_test_annual_coupon");
+    const user = await createUser("discount-annual");
+
+    const response = await withTestUser(user, () => POST(postBody("pro_annual")));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateParams?.discounts).toEqual([{ coupon: "ir_test_annual_coupon" }]);
+  });
+
+  it("Founding eligible checkout gets the configured Founding launch coupon and still reserves exactly one slot", async () => {
+    vi.stubEnv("LAUNCH_DISCOUNTS_ENABLED", "true");
+    vi.stubEnv("STRIPE_FOUNDING_LAUNCH_COUPON_ID", "ir_test_founding_coupon");
+    await seedSlots(1);
+    const user = await createUser("discount-founding");
+
+    const response = await withTestUser(user, () => POST(postBody("founding_lifetime")));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateParams?.discounts).toEqual([{ coupon: "ir_test_founding_coupon" }]);
+    const allocation = await testDb.query.foundingEngineerAllocations.findFirst({
+      where: eq(foundingEngineerAllocations.userId, user.id),
+    });
+    expect(allocation?.status).toBe("reserved");
+  });
+
+  it("missing coupon config fails safe to no discount, never blocks checkout", async () => {
+    vi.stubEnv("LAUNCH_DISCOUNTS_ENABLED", "true");
+    vi.stubEnv("STRIPE_PRO_MONTHLY_LAUNCH_COUPON_ID", "");
+    const user = await createUser("discount-unconfigured");
+
+    const response = await withTestUser(user, () => POST(postBody("pro_monthly")));
+
+    expect(response.status).toBe(200);
+    expect(lastSessionCreateParams?.discounts).toBeUndefined();
+  });
+
+  it("an arbitrary coupon/discount field supplied by the client is ignored — the server never reads it", async () => {
+    vi.stubEnv("LAUNCH_DISCOUNTS_ENABLED", "true");
+    vi.stubEnv("STRIPE_PRO_MONTHLY_LAUNCH_COUPON_ID", "ir_test_monthly_coupon");
+    const user = await createUser("discount-client-supplied");
+
+    const request = new Request("http://localhost/api/stripe/checkout", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        plan: "pro_monthly",
+        coupon: "client_injected_coupon",
+        discountPercent: 99,
+      }),
+    });
+    const response = await withTestUser(user, () => POST(request));
+
+    expect(response.status).toBe(200);
+    // Only the server-configured coupon is ever sent — the client-supplied
+    // "coupon"/"discountPercent" fields above are never read by the route.
+    expect(lastSessionCreateParams?.discounts).toEqual([{ coupon: "ir_test_monthly_coupon" }]);
   });
 });

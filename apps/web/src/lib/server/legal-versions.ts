@@ -14,7 +14,17 @@ import "server-only";
  */
 
 export const CURRENT_TERMS_VERSION = "2026-10-v1";
-export const CURRENT_PRIVACY_VERSION = "2026-10-v1";
+// Phase 10E (docs/implementation_plan/phase10e.md §33): bumped to v2 —
+// privacy.ts's new "Benchmark research" section is a material addition
+// (a new, previously-undisclosed use of pseudonymous practice-attempt
+// data for internal calibration/research). Never edit text under the v1
+// identifier that users already accepted it under — this is a genuinely
+// new version, not an in-place edit. Because the legal-acceptance gate
+// only ever applies to users created at/after legalAcceptanceGateCutoverAt()
+// (a fixed, already-past instant — see requireCurrentLegalAcceptance
+// below), this bump has zero effect on any existing user: they remain
+// permanently exempt from the gate regardless of version, by design.
+export const CURRENT_PRIVACY_VERSION = "2026-10-v2";
 export const CURRENT_ASSESSMENT_NOTICE_VERSION = "2026-10-v1";
 export const CURRENT_ORG_TERMS_VERSION = "2026-10-v1";
 

@@ -5,6 +5,7 @@ import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { loadOwnedAttempt } from "@/lib/server/load-owned-attempt";
 import { resolveSimulationDefinition } from "@/lib/server/scenario-registry";
 import { persistTerminalAttempt } from "@/lib/server/terminal-attempt";
+import { materializeBenchmarkAttemptFactSafely } from "@/lib/server/benchmark/materialize";
 import { isAttemptActive } from "@/lib/attempt-lifecycle";
 
 interface CompleteAttemptBody {
@@ -136,6 +137,13 @@ export async function POST(
   const result = await persistTerminalAttempt(db, owned.attempt, inputs, body.finalState, {
     outcome: body.status,
   });
+
+  // Phase 10E (docs/implementation_plan/phase10e.md §27): called after
+  // persistTerminalAttempt's own write has already committed (it was
+  // never wrapped in a transaction here) — self-contained failure
+  // isolation, never throws back to this route. No-op for assessment
+  // attempts (materializeBenchmarkAttemptFact's own practice-only gate).
+  await materializeBenchmarkAttemptFactSafely(owned.attempt.id);
 
   return NextResponse.json({ score: result });
 }

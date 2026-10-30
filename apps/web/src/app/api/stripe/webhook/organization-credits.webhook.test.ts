@@ -4,6 +4,7 @@ import {
   createDb,
   organizationAuditEvents,
   organizationCreditLedger,
+  organizationLaunchDiscountClaims,
   organizationMembers,
   organizations,
   organizationStripeCustomers,
@@ -76,6 +77,9 @@ afterEach(async () => {
   });
   for (const org of orgs) {
     await testDb.delete(organizationAuditEvents).where(eq(organizationAuditEvents.organizationId, org.id));
+    await testDb
+      .delete(organizationLaunchDiscountClaims)
+      .where(eq(organizationLaunchDiscountClaims.organizationId, org.id));
     await testDb.delete(organizationCreditLedger).where(eq(organizationCreditLedger.organizationId, org.id));
     await testDb
       .delete(organizationStripeCustomers)
@@ -142,6 +146,9 @@ function orgCreditSessionObject(opts: {
   organizationId: string;
   plan: string;
   purchasingUserId?: string | null;
+  amountTotal?: number;
+  currency?: string;
+  amountDiscount?: number;
 }) {
   return {
     id: opts.sessionId,
@@ -149,6 +156,9 @@ function orgCreditSessionObject(opts: {
     payment_status: "paid",
     customer: opts.stripeCustomerId,
     payment_intent: `pi_test_${crypto.randomUUID().slice(0, 8)}`,
+    amount_total: opts.amountTotal ?? 5000,
+    currency: opts.currency ?? "usd",
+    total_details: { amount_discount: opts.amountDiscount ?? 0 },
     metadata: {
       application: "incidentrank",
       purchase_type: "organization_assessment_credits",
@@ -342,5 +352,176 @@ describe("checkout.session.completed — organization assessment credits", () =>
 
     const balance = await getOrganizationCreditBalance(org.id);
     expect(balance.available).toBe(1);
+  });
+});
+
+describe("checkout.session.completed — actual amount persistence", () => {
+  it("persists the real amount/currency/discount onto the purchase ledger row", async () => {
+    const { org, stripeCustomerId } = await createOrgWithStripeCustomer();
+    lineItemsPriceId = SINGLE_PRICE_ID;
+    const sessionId = `cs_test_${crypto.randomUUID()}`;
+
+    await POST(
+      signedRequest(
+        buildEvent({
+          id: `evt_test_${crypto.randomUUID()}`,
+          type: "checkout.session.completed",
+          object: orgCreditSessionObject({
+            sessionId,
+            stripeCustomerId,
+            organizationId: org.id,
+            plan: "single_credit",
+            amountTotal: 2500,
+            currency: "usd",
+            amountDiscount: 2500,
+          }),
+        }),
+      ),
+    );
+
+    const row = await testDb.query.organizationCreditLedger.findFirst({
+      where: eq(organizationCreditLedger.stripeCheckoutSessionId, sessionId),
+    });
+    expect(row?.amountTotalUsdCents).toBe(2500);
+    expect(row?.currency).toBe("usd");
+    expect(row?.discountAmountUsdCents).toBe(2500);
+  });
+
+  it("credit quantity granted is unaffected by the discount amount — still exactly the configured plan quantity", async () => {
+    const { org, stripeCustomerId } = await createOrgWithStripeCustomer();
+    lineItemsPriceId = PACK_PRICE_ID;
+    const sessionId = `cs_test_${crypto.randomUUID()}`;
+
+    await POST(
+      signedRequest(
+        buildEvent({
+          id: `evt_test_${crypto.randomUUID()}`,
+          type: "checkout.session.completed",
+          object: orgCreditSessionObject({
+            sessionId,
+            stripeCustomerId,
+            organizationId: org.id,
+            plan: "credit_pack_110",
+            amountTotal: 250_000, // 50% off $5,000
+            currency: "usd",
+            amountDiscount: 250_000,
+          }),
+        }),
+      ),
+    );
+
+    const balance = await getOrganizationCreditBalance(org.id);
+    expect(balance.available).toBe(110);
+  });
+});
+
+describe("checkout.session.completed — launch discount claim redemption", () => {
+  it("a reserved claim for this exact session is redeemed on successful purchase", async () => {
+    const { org, stripeCustomerId } = await createOrgWithStripeCustomer();
+    lineItemsPriceId = SINGLE_PRICE_ID;
+    const sessionId = `cs_test_${crypto.randomUUID()}`;
+    await testDb.insert(organizationLaunchDiscountClaims).values({
+      organizationId: org.id,
+      status: "reserved",
+      stripeCheckoutSessionId: sessionId,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const response = await POST(
+      signedRequest(
+        buildEvent({
+          id: `evt_test_${crypto.randomUUID()}`,
+          type: "checkout.session.completed",
+          object: orgCreditSessionObject({ sessionId, stripeCustomerId, organizationId: org.id, plan: "single_credit" }),
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const claim = await testDb.query.organizationLaunchDiscountClaims.findFirst({
+      where: eq(organizationLaunchDiscountClaims.organizationId, org.id),
+    });
+    expect(claim?.status).toBe("redeemed");
+    expect(claim?.redeemedAt).not.toBeNull();
+  });
+
+  it("an organization with no reserved claim at all is unaffected — redemption is a safe no-op", async () => {
+    const { org, stripeCustomerId } = await createOrgWithStripeCustomer();
+    lineItemsPriceId = SINGLE_PRICE_ID;
+    const sessionId = `cs_test_${crypto.randomUUID()}`;
+
+    const response = await POST(
+      signedRequest(
+        buildEvent({
+          id: `evt_test_${crypto.randomUUID()}`,
+          type: "checkout.session.completed",
+          object: orgCreditSessionObject({ sessionId, stripeCustomerId, organizationId: org.id, plan: "single_credit" }),
+        }),
+      ),
+    );
+
+    expect(response.status).toBe(200);
+    const claim = await testDb.query.organizationLaunchDiscountClaims.findFirst({
+      where: eq(organizationLaunchDiscountClaims.organizationId, org.id),
+    });
+    expect(claim).toBeUndefined();
+    const balance = await getOrganizationCreditBalance(org.id);
+    expect(balance.available).toBe(1);
+  });
+
+  it("credit quantity granted is unaffected by whether a discount claim was redeemed", async () => {
+    const { org, stripeCustomerId } = await createOrgWithStripeCustomer();
+    lineItemsPriceId = PACK_PRICE_ID;
+    const sessionId = `cs_test_${crypto.randomUUID()}`;
+    await testDb.insert(organizationLaunchDiscountClaims).values({
+      organizationId: org.id,
+      status: "reserved",
+      stripeCheckoutSessionId: sessionId,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    await POST(
+      signedRequest(
+        buildEvent({
+          id: `evt_test_${crypto.randomUUID()}`,
+          type: "checkout.session.completed",
+          object: orgCreditSessionObject({ sessionId, stripeCustomerId, organizationId: org.id, plan: "credit_pack_110" }),
+        }),
+      ),
+    );
+
+    // Still exactly 110 — the ledger's credit quantity is derived purely
+    // from the configured Price ID, never from the discount/amount paid.
+    const balance = await getOrganizationCreditBalance(org.id);
+    expect(balance.available).toBe(110);
+  });
+
+  it("duplicate webhook delivery redeems the claim at most once (idempotent)", async () => {
+    const { org, stripeCustomerId } = await createOrgWithStripeCustomer();
+    lineItemsPriceId = SINGLE_PRICE_ID;
+    const sessionId = `cs_test_${crypto.randomUUID()}`;
+    await testDb.insert(organizationLaunchDiscountClaims).values({
+      organizationId: org.id,
+      status: "reserved",
+      stripeCheckoutSessionId: sessionId,
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const object = orgCreditSessionObject({ sessionId, stripeCustomerId, organizationId: org.id, plan: "single_credit" });
+
+    await POST(
+      signedRequest(buildEvent({ id: `evt_test_${crypto.randomUUID()}`, type: "checkout.session.completed", object })),
+    );
+    const beforeSecond = await testDb.query.organizationLaunchDiscountClaims.findFirst({
+      where: eq(organizationLaunchDiscountClaims.organizationId, org.id),
+    });
+    await POST(
+      signedRequest(buildEvent({ id: `evt_test_${crypto.randomUUID()}`, type: "checkout.session.completed", object })),
+    );
+    const afterSecond = await testDb.query.organizationLaunchDiscountClaims.findFirst({
+      where: eq(organizationLaunchDiscountClaims.organizationId, org.id),
+    });
+
+    expect(beforeSecond?.status).toBe("redeemed");
+    expect(afterSecond?.redeemedAt?.getTime()).toBe(beforeSecond?.redeemedAt?.getTime());
   });
 });

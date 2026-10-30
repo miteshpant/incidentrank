@@ -13,6 +13,7 @@ import {
 import { db } from "./db";
 import { resolveSimulationDefinition } from "./scenario-registry";
 import { persistTerminalAttempt } from "./terminal-attempt";
+import { materializeBenchmarkAttemptFactSafely } from "./benchmark/materialize";
 
 export type FinishableAttempt = Attempt & { scenario: Scenario };
 
@@ -137,6 +138,18 @@ export async function finishAttempt(
     const result = rebuildFinishResultFromRow(outcome.lockedAttempt);
     return { ok: true, result, alreadyApplied: true };
   }
+
+  // Phase 10E (docs/implementation_plan/phase10e.md §27): called only
+  // AFTER the db.transaction above has already committed — never inside
+  // it — so a benchmark-materialization bug can never roll back this
+  // genuinely-new terminal completion. Awaited (not fire-and-forget) so
+  // it reliably runs to completion before the request ends, but its own
+  // internal try/catch guarantees a failure here is logged and never
+  // thrown back to this caller. Only runs on a real first application
+  // (outcome.kind === "applied"), never on an idempotent replay,
+  // matching persistRankSnapshotIfChanged's own only-the-race-winner
+  // convention one layer up.
+  await materializeBenchmarkAttemptFactSafely(attempt.id);
 
   return { ok: true, result: outcome.result, alreadyApplied: false };
 }

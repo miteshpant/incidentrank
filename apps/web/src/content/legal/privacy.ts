@@ -8,7 +8,7 @@
  * instruction).
  */
 
-export const PRIVACY_VERSION = "2026-10-v1";
+export const PRIVACY_VERSION = "2026-10-v2";
 
 export const PRIVACY_TITLE = "IncidentRank Privacy Policy";
 
@@ -40,7 +40,11 @@ When you complete a practice incident simulation, we store your attempt history,
 
 Engineer Rank is a personal benchmark computed from your completed practice attempts. By default, your Engineer Rank is private — visible only to you and, where necessary for support, IncidentRank platform administrators. Organizations you participate in assessments for do not automatically gain access to your personal Engineer Rank.
 
-## 6. Leaderboard (opt-in only)
+## 6. Benchmark research (pseudonymous)
+
+Separately from Engineer Rank, we use a pseudonymous copy of your completed practice-incident data — which scenario, difficulty, category, your decision sequence and timing, your terminal outcome, and your score breakdown — to calibrate IncidentRank's scenarios and build an aggregate benchmark of production-engineering judgment. This data is linked to your account only by an internal, randomly generated reference, never by your display name, email, or authentication identity, and is never shown as an individual engineer's record in any dashboard or report — only as part of aggregate statistics (for example, "68% of first-time attempts at this scenario resolved the incident"). This applies only to practice incidents on IncidentRank-owned scenarios; your employer-assessment attempts and any organization-private scenario content are never included. We do not use this data for third-party advertising, and we do not sell it.
+
+## 7. Leaderboard (opt-in only)
 
 IncidentRank offers an optional public leaderboard. Your profile never appears on it unless you explicitly opt in through your profile settings. Accepting these Terms or our Privacy Policy does not opt you into the leaderboard — it is a separate, explicit choice, never pre-checked.
 
@@ -48,27 +52,27 @@ If you opt in, the following becomes publicly visible: your display name, your I
 
 You may opt out at any time; doing so removes your profile from the public leaderboard and from the public leaderboard API.
 
-## 7. Billing and transaction information
+## 8. Billing and transaction information
 
-We use Stripe to process payments. Stripe collects your payment card details directly — IncidentRank's servers never receive or store your full card number, CVC, or raw bank account credentials. We store only billing identifiers issued by Stripe (such as customer and subscription references), purchase status, and timestamps, which we use for access control, billing support, and revenue reporting.
+We use Stripe to process payments. Stripe collects your payment card details directly — IncidentRank's servers never receive or store your full card number, CVC, or raw bank account credentials. We store only billing identifiers issued by Stripe (such as customer and subscription references), purchase status, timestamps, and the actual amount charged (which may reflect a promotional discount), which we use for access control, billing support, and revenue reporting.
 
-## 8. Referral information
+## 9. Referral information
 
 If you refer another person to IncidentRank, we store your referral code and the relationship between you and anyone who uses it, to track reward eligibility.
 
-## 9. Security and audit information
+## 10. Security and audit information
 
 We maintain internal audit logs of administrative and organizational actions for security and governance purposes. These logs are not publicly visible.
 
-## 10. Technical and log information
+## 11. Technical and log information
 
 IncidentRank does not currently collect IP addresses, device fingerprints, analytics, advertising identifiers, or session-replay data. If this changes in a future version of the Service, we will update this Privacy Policy before doing so.
 
-## 11. How we use information
+## 12. How we use information
 
-We use the information described above to operate the Service: providing practice and assessment functionality, computing Engineer Rank, processing payments, sending transactional emails (never marketing email unless you separately opt into that in the future), maintaining security and audit records, and providing customer support.
+We use the information described above to operate the Service: providing practice and assessment functionality, computing Engineer Rank, calibrating scenarios via pseudonymous benchmark research, processing payments, sending transactional emails (never marketing email unless you separately opt into that in the future), maintaining security and audit records, and providing customer support.
 
-## 12. Service providers
+## 13. Service providers
 
 We share information with the following service providers, each solely to operate the Service:
 
@@ -79,35 +83,35 @@ We share information with the following service providers, each solely to operat
 
 We do not sell your personal information. We do not use your assessment or practice data to train AI models, and we do not use it for third-party advertising or behavioral profiling.
 
-## 13. Disclosure to organizations
+## 14. Disclosure to organizations
 
 If you participate in an organization's assessment, that organization's authorized owners/admins can see your assessment attempt and results for that assessment. This is necessary for the assessment to serve its purpose and is disclosed to you before your first assessment attempt begins.
 
-## 14. Public leaderboard disclosure
+## 15. Public leaderboard disclosure
 
-See Section 6 above — this is the only way your information becomes publicly visible, and only if you explicitly opt in.
+See Section 7 above — this is the only way your information becomes publicly visible, and only if you explicitly opt in.
 
-## 15. Your privacy rights
+## 16. Your privacy rights
 
 You may request access to, correction of, or deletion of your personal information by contacting support@incidentrank.com or by using the in-product privacy request tools where available. Some information may need to be retained for financial, legal, audit, or organizational-integrity reasons even after a deletion request — see our account deletion behavior below.
 
-## 16. Account deletion
+## 17. Account deletion
 
-You may request deletion of your account. When you do, we anonymize your directly-identifying profile information (such as your display name) and disconnect your account from further use. We retain certain records — including organization membership history, completed assessment results an organization relied on, billing/credit history, and audit trails — associated with an anonymized reference rather than your identity, because deleting them could compromise another organization's legitimate hiring records, financial record-keeping, or the evidence that you once accepted these Terms.
+You may request deletion of your account. When you do, we anonymize your directly-identifying profile information (such as your display name) and disconnect your account from further use. We retain certain records — including organization membership history, completed assessment results an organization relied on, billing/credit history, pseudonymous benchmark research records, and audit trails — associated with an anonymized reference rather than your identity, because deleting them could compromise another organization's legitimate hiring records, financial record-keeping, the integrity of our benchmark research, or the evidence that you once accepted these Terms.
 
-## 17. Security
+## 18. Security
 
 We rely on our infrastructure providers' security measures (encryption in transit via TLS, encryption at rest where provided by our database/hosting provider) and do not implement custom cryptography.
 
-## 18. Children
+## 19. Children
 
 IncidentRank is intended for users who are at least 18 years old, or the age of majority in their jurisdiction. We do not knowingly collect information from minors.
 
-## 19. Updates to this policy
+## 20. Updates to this policy
 
 We may update this Privacy Policy. Material changes will be reflected in a new version number, and where applicable, may require renewed acknowledgment before continued use.
 
-## 20. Contact
+## 21. Contact
 
 Questions about this Privacy Policy can be sent to support@incidentrank.com.
 `.trim();
