@@ -11,7 +11,7 @@ import {
 } from "@incidentrank/db";
 import { createDb } from "@incidentrank/db";
 import { compileAuthoredScenario, type AuthoredScenario } from "@incidentrank/scenarios/authoring";
-import { createInitialState, simulate, type CandidateAction } from "@incidentrank/simulator";
+import { ATTEMPT_CEILING_MS, createInitialState, simulate, type CandidateAction } from "@incidentrank/simulator";
 import { createOrgScenario, publishScenarioDraft } from "./scenario-authoring";
 import { finishAttempt } from "./finish-attempt";
 
@@ -660,7 +660,16 @@ describe("finishAttempt", () => {
     it("automatic failure Finish: failedAtMs remains purely engine-derived, unaffected by the resolvedAtMs override mechanism", async () => {
       const { user, scenario } = await setup();
       const attempt = await startPracticeAttempt(user.id, scenario.id, 1);
-      await testDb.update(attempts).set({ lastSimulationTimeMs: 16_000 }).where(eq(attempts.id, attempt.id));
+      // Sustaining a breached failureCondition no longer ends an attempt
+      // on its own — the only automatic-failure trigger left is the
+      // uniform 35-minute attempt ceiling (ATTEMPT_CEILING_MS), measured
+      // from incidentStartedAtMs (this fixture's incidentActive trigger
+      // fires at 5s, not at simulation-time zero). This test asserts
+      // status === "failed" directly, so it must reach past the ceiling.
+      await testDb
+        .update(attempts)
+        .set({ lastSimulationTimeMs: 5_000 + ATTEMPT_CEILING_MS + 1_000 })
+        .where(eq(attempts.id, attempt.id));
 
       const finishable = await loadFinishable(attempt.id);
       const result = await finishAttempt(finishable, "req-failure-time", null);

@@ -14,6 +14,7 @@ import {
 } from "@incidentrank/db";
 import { createDb } from "@incidentrank/db";
 import { paymentRetryStorm, paymentRetryStormSimulation } from "@incidentrank/scenarios";
+import { ATTEMPT_CEILING_MS } from "@incidentrank/simulator";
 import { compileAuthoredScenario, type AuthoredScenario } from "@incidentrank/scenarios/authoring";
 import {
   evaluateCandidateDeclaredFinish,
@@ -874,13 +875,19 @@ describe("Payment Retry Storm regression through the server runtime", () => {
     await resumeRuntimeClock(attempt.id);
 
     // A proven harmful action sequence (same as packages/scenarios/src/
-    // payment-retry-storm/simulation.test.ts) drives the failure
-    // condition (checkoutSuccessRate < 60, sustained 3min) past its
-    // sustain window well before the 15-minute provider-recovery mark.
-    // Failure remains fully automatic in every completion mode
-    // (docs/implementation_plan/phase6.1.md's "Failure Remains
-    // Automatic") — the assessment runtime must complete this on its
-    // own, with no candidate Finish action involved.
+    // payment-retry-storm/simulation.test.ts) keeps the failure
+    // condition (checkoutSuccessRate < 60) sustained throughout, but
+    // sustaining a breached failureCondition no longer ends an attempt
+    // on its own — the only automatic-failure trigger left is the
+    // uniform 35-minute attempt ceiling (ATTEMPT_CEILING_MS), measured
+    // from incidentStartedAtMs. Payment Retry Storm's own incident
+    // starts at 60s (timed-events.ts's INCIDENT_START_MS), not at
+    // simulation-time zero, so the runtime must be advanced past
+    // 60s + the ceiling to reach a genuine automatic failure. Failure
+    // remains fully automatic in every completion mode (docs/
+    // implementation_plan/phase6.1.md's "Failure Remains Automatic") —
+    // the assessment runtime must complete this on its own, with no
+    // candidate Finish action involved.
     const afterAdvance = await driveServerRuntimeThroughActions(
       testDb,
       attempt.id,
@@ -889,7 +896,7 @@ describe("Payment Retry Storm regression through the server runtime", () => {
         { atMs: 65_000, controlKey: "paymentInstances", value: 24 },
         { atMs: 65_000, controlKey: "retries", value: 5 },
       ],
-      66_000 + 3 * 60_000 + 60_000,
+      60_000 + ATTEMPT_CEILING_MS + 60_000,
     );
 
     expect(afterAdvance.status).toBe("completed");

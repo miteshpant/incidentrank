@@ -9,10 +9,13 @@ vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
 import { mockAuthState } from "@/test/clerk-mock";
 
 /**
- * Minimal fixture whose failure condition is already satisfied the
- * instant the incident starts (sustainedSeconds: 0), so the very first
- * tick after acknowledging fails it automatically — no candidate action
- * required. Exercises the AUTOMATIC-failure score-fetch path
+ * Minimal fixture whose failure condition is satisfied the instant the
+ * incident starts. The only automatic-failure trigger in the engine is
+ * now the uniform 35-minute attempt ceiling (packages/simulator/src/
+ * tick.ts's ATTEMPT_CEILING_MS) — sustaining a breached failureCondition
+ * no longer ends an attempt on its own, so this test advances fake
+ * timers past that ceiling to reach a genuine automatic failure.
+ * Exercises the AUTOMATIC-failure score-fetch path
  * (completeAttemptRecord/requestScorePreview via
  * use-incident-attempt.ts's terminal-completion effects). Per the Phase
  * 7.1 doctrine the engine can only ever auto-detect FAILURE — a
@@ -119,9 +122,10 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
     );
     acknowledgeIncident();
 
-    // One tick past the incident start is enough: the failure condition
-    // is already satisfied with sustainedSeconds: 0.
-    advanceSeconds(2);
+    // The failure condition is satisfied from the first tick, but the
+    // engine only ever auto-fails via the uniform 35-minute attempt
+    // ceiling now — advance past it to reach a genuine automatic failure.
+    advanceSeconds(35 * 60);
 
     await act(async () => {
       await Promise.resolve();

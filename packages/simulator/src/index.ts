@@ -58,7 +58,7 @@ export type {
   CompletionEligibility,
   CandidateDeclaredFinishResult,
 } from "./completion";
-export { tickOnce } from "./tick";
+export { tickOnce, ATTEMPT_CEILING_MS } from "./tick";
 export { replayAttempt } from "./replay";
 export type { ReplayActionGroup, ReplayAttemptInput, ReplayResult } from "./replay";
 export { reviewAttempt } from "./review";
