@@ -9,6 +9,7 @@ import type { CandidateActionGroup } from "@/lib/use-incident-attempt";
 import {
   requestActionFeedback,
   type ActionFeedbackGroup,
+  type IncidentNarrativeDTO,
   type ServerScoreResult,
 } from "@/lib/attempt-persistence";
 import { formatElapsed, formatNumber, formatUsd } from "@/lib/format";
@@ -205,6 +206,7 @@ export function GenericResultScreen({
   // stays silent-but-terminal, matching the prior (correct) behavior
   // for an ineligible/missing attempt.
   const [feedbackGroups, setFeedbackGroups] = useState<ActionFeedbackGroup[] | null>(null);
+  const [narrative, setNarrative] = useState<IncidentNarrativeDTO | null>(null);
   useEffect(() => {
     if (!attemptId) return;
     let cancelled = false;
@@ -216,7 +218,8 @@ export function GenericResultScreen({
       void requestActionFeedback(attemptId).then((result) => {
         if (cancelled) return;
         if (!("error" in result)) {
-          setFeedbackGroups(result);
+          setFeedbackGroups(result.actionGroups);
+          setNarrative(result.narrative);
           return;
         }
         attempt += 1;
@@ -376,6 +379,60 @@ export function GenericResultScreen({
             );
           })}
         </div>
+
+        {narrative && (
+          <div className="mt-6 rounded-md border border-border bg-surface p-4">
+            <h2 className="font-mono text-xs uppercase tracking-wide text-muted">
+              What Happened
+            </h2>
+            <dl className="mt-3 flex flex-col gap-3 text-sm">
+              {narrative.rootCause.length > 0 && (
+                <div>
+                  <dt className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                    Root Cause
+                  </dt>
+                  <dd className="mt-1">
+                    {narrative.rootCause.map((entry) => `${entry.label}: ${entry.value}`).join(" · ")}
+                  </dd>
+                </div>
+              )}
+              {narrative.contributingFactors.length > 0 && (
+                <div>
+                  <dt className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                    Contributing Factors
+                  </dt>
+                  <dd className="mt-1">
+                    {narrative.contributingFactors
+                      .map((entry) => `${entry.label}: ${entry.value}`)
+                      .join(" · ")}
+                  </dd>
+                </div>
+              )}
+              {narrative.observedEffects.length > 0 && (
+                <div>
+                  <dt className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                    Observed Effects
+                  </dt>
+                  <dd className="mt-1">
+                    {narrative.observedEffects
+                      .map((entry) => `${entry.label}: ${entry.value}`)
+                      .join(" · ")}
+                  </dd>
+                </div>
+              )}
+              {narrative.context.length > 0 && (
+                <div>
+                  <dt className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                    Context
+                  </dt>
+                  <dd className="mt-1">
+                    {narrative.context.map((entry) => `${entry.label}: ${entry.value}`).join(" · ")}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          </div>
+        )}
 
         {actionGroups.length > 0 && (
           <div className="mt-6">

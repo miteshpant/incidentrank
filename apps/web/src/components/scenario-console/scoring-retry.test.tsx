@@ -72,6 +72,7 @@ const scenario: ScenarioDefinition = {
   difficulty: "beginner",
   estimatedMinutes: 1,
   isFree: true,
+  structure: "linear",
   simulation,
 };
 

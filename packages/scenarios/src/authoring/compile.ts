@@ -157,6 +157,14 @@ export function compileAuthoredScenario(raw: unknown): CompileAuthoredScenarioRe
     difficulty: authored.basics.difficulty,
     estimatedMinutes: authored.basics.estimatedMinutes,
     isFree: false,
+    // Phase 10F: missing on every scenario authored before this phase —
+    // default to "linear", the literal truth of every pre-existing
+    // authored scenario (none used branching/parallel/cascading rule
+    // topology on purpose). domain/primarySkill/secondarySkills stay on
+    // AuthoredBasics only (queryable from definitionJson directly) —
+    // not threaded into the compiled definition, since org-authored
+    // scenarios never set `library` and are never library-listed.
+    structure: authored.basics.structure ?? "linear",
     simulation,
   };
 

@@ -16,7 +16,29 @@
 // decrement, emit authored event, duration-based conditions).
 // ─────────────────────────────────────────────────────────────────────────
 
+import type { ScenarioCategory } from "../types";
+
 export type AuthoredDifficulty = "beginner" | "intermediate" | "senior" | "staff" | "senior_staff" | "principal";
+
+/** Phase 10F — see ScenarioStructure (packages/scenarios/src/types.ts). Optional on AuthoredBasics because every scenario authored before Phase 10F has no such field in its persisted definitionJson; compileAuthoredScenario defaults a missing value to "linear", the literal truth for every pre-existing authored scenario. */
+export type AuthoredScenarioStructure = "linear" | "branching" | "parallel" | "cascading";
+
+/**
+ * Phase 10F — what a piece of evidence represents about the incident,
+ * authored on individual metrics only (see AuthoredMetric.roleInIncident
+ * — never on rules, and never on controls, which keep their own,
+ * separate `kind`/ActionClassificationRule-based classification for
+ * investigation/remediation actions). Used only by the post-incident
+ * review narrative and by an author's own explicit scoring measures;
+ * never read by the matching/tick engine and never auto-computes score
+ * by itself.
+ */
+export type AuthoredRoleInIncident =
+  | "root_cause"
+  | "contributing_factor"
+  | "downstream_symptom"
+  | "context"
+  | "noise";
 
 export type AuthoredNodeType =
   | "service"
@@ -58,6 +80,14 @@ export interface AuthoredBasics {
   estimatedMinutes: number;
   /** Shown to the candidate before/during the attempt. Never includes hidden solution information. */
   instructions?: string;
+  /** Phase 10F. Optional: missing on every scenario authored before this phase — compileAuthoredScenario defaults a missing value to "linear". */
+  structure?: AuthoredScenarioStructure;
+  /** Phase 10F — reuses the same closed taxonomy the built-in library catalog already filters by (ScenarioCategory), rather than a parallel "domain" vocabulary. */
+  domain?: ScenarioCategory;
+  /** Phase 10F — the single most central skill this scenario tests. */
+  primarySkill?: string;
+  /** Phase 10F — finer-grained, unordered skill tags beyond primarySkill. */
+  secondarySkills?: string[];
 }
 
 // 2. Architecture
@@ -94,6 +124,17 @@ export interface AuthoredControl {
    * candidate-facing grouping, mirroring the built-in UI's
    * COMPONENT_CONTROL_KEYS but authored instead of hardcoded). */
   componentId: string;
+  /**
+   * Phase 10F — purely descriptive UI label distinguishing a
+   * non-destructive, evidence-revealing action ("investigation") from a
+   * state-mutating remediation action. Never consulted by
+   * isValidControlValue/classifyAction or any engine mechanics — a
+   * control's actual behavior comes entirely from the rules/
+   * actionClassifications that key off it, exactly as today. Defaults to
+   * "remediation" (compileAuthoredScenario) for every control authored
+   * before this phase, matching their actual existing behavior.
+   */
+  kind?: "remediation" | "investigation";
 }
 
 // 4. Initial State
@@ -107,6 +148,20 @@ export interface AuthoredMetric {
   /** The state key this metric reads its live value from. */
   sourceStateKey: string;
   format: AuthoredMetricFormat;
+  /**
+   * Phase 10F — what this piece of evidence represents about the
+   * incident (root cause / contributing factor / downstream symptom /
+   * context / noise — see AuthoredRoleInIncident). Deliberately lives
+   * only on metrics (facts about the incident), never on controls —
+   * controls keep their own, separate `kind`/ActionClassificationRule-
+   * based classification for investigation/remediation actions. Author-
+   * only: never gates visibility, never shown to the candidate during an
+   * active attempt, never read by the simulation engine. Consumed only
+   * by the post-incident review narrative (buildIncidentNarrative) and
+   * optionally referenced by an author writing their own explicit
+   * scoring measure.
+   */
+  roleInIncident?: AuthoredRoleInIncident;
 }
 
 // 6. Timeline Events

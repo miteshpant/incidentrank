@@ -15,11 +15,13 @@ export function authoredScenarioToCandidateUI(authored: AuthoredScenario): Candi
       label: metric.label,
       sourceStateKey: metric.sourceStateKey,
       format: metric.format,
+      roleInIncident: metric.roleInIncident,
     })),
     controls: authored.controls.map((control) => ({
       key: control.key,
       label: control.label,
       componentId: control.componentId,
+      kind: control.kind ?? "remediation",
     })),
     components: authored.architecture.nodes.map((node) => ({
       id: node.id,

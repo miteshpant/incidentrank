@@ -22,6 +22,18 @@ export interface CandidateMetricDescriptor {
   label: string;
   sourceStateKey: string;
   format: CandidateMetricFormat;
+  /**
+   * Phase 10F — what this metric represents about the incident (root
+   * cause / contributing factor / downstream symptom / context / noise).
+   * Author-only: never gates visibility, never shown to the candidate
+   * during an active attempt, never read by the simulation engine.
+   * Consumed only by the post-incident review narrative
+   * (buildIncidentNarrative) and optionally referenced by an author
+   * writing their own explicit scoring measure. Works identically for
+   * built-in and organization-authored scenarios, since both resolve to
+   * this same CandidateUIDescriptor shape.
+   */
+  roleInIncident?: "root_cause" | "contributing_factor" | "downstream_symptom" | "context" | "noise";
 }
 
 export interface CandidateControlDescriptor {
@@ -30,6 +42,8 @@ export interface CandidateControlDescriptor {
   componentId: string;
   /** Pre-formatted display string per allowed value, keyed by String(value). */
   valueLabels?: Record<string, string>;
+  /** Phase 10F — purely descriptive UI label (see AuthoredControl.kind). Defaults to "remediation" for every control authored before this phase. Never consulted by any engine mechanics. */
+  kind?: "remediation" | "investigation";
 }
 
 export interface CandidateComponentDescriptor {

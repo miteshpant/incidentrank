@@ -23,6 +23,7 @@ function scenario(overrides: Partial<ScenarioDefinition> = {}): ScenarioDefiniti
     difficulty: "senior",
     estimatedMinutes: 15,
     isFree: true,
+    structure: "linear",
     // Simulation is never read by LibraryBrowser — a minimal stub is fine.
     simulation: {} as ScenarioDefinition["simulation"],
     library: {

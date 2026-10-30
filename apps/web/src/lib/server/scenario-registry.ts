@@ -1,9 +1,13 @@
 import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { scenarios, scenarioVersions, type Scenario } from "@incidentrank/db";
-import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
+import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry, type CandidateUIDescriptor } from "@incidentrank/scenarios";
 import type { ScenarioSimulationDefinition } from "@incidentrank/simulator";
-import { compileAuthoredScenario } from "@incidentrank/scenarios/authoring";
+import {
+  compileAuthoredScenario,
+  authoredScenarioToCandidateUI,
+  type AuthoredScenario,
+} from "@incidentrank/scenarios/authoring";
 import { db } from "./db";
 
 /**
@@ -84,6 +88,69 @@ export async function resolveSimulationDefinition(
 
   const compiled = compileAuthoredScenario(row.definitionJson);
   return compiled.ok ? compiled.definition.simulation : null;
+}
+
+/**
+ * Phase 10F: the authoritative free/paid check for a BUILT-IN scenario,
+ * by slug — persisted `scenarios.is_free` now wins over the compiled
+ * ScenarioDefinition's own `isFree` literal, so an admin can rotate
+ * which incident is free without a code deploy (updating the DB column
+ * directly; db:seed's onConflictDoUpdate would otherwise overwrite a
+ * manual change back to the code literal on the next deploy — that
+ * reconciliation is a known, accepted tradeoff until a real admin UI
+ * exists, not a bug).
+ *
+ * Scoped to ownershipType="incidentrank" explicitly, exactly like
+ * getActiveScenarioBySlug/isPlayableBuiltinScenario above — scenarios.
+ * slug is namespaced per ownership type, so an unscoped lookup could
+ * otherwise read a private organization-owned scenario's is_free value
+ * for a colliding slug. Falls back to the code literal only when no
+ * matching built-in row exists at all (e.g. a scenario added to the
+ * catalog but not yet seeded) — never silently defaults to `false` for
+ * a scenario the code says should be free, since that would be a
+ * regression for every stateless/anonymous caller that has no other way
+ * to know the scenario is free.
+ */
+export async function resolveBuiltInScenarioIsFree(slug: string): Promise<boolean | null> {
+  const entry = getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, slug);
+  if (!entry) return null;
+
+  const row = await db.query.scenarios.findFirst({
+    where: and(eq(scenarios.slug, slug), eq(scenarios.ownershipType, "incidentrank")),
+    columns: { isFree: true },
+  });
+
+  return row ? row.isFree : entry.definition.isFree;
+}
+
+/**
+ * Phase 10F: resolves the candidate-facing display descriptor (metrics/
+ * controls/components, including any roleInIncident tags) for the same
+ * (scenario, version) pair resolveSimulationDefinition resolves — used
+ * by the post-incident review narrative (buildIncidentNarrative), which
+ * needs metric labels/tags, not just the bare simulation engine config.
+ * Mirrors resolveSimulationDefinition's own branching exactly.
+ */
+export async function resolveCandidateUIDescriptor(
+  scenario: Pick<Scenario, "id" | "slug" | "ownershipType">,
+  version: number,
+): Promise<CandidateUIDescriptor | null> {
+  if (scenario.ownershipType === "incidentrank") {
+    const entry = getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, scenario.slug);
+    if (!entry || entry.definition.version !== version) return null;
+    return entry.candidateUI;
+  }
+
+  const row = await db.query.scenarioVersions.findFirst({
+    where: and(
+      eq(scenarioVersions.scenarioId, scenario.id),
+      eq(scenarioVersions.version, version),
+      eq(scenarioVersions.status, "published"),
+    ),
+  });
+  if (!row) return null;
+
+  return authoredScenarioToCandidateUI(row.definitionJson as AuthoredScenario);
 }
 
 /**

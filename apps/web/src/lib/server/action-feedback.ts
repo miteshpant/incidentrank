@@ -6,8 +6,13 @@ import {
   type ActionOutcome,
   type ReplayActionGroup,
 } from "@incidentrank/simulator";
+import {
+  buildIncidentNarrative,
+  hasIncidentNarrative,
+  type IncidentNarrative,
+} from "@incidentrank/scenarios";
 import { db } from "./db";
-import { resolveSimulationDefinition } from "./scenario-registry";
+import { resolveSimulationDefinition, resolveCandidateUIDescriptor } from "./scenario-registry";
 import { isAttemptTerminal } from "@/lib/attempt-lifecycle";
 
 export type ReviewableAttempt = Attempt & { scenario: Scenario };
@@ -35,7 +40,7 @@ export interface ActionFeedbackGroupDTO {
 }
 
 export type ActionFeedbackReviewResult =
-  | { ok: true; actionGroups: ActionFeedbackGroupDTO[] }
+  | { ok: true; actionGroups: ActionFeedbackGroupDTO[]; narrative: IncidentNarrative | null }
   | { ok: false; reason: "not_practice" | "not_terminal" | "scenario_version_unresolvable" };
 
 /**
@@ -87,7 +92,16 @@ export async function reviewPracticeAttemptFeedback(
   }));
 
   const elapsedMs = attempt.completionSimulationTimeMs ?? attempt.lastSimulationTimeMs ?? 0;
-  const { actionGroups } = reviewAttempt(scenario, replayGroups, elapsedMs);
+  const { state, actionGroups } = reviewAttempt(scenario, replayGroups, elapsedMs);
+
+  // Phase 10F: narrative is author-tagged metadata (roleInIncident), not
+  // simulation-engine data — resolved separately from `scenario`
+  // (ScenarioSimulationDefinition) via the matching CandidateUIDescriptor
+  // for the same (scenario, version). A scenario with no roleInIncident
+  // tags anywhere (every scenario authored before this phase) correctly
+  // produces `narrative: null`, so the client renders nothing new.
+  const candidateUI = await resolveCandidateUIDescriptor(attempt.scenario, attempt.scenarioVersion);
+  const narrative = candidateUI ? buildIncidentNarrative(candidateUI, state.values) : null;
 
   return {
     ok: true,
@@ -101,5 +115,6 @@ export async function reviewPracticeAttemptFeedback(
         feedback: change.feedback,
       })),
     })),
+    narrative: narrative && hasIncidentNarrative(narrative) ? narrative : null,
   };
 }

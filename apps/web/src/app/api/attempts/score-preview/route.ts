@@ -4,6 +4,7 @@ import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentran
 import { scoreAuthoredAttempt } from "@incidentrank/scenarios/authoring";
 import { evaluatePracticeAccess } from "@/lib/server/practice-access";
 import { isDevUnlockPaidScenariosRequest } from "@/lib/server/dev-unlock";
+import { resolveBuiltInScenarioIsFree } from "@/lib/server/scenario-registry";
 
 interface ScorePreviewBody {
   scenarioSlug?: unknown;
@@ -47,7 +48,11 @@ export async function POST(request: Request) {
   }
 
   const devUnlockPaid = isDevUnlockPaidScenariosRequest(request.headers.get("host"));
-  const access = evaluatePracticeAccess({ isFree: entry.definition.isFree }, { devUnlockPaid });
+  // Phase 10F: persisted scenarios.is_free is authoritative, not the
+  // compiled definition literal — see resolveBuiltInScenarioIsFree's
+  // doc comment.
+  const isFree = (await resolveBuiltInScenarioIsFree(body.scenarioSlug)) ?? entry.definition.isFree;
+  const access = evaluatePracticeAccess({ isFree }, { devUnlockPaid });
   if (!access.allowed) {
     return NextResponse.json(
       { error: "This scenario is not available in practice mode without an entitlement." },

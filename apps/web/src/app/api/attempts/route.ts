@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { and, desc, eq } from "drizzle-orm";
 import { attempts } from "@incidentrank/db";
-import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { getActiveScenarioBySlug } from "@/lib/server/scenario-registry";
@@ -61,9 +60,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ attempt: existing });
   }
 
-  const entry = getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, scenario.slug);
   const devUnlockPaid = isDevUnlockPaidScenariosRequest(request.headers.get("host"));
-  const isFree = entry?.definition.isFree ?? false;
+  // Phase 10F: persisted scenarios.is_free is now authoritative — lets a
+  // free incident rotate without a code deploy. `scenario` here is
+  // already scoped to ownershipType="incidentrank" by
+  // getActiveScenarioBySlug, so this can never read a different
+  // organization's row for a colliding slug. Falls back to false (not
+  // the code literal) if is_free is somehow null, matching every other
+  // resolution's existing "unknown → locked" default.
+  const isFree = scenario.isFree ?? false;
 
   // Phase 9: Pro/Founding takes precedence over the Incident Pass — when
   // a paid entitlement already grants access, the pass must never be

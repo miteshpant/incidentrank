@@ -42,10 +42,20 @@ export default async function ScenarioPracticePage({
 
   const devUnlockPaid = await isDevUnlockPaidScenarios();
 
+  // Phase 10F: persisted scenarios.is_free is authoritative, not the
+  // compiled definition literal — lets a free incident rotate without a
+  // code deploy. getActiveScenarioBySlug is already scoped to
+  // ownershipType="incidentrank" (see its own doc comment), so this can
+  // never read a different organization's row for a colliding slug.
+  // Resolved once, before any gating below, so the short-circuit at the
+  // next `if` and the final evaluatePracticeAccess call can never
+  // disagree about whether this scenario is free.
+  const isFree = (await getActiveScenarioBySlug(slug))?.isFree ?? entry.definition.isFree;
+
   let paidEntitlementState: PaidEntitlementState = null;
   let incidentPassState: IncidentPassAccessState | null = null;
   let availablePassId: string | undefined;
-  if (!devUnlockPaid && !entry.definition.isFree) {
+  if (!devUnlockPaid && !isFree) {
     const user = await getOrCreateCurrentUser();
     const scenarioRow = user ? await getActiveScenarioBySlug(slug) : null;
     if (user && scenarioRow) {
@@ -87,7 +97,7 @@ export default async function ScenarioPracticePage({
   }
 
   const access = evaluatePracticeAccess(
-    { isFree: entry.definition.isFree },
+    { isFree },
     { devUnlockPaid, paidEntitlementState, incidentPassState },
   );
   if (!access.allowed) {

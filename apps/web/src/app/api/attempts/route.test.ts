@@ -120,6 +120,106 @@ describe("POST /api/attempts — paid-scenario practice gate", () => {
 });
 
 /**
+ * Phase 10F: persisted scenarios.is_free is now the authoritative value
+ * for practice access — it must win over the compiled ScenarioDefinition
+ * literal, so a free incident can rotate via a DB update alone, with no
+ * code deploy. The first block below is the exact regression the
+ * migration itself had to preserve: every scenario the code still
+ * literally marks isFree: true must stay free after the Phase 10F
+ * migration + seed sync, through this real route end to end. The second
+ * block proves the DB column genuinely drives access, independent of
+ * the TypeScript literal, in both directions.
+ */
+describe("POST /api/attempts — persisted is_free is authoritative (Phase 10F)", () => {
+  let testDb: Db;
+  let POST: typeof PostHandler;
+
+  beforeAll(async () => {
+    testDb = createDb();
+    ({ POST } = await import("./route"));
+  }, 30_000);
+
+  beforeEach(() => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("DEV_UNLOCK_PAID_SCENARIOS", undefined);
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await testDb.delete(users).where(eq(users.authProviderId, TEST_AUTH_ID));
+  });
+
+  function buildRequest(scenarioSlug: string) {
+    return new Request("http://internal/api/attempts", {
+      method: "POST",
+      headers: { host: "app.incidentrank.com", "content-type": "application/json" },
+      body: JSON.stringify({ scenarioSlug }),
+    });
+  }
+
+  it.each([
+    ["kafka-consumer-lag"],
+    ["payment-retry-storm"],
+    ["database-connection-saturation"],
+  ])("the 3 currently-free built-in scenarios remain free after Phase 10F: %s", async (slug) => {
+    const response = await POST(buildRequest(slug));
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.attempt?.id).toBeTruthy();
+  });
+
+  it("flipping a paid scenario's persisted is_free to true grants access with no TypeScript change", async () => {
+    // "rate-limit-misconfiguration" is isFree: false in code (same
+    // scenario the existing "paid-scenario practice gate" block above
+    // uses to prove the gate blocks it by default).
+    await testDb
+      .update(scenarios)
+      .set({ isFree: true })
+      .where(
+        and(eq(scenarios.slug, "rate-limit-misconfiguration"), eq(scenarios.ownershipType, "incidentrank")),
+      );
+
+    try {
+      const response = await POST(buildRequest("rate-limit-misconfiguration"));
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body.attempt?.id).toBeTruthy();
+    } finally {
+      await testDb
+        .update(scenarios)
+        .set({ isFree: false })
+        .where(
+          and(
+            eq(scenarios.slug, "rate-limit-misconfiguration"),
+            eq(scenarios.ownershipType, "incidentrank"),
+          ),
+        );
+    }
+  });
+
+  it("flipping a free scenario's persisted is_free to false locks it, even though the code literal still says isFree: true", async () => {
+    await testDb
+      .update(scenarios)
+      .set({ isFree: false })
+      .where(
+        and(eq(scenarios.slug, "kafka-consumer-lag"), eq(scenarios.ownershipType, "incidentrank")),
+      );
+
+    try {
+      const response = await POST(buildRequest("kafka-consumer-lag"));
+      expect(response.status).toBe(403);
+    } finally {
+      await testDb
+        .update(scenarios)
+        .set({ isFree: true })
+        .where(
+          and(eq(scenarios.slug, "kafka-consumer-lag"), eq(scenarios.ownershipType, "incidentrank")),
+        );
+    }
+  });
+});
+
+/**
  * Phase 7.3 regression: POST /api/attempts used to unconditionally
  * INSERT, so a signed-in candidate who navigated away/refreshed an
  * active practice incident and re-acknowledged the briefing got a

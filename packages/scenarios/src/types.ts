@@ -32,10 +32,29 @@ export type ScenarioCategory =
 export interface ScenarioLibraryMetadata {
   category: ScenarioCategory;
   tags: string[];
+  /** Secondary skills — finer-grained than `category`, no single "primary" distinction. */
   skills: string[];
+  /**
+   * Phase 10F: the single most central skill this scenario tests (e.g.
+   * "cross_service_diagnosis") — distinct from `skills`' flatter,
+   * unordered secondary-skill list. Optional because no existing
+   * scenario has one authored yet; omitting it changes nothing about
+   * library display or filtering.
+   */
+  primarySkill?: string;
   /** Short, card-length summary — distinct from ScenarioDefinition.description's longer briefing copy. */
   shortDescription: string;
 }
+
+/**
+ * Phase 10F — how a candidate moves through the incident, orthogonal to
+ * `difficulty` (docs/implementation_plan/phase10f.md §1: "a Principal
+ * incident is not automatically cascading"). Not read by the simulation
+ * engine (packages/simulator) at all — the existing trigger/control
+ * rule-matching engine already supports all four shapes; this is purely
+ * classification metadata for catalog filtering and authoring guidance.
+ */
+export type ScenarioStructure = "linear" | "branching" | "parallel" | "cascading";
 
 export interface ScenarioDefinition {
   id: string;
@@ -57,6 +76,8 @@ export interface ScenarioDefinition {
   estimatedMinutes: number;
   /** Playable without signing in. Anonymous attempts on free scenarios are never persisted. */
   isFree: boolean;
+  /** Phase 10F — see ScenarioStructure. Required so every scenario makes an explicit, auditable choice rather than silently defaulting. */
+  structure: ScenarioStructure;
   simulation: ScenarioSimulationDefinition;
   /**
    * Public library discovery metadata. Optional on the base type because

@@ -134,6 +134,7 @@ describe("BUILT_IN_SCENARIO_CATALOG", () => {
           difficulty: "intermediate" as const,
           estimatedMinutes: 10,
           isFree: false,
+          structure: "linear" as const,
           simulation: BUILT_IN_SCENARIO_CATALOG["payment-retry-storm"]!.definition.simulation,
         },
         candidateUI: { metrics: [], controls: [], components: [] },

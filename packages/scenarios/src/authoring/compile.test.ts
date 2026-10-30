@@ -2,6 +2,7 @@ import { createInitialState, simulate } from "@incidentrank/simulator";
 import type { CandidateAction } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { compileAuthoredScenario } from "./compile";
+import { authoredScenarioToCandidateUI } from "./candidate-ui";
 import { buildValidAuthoredScenario } from "./fixtures";
 
 describe("compileAuthoredScenario — validation gate", () => {
@@ -203,6 +204,43 @@ describe("compileAuthoredScenario — severity/watch/impact/action sections", ()
     }
 
     expect(state.cost.currentMonthlyCostUsd).toBe(1_300);
+  });
+});
+
+describe("compileAuthoredScenario — Phase 10F backward compatibility", () => {
+  it("defaults structure to linear when the authored document predates Phase 10F (no structure field in definitionJson)", () => {
+    // buildValidAuthoredScenario() intentionally sets no structure/
+    // domain/primarySkill/secondarySkills/kind/roleInIncident fields —
+    // it represents every scenario_versions.definitionJson row persisted
+    // before this phase shipped. compileAuthoredScenario must still
+    // compile it to a valid ScenarioDefinition with structure: "linear",
+    // the literal truth of every such scenario (none used
+    // branching/parallel/cascading rule topology on purpose).
+    const result = compileAuthoredScenario(buildValidAuthoredScenario());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.definition.structure).toBe("linear");
+  });
+
+  it("respects an explicitly authored structure instead of defaulting", () => {
+    const base = buildValidAuthoredScenario();
+    const authored = { ...base, basics: { ...base.basics, structure: "parallel" as const } };
+    const result = compileAuthoredScenario(authored);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    expect(result.definition.structure).toBe("parallel");
+  });
+
+  it("defaults every control's kind to remediation in the candidate UI descriptor when the authored document predates Phase 10F", () => {
+    const authored = buildValidAuthoredScenario();
+    const candidateUI = authoredScenarioToCandidateUI(authored);
+
+    expect(candidateUI.controls.length).toBeGreaterThan(0);
+    for (const control of candidateUI.controls) {
+      expect(control.kind).toBe("remediation");
+    }
   });
 });
 

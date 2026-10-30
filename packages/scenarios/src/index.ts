@@ -1,4 +1,6 @@
-export type { ScenarioDefinition, ScenarioLibraryMetadata, ScenarioCategory } from "./types";
+export type { ScenarioDefinition, ScenarioLibraryMetadata, ScenarioCategory, ScenarioStructure } from "./types";
+export { buildIncidentNarrative, hasIncidentNarrative } from "./narrative";
+export type { IncidentNarrative, IncidentNarrativeEntry } from "./narrative";
 export {
   paymentRetryStorm,
   paymentRetryStormSimulation,
@@ -723,6 +725,14 @@ export {
   enterpriseWideDependencyDeprecationCandidateUI,
   ENTERPRISE_WIDE_DEPENDENCY_DEPRECATION_SCORING,
 } from "./enterprise-wide-dependency-deprecation";
+
+// Phase 10F reference incident
+export {
+  checkoutPaymentInventoryRedisContention,
+  checkoutPaymentInventoryRedisContentionSimulation,
+  checkoutPaymentInventoryRedisContentionCandidateUI,
+  CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING,
+} from "./checkout-payment-inventory-redis-contention";
 
 export {
   BUILT_IN_SCENARIO_CATALOG,

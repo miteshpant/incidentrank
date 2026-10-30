@@ -136,6 +136,37 @@ export const scenarioVersionStatusEnum = pgEnum("scenario_version_status", [
   "published",
 ]);
 
+// Phase 10F: incident structure, orthogonal to difficulty — a Principal
+// incident is not automatically cascading, an Intermediate incident is
+// not automatically linear. Defaults to "linear" for every row that
+// predates this phase, which is the literal truth of every scenario
+// authored before Phase 10F (none used branching/parallel/cascading
+// rule topology on purpose). Not read by the simulation engine at all —
+// purely classification metadata for catalog filtering/authoring.
+export const scenarioStructureEnum = pgEnum("scenario_structure", [
+  "linear",
+  "branching",
+  "parallel",
+  "cascading",
+]);
+
+// Phase 10F: mirrors packages/scenarios/src/types.ts's ScenarioCategory
+// union exactly — reused as the catalog's "domain" filter (phase10f.md
+// §14) rather than inventing a parallel taxonomy. Nullable: not every
+// scenario (e.g. an org-authored one) necessarily sets a category today.
+export const scenarioDomainEnum = pgEnum("scenario_domain", [
+  "Databases & Storage",
+  "Messaging & Streaming",
+  "Caching",
+  "Microservices & Dependencies",
+  "API & Traffic",
+  "Distributed Systems",
+  "Deployments & Reliability",
+  "Infrastructure & Capacity",
+  "Security & Identity",
+  "Data Pipelines",
+]);
+
 // Phase 8: platform-wide (not organization-scoped) admin authority. Owner
 // is the single bootstrap identity (see docs/implementation_plan/
 // phase8_admin_promotional_access_referrals.md §4); admin is every
@@ -466,6 +497,20 @@ export const scenarios = pgTable("scenarios", {
   }),
   visibility: scenarioVisibilityEnum("visibility").notNull().default("public"),
   status: scenarioStatusEnum("status").notNull().default("published"),
+
+  // Phase 10F — additive catalog/editorial metadata. None of these are
+  // read by any entitlement/access-control or runtime code path; they
+  // exist for querying/admin visibility only (docs/implementation_plan/
+  // phase10f.md §11/§13/§14). `isFree` in particular does NOT drive
+  // evaluatePracticeAccess (apps/web/src/lib/practice-access.ts) in this
+  // phase — that remains driven by the compiled ScenarioDefinition's own
+  // isFree literal, exactly as today; this column is a mirror kept in
+  // sync by packages/db/src/seed.ts, not a second source of truth.
+  structure: scenarioStructureEnum("structure").notNull().default("linear"),
+  isFree: boolean("is_free").notNull().default(false),
+  domain: scenarioDomainEnum("domain"),
+  releaseWeek: text("release_week"),
+  publishedAt: timestamp("published_at", { withTimezone: true }),
 
   createdByUserId: uuid("created_by_user_id").references(() => users.id, {
     onDelete: "set null",

@@ -49,5 +49,5 @@ export async function GET(
     );
   }
 
-  return NextResponse.json({ actionGroups: result.actionGroups });
+  return NextResponse.json({ actionGroups: result.actionGroups, narrative: result.narrative });
 }

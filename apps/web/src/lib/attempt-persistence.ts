@@ -387,6 +387,24 @@ export interface ActionFeedbackGroup {
   changes: ActionFeedbackChange[];
 }
 
+/** Phase 10F — see @incidentrank/scenarios' IncidentNarrative. Mirrored here (not imported) so this client-side module stays free of any server-only package dependency. */
+export interface IncidentNarrativeEntryDTO {
+  label: string;
+  value: number | string | undefined;
+}
+
+export interface IncidentNarrativeDTO {
+  rootCause: IncidentNarrativeEntryDTO[];
+  contributingFactors: IncidentNarrativeEntryDTO[];
+  observedEffects: IncidentNarrativeEntryDTO[];
+  context: IncidentNarrativeEntryDTO[];
+}
+
+export interface ActionFeedbackResult {
+  actionGroups: ActionFeedbackGroup[];
+  narrative: IncidentNarrativeDTO | null;
+}
+
 /**
  * Phase 6.1 "Post-Incident Practice Explanation": fetches authored
  * per-action feedback for a completed, signed-in PRACTICE attempt only
@@ -401,14 +419,18 @@ export interface ActionFeedbackGroup {
  */
 export async function requestActionFeedback(
   attemptId: string,
-): Promise<ActionFeedbackGroup[] | { error: string; status?: number }> {
+): Promise<ActionFeedbackResult | { error: string; status?: number }> {
   try {
     const response = await fetch(`/api/attempts/${attemptId}/review`);
-    const data = (await response.json()) as { actionGroups?: ActionFeedbackGroup[]; error?: string };
+    const data = (await response.json()) as {
+      actionGroups?: ActionFeedbackGroup[];
+      narrative?: IncidentNarrativeDTO | null;
+      error?: string;
+    };
     if (!response.ok || !data.actionGroups) {
       return { error: data.error ?? "We couldn't load the post-incident review.", status: response.status };
     }
-    return data.actionGroups;
+    return { actionGroups: data.actionGroups, narrative: data.narrative ?? null };
   } catch {
     return { error: "We couldn't load the post-incident review." };
   }
