@@ -181,7 +181,7 @@ describe("Network Partition", () => {
       expect(state.values.regionBAvailability).toBe(0);
     });
 
-    it("baseline (no action) stays critical and never self-resolves (before the sustained failure window elapses)", () => {
+    it("baseline (no action) stays critical and never self-resolves", () => {
       const state = runScenario(NETWORK_PARTITION_MS + 40_000);
       expect(state.status).toBe("critical");
       expect(state.values.ledgerWriteAuthority).toBe("dual");
@@ -217,10 +217,13 @@ describe("Network Partition", () => {
       expect(afterHeal.values.ledgerConsistencyViolationCount).toBeGreaterThan(0);
     });
 
-    it("fails if dual ledger-write authority with real violations persists for the full sustained window", () => {
+    it("stays active (never auto-fails) even after dual ledger-write authority with real violations persists past the old sustained window", () => {
       const state = runScenario(NETWORK_PARTITION_MS + 91_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        networkPartitionSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak ledger-violation count generically via numericWatchFields", () => {
@@ -320,9 +323,10 @@ describe("Network Partition", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode; Finish from the still-active baseline is still declared_unstable", () => {
       const state = runScenario(NETWORK_PARTITION_MS + 91_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(networkPartitionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

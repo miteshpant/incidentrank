@@ -168,7 +168,7 @@ describe("Distributed Lock Failure", () => {
       );
     });
 
-    it("baseline (no action) stays critical and never self-resolves (before the sustained failure window elapses)", () => {
+    it("baseline (no action) stays critical and never self-resolves", () => {
       const state = runScenario(PROCESSING_SLOWDOWN_MS + 30_000);
       expect(state.status).toBe("critical");
       expect(state.values.lockServiceStatus).toBe("critical");
@@ -186,12 +186,15 @@ describe("Distributed Lock Failure", () => {
       expect(afterCrash.values.resourceBlockedSeconds).toBeGreaterThan(0);
     });
 
-    it("fails if correctness violations stay at or above 15 for the full sustained window", () => {
+    it("stays active (never auto-fails) even after correctness violations stay at or above 15 past the old sustained window", () => {
       const state = runScenario(PROCESSING_SLOWDOWN_MS + 61_000, [
         { atMs: PROCESSING_SLOWDOWN_MS + 1_000, controlKey: WORKER_CONCURRENCY_KEY, value: 16 },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        distributedLockFailureSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak correctness violation count and peak overlapping owner count generically via numericWatchFields", () => {
@@ -310,11 +313,12 @@ describe("Distributed Lock Failure", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("sustained breach alone still never auto-fails in candidate_declared mode; a Finish there still yields declared_unstable", () => {
       const state = runScenario(PROCESSING_SLOWDOWN_MS + 61_000, [
         { atMs: PROCESSING_SLOWDOWN_MS + 1_000, controlKey: WORKER_CONCURRENCY_KEY, value: 16 },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(distributedLockFailureSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

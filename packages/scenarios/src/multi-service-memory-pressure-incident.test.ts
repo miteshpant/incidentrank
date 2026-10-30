@@ -178,10 +178,13 @@ describe("Multi-Service Memory Pressure Incident", () => {
       expect(state.componentHealth["dependency-c"]).toBe("critical");
     });
 
-    it("baseline (no action) never self-resolves and eventually fails", () => {
+    it("baseline (no action) never self-resolves, but stays active (never auto-fails) even once the failure condition has sustained past its own window", () => {
       const state = runScenario(OOM_CHURN_ONSET_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        multiServiceMemoryPressureIncidentSimulation.failureCondition.sustainedSeconds,
+      );
     });
   });
 
@@ -459,9 +462,13 @@ describe("Multi-Service Memory Pressure Incident", () => {
       expect(result.outcome).toBe("declared_unstable");
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("sustained breach alone never auto-fails in candidate_declared mode either — Finish still yields declared_unstable", () => {
       const state = runScenario(OOM_CHURN_ONSET_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        multiServiceMemoryPressureIncidentSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(multiServiceMemoryPressureIncidentSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

@@ -211,10 +211,13 @@ describe("Request Timeout Cascade", () => {
       expect(afterSecondWave.values.customerSuccessRatePercent).toBe(9);
     });
 
-    it("fails if customer success rate stays at or below 10% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after customer success rate remains at or below 10% past the old sustained window", () => {
       const state = runScenario(ACCUMULATION_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        requestTimeoutCascadeSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks monthly infrastructure cost that increases with elevated Gateway retries", () => {
@@ -312,9 +315,10 @@ describe("Request Timeout Cascade", () => {
       expect(state.values.timeoutBudgetHealth).toBe("unresolved");
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails even past the old sustained window, and a candidate_declared Finish there still yields declared_unstable", () => {
       const state = runScenario(ACCUMULATION_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(requestTimeoutCascadeSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

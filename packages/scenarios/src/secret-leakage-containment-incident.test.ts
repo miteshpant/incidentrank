@@ -237,10 +237,13 @@ describe("Secret Leakage Containment Incident", () => {
         );
       });
 
-      it("holding the do-nothing path through the sustained window reaches automatic failure", () => {
+      it("holding the do-nothing path past the old sustained window never auto-fails, but the breach is tracked as sustained", () => {
         const state = runScenario(SUSTAINED_EXPOSURE_MS + 50_000);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+          secretLeakageContainmentIncidentSimulation.failureCondition.sustainedSeconds,
+        );
       });
 
       it("Finish returns unstable regardless of how healthy availability looks", () => {
@@ -447,8 +450,9 @@ describe("Secret Leakage Containment Incident", () => {
       expect(eligibility).toEqual({ eligible: false });
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("the fully-trusted do-nothing path stays declared_unstable in candidate_declared mode (never auto-fails, never Finish-eligible)", () => {
       const state = runScenario(SUSTAINED_EXPOSURE_MS + 50_000);
+      expect(state.status).not.toBe("failed");
       const result = evaluateCandidateDeclaredFinish(secretLeakageContainmentIncidentSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

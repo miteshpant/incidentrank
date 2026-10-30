@@ -142,10 +142,13 @@ describe("Authentication Service Degradation", () => {
     expect(state.values.authFailureRate).toBe(28);
   });
 
-  it("fails if the failure rate stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after the failure rate remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      authenticationServiceDegradationSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak auth failure rate generically via numericWatchFields", () => {

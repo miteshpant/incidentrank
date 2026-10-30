@@ -163,10 +163,13 @@ describe("Consumer Rebalance Storm", () => {
     expect(state.values.rebalanceCount).toBe(38);
   });
 
-  it("fails if effective throughput stays critically low for the full sustained window", () => {
+  it("stays active (never auto-fails) even after effective throughput remains critically low past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      consumerRebalanceStormSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak rebalance count generically via numericWatchFields", () => {
@@ -223,15 +226,18 @@ describe("Consumer Rebalance Storm", () => {
 
       // Baseline: no action, rolling one-at-a-time deploy with default
       // controls ("rebalance-storm-default") — effectiveThroughput 900
-      // stays <= 1,000 for the full 60s sustained window, so the
-      // automatic failureCondition fires.
+      // stays <= 1,000 for the full 60s sustained window, so
+      // consecutiveFailureSeconds sustains past the failureCondition
+      // threshold, but (per the removal of auto-fail-on-breach) the
+      // attempt is never auto-terminated.
       const baseline = runScenario(30_000 + 61_000);
 
       // Harmful: shortening the session timeout during the one-at-a-time
       // deploy ("short-timeout-harmful") — the coordinator declares
       // consumers dead on even shorter jitter, triggering MORE
       // rebalances (42 vs. 24) and driving effectiveThroughput down to
-      // 400, well below baseline's 900, so it fails faster/harder too.
+      // 400, well below baseline's 900, so it sustains the breach
+      // faster/harder too (still never auto-failed).
       const harmful = runScenario(30_000 + 61_000, [
         { atMs: 31_000, controlKey: SESSION_TIMEOUT_MS_KEY, value: 6_000 },
       ]);
@@ -245,8 +251,16 @@ describe("Consumer Rebalance Storm", () => {
         acceptableTierPartial,
       );
       expect(acceptableEligibility).toEqual({ eligible: true, tier: "acceptable" });
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      expect(baseline.status).not.toBe("failed");
+      expect(baseline.failedAtMs).toBeNull();
+      expect(baseline.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        consumerRebalanceStormSimulation.failureCondition.sustainedSeconds,
+      );
+      expect(harmful.status).not.toBe("failed");
+      expect(harmful.failedAtMs).toBeNull();
+      expect(harmful.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        consumerRebalanceStormSimulation.failureCondition.sustainedSeconds,
+      );
       expect(harmful.values.rebalanceCount as number).toBeGreaterThan(
         baseline.values.rebalanceCount as number,
       );

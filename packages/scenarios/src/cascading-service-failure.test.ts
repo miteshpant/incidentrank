@@ -129,10 +129,13 @@ describe("Cascading Service Failure", () => {
     expect(state.values.checkoutSuccessRate).toBe(20);
   });
 
-  it("fails if checkout success stays critically low for the full sustained window", () => {
+  it("stays active (never auto-fails) even after checkout success remains critically low past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      cascadingServiceFailureSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak cascade depth generically via numericWatchFields", () => {
@@ -211,14 +214,24 @@ describe("Cascading Service Failure", () => {
     });
 
     it("scores an unmitigated run to failure the same total as a tight-queue-limit-only partial, both strictly above the harmful restart trap", () => {
-      // Baseline: no action at all -> cascade-critical-default then the
-      // 60s sustained failureCondition trips -> status "failed" at 89_000ms.
-      // recovery and reliability both carry terminalOverrides.failed: 0, and
-      // the modest revenueLossUsd/criticalTimeRatio accrued before failure
-      // stay inside every band's full-marks ceiling, so customerImpact and
-      // costEfficiency both still award full points -> total 535.
+      // Baseline: no action at all -> cascade-critical-default, and
+      // checkoutSuccessRate stays below the failureCondition threshold past
+      // its full 60s sustained window, but the engine no longer auto-fails
+      // on a sustained breach alone (only the uniform 35-minute
+      // ATTEMPT_CEILING_MS can end an attempt) -> status stays "critical",
+      // unresolved, at 91_000ms. recovery and reliability both carry
+      // terminalOverrides.unresolved: 0, and the modest
+      // revenueLossUsd/criticalTimeRatio accrued so far stay inside every
+      // band's full-marks ceiling, so customerImpact and costEfficiency
+      // both still award full points -> total 535.
       const baseline = scoreFor([], 30_000 + 61_000);
-      expect(baseline.state.status).toBe("failed");
+      expect(baseline.state.status).not.toBe("failed");
+      expect(baseline.state.status).not.toBe("resolved");
+      expect(
+        baseline.state.transitions.consecutiveFailureSeconds,
+      ).toBeGreaterThanOrEqual(
+        cascadingServiceFailureSimulation.failureCondition.sustainedSeconds,
+      );
 
       // Partial: queue-limit-only rule (breaker OFF, queue limit <= 200) ->
       // checkoutSuccessRate 65, stays "critical"/unresolved the whole run

@@ -236,13 +236,16 @@ describe("Event Processing Backpressure", () => {
       expect(afterSecondWave.values.downstreamPressure).toBe("external-api-overloaded");
     });
 
-    it("fails if database connection utilization stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after database connection utilization remains at or above 95% past the old sustained window", () => {
       const state = runScenario(PRODUCER_SURGE_MS + 20_000 + 61_000, [
         { atMs: PRODUCER_SURGE_MS + 1_000, controlKey: CONSUMER_COUNT_KEY, value: 8 },
         { atMs: PRODUCER_SURGE_MS + 1_000, controlKey: WORKER_CONCURRENCY_KEY, value: 40 },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        eventProcessingBackpressureSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak Kafka lag and peak DB connection utilization generically via numericWatchFields", () => {
@@ -379,12 +382,13 @@ describe("Event Processing Backpressure", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails even past the old sustained window, and candidate_declared mode still resolves to declared_unstable", () => {
       const state = runScenario(PRODUCER_SURGE_MS + 20_000 + 61_000, [
         { atMs: PRODUCER_SURGE_MS + 1_000, controlKey: CONSUMER_COUNT_KEY, value: 8 },
         { atMs: PRODUCER_SURGE_MS + 1_000, controlKey: WORKER_CONCURRENCY_KEY, value: 40 },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(eventProcessingBackpressureSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

@@ -118,10 +118,13 @@ describe("Downstream Dependency Failure", () => {
     expect(state.values.queuedRequests).toBe(180);
   });
 
-  it("fails if the request queue stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after the request queue remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      downstreamDependencyFailureSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak queued requests generically via numericWatchFields", () => {
@@ -168,18 +171,22 @@ describe("Downstream Dependency Failure", () => {
     // "normal", thread pool 25% <= 40%, failedRequestRate 1 < 5 ->
     // satisfies successCondition and sustains to "resolved"). Doing
     // nothing hits "exhaustion-critical-default" (queuedRequests 450 >=
-    // 400 failureCondition threshold, sustained 60s -> "failed").
-    // Lengthening the timeout past 20_000ms with the breaker still off
-    // hits the authored "long-timeout-no-breaker-harmful" rule (explicit
-    // trap: queuedRequests 620, thread pool 99%, worse than doing
-    // nothing) and is also flagged `outcome: "harmful"` in
-    // action-classifications.ts. Shortening the timeout alone (<=500ms,
-    // breaker still off) hits "short-timeout-no-breaker-partial" (status
-    // "degraded", queuedRequests 180 — below the 400 failure threshold,
-    // so it never fails, but never satisfies successCondition either
-    // since failedRequestRate stays at 30 >= 5).
+    // 400 failureCondition threshold, sustained past 60s) — the engine
+    // no longer auto-fails on a sustained breach, so this stays "critical"
+    // indefinitely (status never becomes "failed", resolvedAtMs stays
+    // null) rather than terminating; scoring still treats it as the
+    // unresolved baseline via terminalOverrides.unresolved. Lengthening
+    // the timeout past 20_000ms with the breaker still off hits the
+    // authored "long-timeout-no-breaker-harmful" rule (explicit trap:
+    // queuedRequests 620, thread pool 99%, worse than doing nothing) and
+    // is also flagged `outcome: "harmful"` in action-classifications.ts.
+    // Shortening the timeout alone (<=500ms, breaker still off) hits
+    // "short-timeout-no-breaker-partial" (status "degraded", queuedRequests
+    // 180 — below the 400 failure threshold, so it never breaches, but
+    // never satisfies successCondition either since failedRequestRate
+    // stays at 30 >= 5).
     const UNTIL_RESOLVED_MS = 60_000;
-    const UNTIL_FAILED_MS = 30_000 + 61_000;
+    const UNTIL_UNRESOLVED_MS = 30_000 + 61_000;
 
     function scoreFor(state: ReturnType<typeof runScenario>) {
       const finishResult = evaluateCandidateDeclaredFinish(
@@ -203,13 +210,15 @@ describe("Downstream Dependency Failure", () => {
           .outcome,
       ).toBe("resolved");
 
-      const baselineState = runScenario(UNTIL_FAILED_MS);
-      expect(baselineState.status).toBe("failed");
+      const baselineState = runScenario(UNTIL_UNRESOLVED_MS);
+      expect(baselineState.status).not.toBe("failed");
+      expect(baselineState.resolvedAtMs).toBeNull();
 
-      const harmfulState = runScenario(UNTIL_FAILED_MS, [
+      const harmfulState = runScenario(UNTIL_UNRESOLVED_MS, [
         { atMs: 31_000, controlKey: REQUEST_TIMEOUT_MS_KEY, value: 20_000 },
       ]);
-      expect(harmfulState.status).toBe("failed");
+      expect(harmfulState.status).not.toBe("failed");
+      expect(harmfulState.resolvedAtMs).toBeNull();
 
       const goodScore = scoreFor(goodState);
       const baselineScore = scoreFor(baselineState);
@@ -227,9 +236,10 @@ describe("Downstream Dependency Failure", () => {
       // rules.ts's long-timeout-no-breaker-harmful pins thread-pool
       // utilization to 99% and queuedRequests to 620 — worse than the
       // 92%/450 baseline-critical default). Both sequences run out the
-      // clock to the same "failed" outcome, but the trap still costs
-      // operationalEfficiency's harmfulChangeCount penalty (-15), so it
-      // must never score at or above doing nothing.
+      // clock to the same unresolved outcome (neither auto-fails nor
+      // resolves), but the trap still costs operationalEfficiency's
+      // harmfulChangeCount penalty (-15), so it must never score at or
+      // above doing nothing.
       expect(baselineScore).toBeGreaterThan(harmfulScore);
     });
 
@@ -241,8 +251,9 @@ describe("Downstream Dependency Failure", () => {
       expect(partialState.status).not.toBe("resolved");
       expect(partialState.status).not.toBe("failed");
 
-      const baselineState = runScenario(UNTIL_FAILED_MS);
-      expect(baselineState.status).toBe("failed");
+      const baselineState = runScenario(UNTIL_UNRESOLVED_MS);
+      expect(baselineState.status).not.toBe("failed");
+      expect(baselineState.resolvedAtMs).toBeNull();
 
       const partialScore = scoreFor(partialState);
       const baselineScore = scoreFor(baselineState);
@@ -251,8 +262,8 @@ describe("Downstream Dependency Failure", () => {
       // loss ~$131 vs. ~$413, and 2s vs. 62s spent in a critical state,
       // measured directly off customerImpact), but recovery and
       // reliability are both zeroed by terminalOverrides for every
-      // non-resolved outcome ("degraded" and "failed" alike), and the
-      // reduced revenue loss still lands in the same <=$5,000
+      // non-resolved outcome ("degraded" and unresolved-"critical" alike),
+      // and the reduced revenue loss still lands in the same <=$5,000
       // customerImpact band as the baseline's ~$413 loss. The two
       // sequences are therefore genuinely tied at the total-score level
       // for this scenario's authored bands — asserting strict

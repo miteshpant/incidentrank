@@ -219,10 +219,14 @@ describe("Global Feature Rollout Incident", () => {
       );
     });
 
-    it("a true zero-action attempt eventually reaches automatic failure (catastrophic widening)", () => {
+    it("a true zero-action attempt stays active (never auto-fails) even past catastrophic widening, though the breach genuinely sustains", () => {
       const state = runScenario(CATASTROPHIC_WIDENING_MS + 40_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       expect(state.values.alreadyIncompatibleWriteCount as number).toBeGreaterThanOrEqual(1_500);
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        globalFeatureRolloutIncidentSimulation.failureCondition.sustainedSeconds,
+      );
     });
   });
 
@@ -458,11 +462,12 @@ describe("Global Feature Rollout Incident", () => {
       expect(result.completionTier).toBe("acceptable");
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("an unresolved zero-action attempt still resolves to declared_unstable in candidate_declared mode, without the engine auto-failing it", () => {
       const state = runScenario(CATASTROPHIC_WIDENING_MS + 40_000);
       const result = evaluateCandidateDeclaredFinish(globalFeatureRolloutIncidentSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

@@ -236,10 +236,13 @@ describe("Message Retry Storm", () => {
       expect(state.values.queueHealth).toBe("normal");
     });
 
-    it("failure path: an unmitigated storm sustained long enough automatically fails", () => {
+    it("stays active (never auto-fails) even after an unmitigated storm remains breached past the old sustained window", () => {
       const state = runScenario(DEPENDENCY_WORSENS_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        messageRetryStormSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak queue depth and retry rate generically via numericWatchFields", () => {
@@ -325,9 +328,10 @@ describe("Message Retry Storm", () => {
       expect(finish.outcome).toBe("declared_unstable");
     });
 
-    it("automatic failure still fires regardless of completion mode", () => {
+    it("never auto-fails regardless of completion mode, but Finish still declares unstable", () => {
       const state = runScenario(DEPENDENCY_WORSENS_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const finish = evaluateCandidateDeclaredFinish(messageRetryStormSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
       expect(finish.completionTier).toBeNull();
@@ -354,8 +358,14 @@ describe("Message Retry Storm", () => {
         { atMs: DEPENDENCY_DEGRADES_MS + 1_000, controlKey: RETRY_COUNT_KEY, value: 3 },
       ]);
 
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      // Neither run auto-fails anymore (the sustained-breach-only trigger
+      // was removed); both stay "critical" and unresolved, which still
+      // zeroes recovery/reliability via terminalOverrides.unresolved — the
+      // same zeroing terminalOverrides.failed used to produce.
+      expect(baseline.status).not.toBe("failed");
+      expect(harmful.status).not.toBe("failed");
+      expect(baseline.resolvedAtMs).toBeNull();
+      expect(harmful.resolvedAtMs).toBeNull();
 
       const goodScore = scoreOf(good).total;
       const alternateGoodScore = scoreOf(alternateGood).total;

@@ -189,10 +189,13 @@ describe("Split-Brain Incident", () => {
       expect(afterHeal.values.partitionState).toBe("healed");
     });
 
-    it("fails if dual leadership with real conflicts persists for the full sustained window", () => {
+    it("stays active (never auto-fails) even after dual leadership with real conflicts persists past the old sustained window", () => {
       const state = runScenario(NETWORK_PARTITION_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        splitBrainIncidentSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak conflict count and peak leader count generically via numericWatchFields", () => {
@@ -303,9 +306,13 @@ describe("Split-Brain Incident", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, even past the old sustained window", () => {
       const state = runScenario(NETWORK_PARTITION_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        splitBrainIncidentSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(splitBrainIncidentSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

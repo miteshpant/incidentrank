@@ -265,12 +265,15 @@ describe("Data Lineage Break During ETL Migration", () => {
       expect(finish.outcome).toBe("declared_unstable");
     });
 
-    it("sustained silent global-flip exposure eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained silent global-flip exposure stays active (never auto-fails) even long past the old sustained-failure window, while consecutiveFailureSeconds proves the breach really did sustain", () => {
       const state = runScenario(SUSTAINED_UNDECIDED_MS + 15 * 60_000, [
         { atMs: MIGRATION_ONSET_MS + 1_000, controlKey: CUTOVER_STRATEGY_KEY, value: "global-flip" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        dataLineageBreakDuringEtlMigrationSimulation.failureCondition.sustainedSeconds,
+      );
       const finish = evaluateCandidateDeclaredFinish(dataLineageBreakDuringEtlMigrationSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -504,13 +507,14 @@ describe("Data Lineage Break During ETL Migration", () => {
       expect(result.outcome).toBe("declared_unstable");
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("declared_unstable still wins in candidate_declared mode even though the attempt itself never auto-fails", () => {
       const state = runScenario(SUSTAINED_UNDECIDED_MS + 15 * 60_000, [
         { atMs: MIGRATION_ONSET_MS + 1_000, controlKey: CUTOVER_STRATEGY_KEY, value: "global-flip" },
       ]);
       const result = evaluateCandidateDeclaredFinish(dataLineageBreakDuringEtlMigrationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

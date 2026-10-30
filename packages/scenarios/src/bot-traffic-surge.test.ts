@@ -187,10 +187,13 @@ describe("Bot Traffic Surge", () => {
       expect(afterSecondWave.values.backendLoadPct).toBe(96);
     });
 
-    it("fails if backend load stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after backend load remains at or above 95% past the old sustained window", () => {
       const state = runScenario(ESCALATING_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        botTrafficSurgeSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak backend load and peak false-positive rate generically via numericWatchFields", () => {
@@ -290,9 +293,10 @@ describe("Bot Traffic Surge", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails under candidate_declared mode even past the old sustained-failure window; a Finish there is still declared_unstable", () => {
       const state = runScenario(ESCALATING_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(botTrafficSurgeSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

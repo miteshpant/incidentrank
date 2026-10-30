@@ -225,10 +225,13 @@ describe("Fan-Out Request Explosion", () => {
       expect(state.values.aggregatorStatus).toBe("critical");
     });
 
-    it("fails if customer success stays at or below 45% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after customer success remains at or below 45% past the old sustained window", () => {
       const state = runScenario(SERVICE_E_DEGRADING_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        fanOutRequestExplosionSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak Service E and Service A saturation generically via numericWatchFields", () => {
@@ -327,9 +330,10 @@ describe("Fan-Out Request Explosion", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails in candidate_declared mode, even sustained past the old failure window; an undeclared Finish still reads declared_unstable", () => {
       const state = runScenario(SERVICE_E_DEGRADING_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(fanOutRequestExplosionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

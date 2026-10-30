@@ -296,10 +296,13 @@ describe("Training Pipeline Produces Corrupted Model Artifact", () => {
       );
     });
 
-    it("sustained keep-serving exposure eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained keep-serving exposure stays active (never auto-fails) even once consecutiveFailureSeconds has cleared the old sustained window", () => {
       const state = runScenario(SUSTAINED_EXPOSURE_MS + 60_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        trainingPipelineProducesCorruptedModelArtifactSimulation.failureCondition.sustainedSeconds,
+      );
       const finish = evaluateCandidateDeclaredFinish(trainingPipelineProducesCorruptedModelArtifactSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -683,11 +686,12 @@ describe("Training Pipeline Produces Corrupted Model Artifact", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("declared_unstable is reached on the merits (no mitigation engaged) even though the engine itself never auto-fails the attempt", () => {
       const state = runScenario(SUSTAINED_EXPOSURE_MS + 60_000);
       const result = evaluateCandidateDeclaredFinish(trainingPipelineProducesCorruptedModelArtifactSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

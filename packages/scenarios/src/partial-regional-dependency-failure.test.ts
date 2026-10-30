@@ -232,13 +232,16 @@ describe("Partial Regional Dependency Failure", () => {
       expect(state.values.apacSuccessRate).toBe(70.0);
     });
 
-    it("failure path: tripping the global breaker without fallback causes an outright outage and automatic failure", () => {
+    it("harmful path: tripping the global breaker without fallback causes an outright outage but never auto-fails even past the old sustained window", () => {
       const state = runScenario(REGIONAL_DIVERGENCE_MS + 61_000, [
         { atMs: REGIONAL_DIVERGENCE_MS + 1_000, controlKey: GLOBAL_CIRCUIT_BREAKER_KEY, value: true },
       ]);
       expect(state.values.globalCustomerSuccessRate).toBe(40.0);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        partialRegionalDependencyFailureSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak EU latency and peak fallback traffic generically via numericWatchFields", () => {
@@ -320,11 +323,12 @@ describe("Partial Regional Dependency Failure", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("sustained outright outage never auto-fails, and still resolves to declared_unstable via candidate_declared Finish", () => {
       const state = runScenario(REGIONAL_DIVERGENCE_MS + 61_000, [
         { atMs: REGIONAL_DIVERGENCE_MS + 1_000, controlKey: GLOBAL_CIRCUIT_BREAKER_KEY, value: true },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(partialRegionalDependencyFailureSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });
@@ -470,7 +474,8 @@ describe("Partial Regional Dependency Failure", () => {
       // either case, so neither is penalized) — not a reward for
       // inaction. harmfulScore (485) is correctly the lowest of all five,
       // reflecting the global-breaker-without-fallback path's outright
-      // failure (status: "failed").
+      // outage (globalCustomerSuccessRate=40.0) — scored as never-resolved
+      // since the engine no longer auto-fails on a sustained breach.
       expect(goodScore.total).toBe(865);
       expect(acceptableScore.total).toBe(800);
       expect(baselineScore.total).toBe(550);

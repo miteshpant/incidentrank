@@ -126,8 +126,11 @@ describe("paymentRetryStorm", () => {
       // Harmful: aggressive-scaling-high-retries rule (paymentInstances
       // >= 16 and retries >= 3) drives checkoutSuccessRate down to 58,
       // below the failureCondition's 60 threshold, sustained for the full
-      // 3-minute window -> genuine "failed" status (simulation.test.ts
-      // "15. bad configuration").
+      // 3-minute window and beyond -> breach genuinely sustains
+      // (consecutiveFailureSeconds reflects it) but the attempt stays
+      // active: the engine no longer auto-fails on a sustained
+      // failureCondition breach, only on the uniform attempt ceiling
+      // (simulation.test.ts "15. bad configuration").
       const harmful = runScenario(66_000 + 3 * 60_000 + 1_000, [
         { atMs: 65_000, controlKey: PAYMENT_INSTANCES_KEY, value: 24 },
         { atMs: 65_000, controlKey: RETRIES_KEY, value: 5 },
@@ -141,7 +144,11 @@ describe("paymentRetryStorm", () => {
       expect(partial.values.checkoutSuccessRate).toBe(84);
       expect(baseline.status).not.toBe("resolved");
       expect(baseline.status).not.toBe("failed");
-      expect(harmful.status).toBe("failed");
+      expect(harmful.status).not.toBe("failed");
+      expect(harmful.failedAtMs).toBeNull();
+      expect(harmful.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        paymentRetryStormSimulation.failureCondition.sustainedSeconds,
+      );
 
       const goodScore = scoreOf(good).total;
       const partialScore = scoreOf(partial).total;

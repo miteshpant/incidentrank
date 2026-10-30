@@ -184,10 +184,13 @@ describe("Dead-Letter Queue Explosion", () => {
       expect(afterSecondWave.values.mainQueueLagMessages).toBe(1_400);
     });
 
-    it("fails if main queue lag stays at or above 1200 for the full sustained window", () => {
+    it("stays active (never auto-fails) even after main queue lag stays at or above 1200 past the old sustained window", () => {
       const state = runScenario(REPLAY_BACKLOG_CATCHUP_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        deadLetterQueueExplosionSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak DLQ depth and peak duplicate-processing risk generically via numericWatchFields", () => {
@@ -359,9 +362,10 @@ describe("Dead-Letter Queue Explosion", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode; a sustained breach still declares unstable on Finish", () => {
       const state = runScenario(REPLAY_BACKLOG_CATCHUP_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(deadLetterQueueExplosionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

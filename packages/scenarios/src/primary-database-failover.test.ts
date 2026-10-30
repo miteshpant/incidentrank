@@ -244,10 +244,13 @@ describe("Primary Database Failover", () => {
       expect(state.values.primaryStatus).toBe("critical");
     });
 
-    it("fails if write success stays at or below 10% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after write success stays at or below 10% past the old sustained window", () => {
       const state = runScenario(PRIMARY_UNAVAILABLE_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        primaryDatabaseFailoverSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("automatic failure does NOT fire for the split-primary trap (availability metrics stay healthy)", () => {
@@ -348,9 +351,10 @@ describe("Primary Database Failover", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode; unmitigated outage still declares unstable", () => {
       const state = runScenario(PRIMARY_UNAVAILABLE_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(primaryDatabaseFailoverSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

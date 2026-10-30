@@ -212,12 +212,15 @@ describe("Global Checkout Brownout", () => {
         expect(moderateRetry.values.paymentAuthSuccessPct).toBeGreaterThanOrEqual(90);
       });
 
-      it("sustained aggressive retry amplification trips the automatic failure condition", () => {
+      it("sustained aggressive retry amplification never auto-fails the attempt, even past the old sustained window", () => {
         const state = runScenario(DEPENDENCIES_DEGRADED_MS + 91_000, [
           { atMs: DEPENDENCIES_DEGRADED_MS + 1_000, controlKey: RETRY_POLICY_KEY, value: "aggressive" },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+          globalCheckoutBrownoutSimulation.failureCondition.sustainedSeconds,
+        );
       });
     });
 
@@ -426,11 +429,12 @@ describe("Global Checkout Brownout", () => {
       expect(baselineResult.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("a sustained harmful configuration never auto-fails, but Finish from it still only reaches declared_unstable", () => {
       const state = runScenario(DEPENDENCIES_DEGRADED_MS + 91_000, [
         { atMs: DEPENDENCIES_DEGRADED_MS + 1_000, controlKey: RETRY_POLICY_KEY, value: "aggressive" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(globalCheckoutBrownoutSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

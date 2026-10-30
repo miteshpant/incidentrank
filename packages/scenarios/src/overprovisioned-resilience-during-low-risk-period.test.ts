@@ -298,13 +298,14 @@ describe("Overprovisioned Resilience During Low-Risk Period", () => {
       expect(drillHit.values.cumulativeUnabsorbedFailoverDrillCount).toBe(1);
     });
 
-    it("a second drill while still below floor compounds the historical count and reaches automatic failure", () => {
+    it("a second drill while still below floor compounds the historical count but never auto-fails the attempt", () => {
       const state = runScenario(SECOND_AZ_FAILURE_DRILL_MS + 30_000 + 1_000, [
         { atMs: HIGH_RISK_WINDOW_ENDED_MS + 1_000, controlKey: MULTI_AZ_MODE_KEY, value: "single-az-only" },
       ]);
       expect(state.transitions.incidentState).toBe("az-floor-violation-drill-hit-second");
       expect(state.values.cumulativeUnabsorbedFailoverDrillCount).toBe(2);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const finish = evaluateCandidateDeclaredFinish(overprovisionedResilienceDuringLowRiskPeriodSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -386,9 +387,10 @@ describe("Overprovisioned Resilience During Low-Risk Period", () => {
       expect(eligibility).toEqual({ eligible: false });
     });
 
-    it("the unsafe minimum-cost path eventually reaches automatic failure once drills expose it", () => {
+    it("the unsafe minimum-cost path never auto-fails even once drills expose it and the violation sustains", () => {
       const state = runScenario(SECOND_AZ_FAILURE_DRILL_MS + 30_000 + 1_000, UNSAFE_MINIMUM_COST_ACTIONS);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 
@@ -421,13 +423,14 @@ describe("Overprovisioned Resilience During Low-Risk Period", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("declared_unstable still wins in candidate_declared mode even though the attempt never auto-fails", () => {
       const state = runScenario(SECOND_AZ_FAILURE_DRILL_MS + 30_000 + 1_000, [
         { atMs: HIGH_RISK_WINDOW_ENDED_MS + 1_000, controlKey: MULTI_AZ_MODE_KEY, value: "single-az-only" },
       ]);
       const result = evaluateCandidateDeclaredFinish(overprovisionedResilienceDuringLowRiskPeriodSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

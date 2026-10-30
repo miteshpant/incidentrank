@@ -179,10 +179,13 @@ describe("Out-of-Order Events", () => {
       expect(afterSecondWave.values.orderingViolationRate).toBe(65);
     });
 
-    it("fails once the unreconciled backlog stays at or above 1200 for the full sustained window", () => {
+    it("stays active (never auto-fails) even after the unreconciled backlog remains at or above 1200 past the old sustained window", () => {
       const state = runScenario(SUSTAINED_LOAD_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        outOfOrderEventsSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak unreconciled violations and peak violation rate generically via numericWatchFields", () => {
@@ -352,9 +355,10 @@ describe("Out-of-Order Events", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, but still declares unstable on Finish", () => {
       const state = runScenario(SUSTAINED_LOAD_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(outOfOrderEventsSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

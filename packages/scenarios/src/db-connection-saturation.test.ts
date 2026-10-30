@@ -120,10 +120,13 @@ describe("Database Connection Saturation — genericity proof", () => {
     expect(state.values.dbStatus).toBe("warning");
   });
 
-  it("fails if error rate stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after error rate remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      dbConnectionSaturationSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak connection usage generically via numericWatchFields", () => {
@@ -182,7 +185,10 @@ describe("Database Connection Saturation — genericity proof", () => {
 
       // Baseline: no action at all — "saturated-default" rule drives
       // errorRate to 22 (>= the failureCondition's 20 threshold),
-      // sustained for the full 60s window, so the incident fails.
+      // sustained well past the old 60s window — but the engine no
+      // longer auto-fails on a sustained breach (only the uniform
+      // 35-minute ATTEMPT_CEILING_MS does), so this stays unresolved
+      // (status "critical"), not "failed".
       const baseline = runScenario(30_000 + 61_000);
 
       // Harmful: "high-timeout-small-pool-harmful" rule — raising the
@@ -190,7 +196,8 @@ describe("Database Connection Saturation — genericity proof", () => {
       // `saturated-worsening` (errorRate 31, revenue-loss rate 900/min,
       // worse than plain `saturated`'s 500/min), and action-classifications.ts
       // explicitly tags both the small pool and the high timeout as
-      // "harmful" for this trigger.
+      // "harmful" for this trigger. Like baseline, this sustained breach
+      // no longer auto-fails the attempt either.
       const harmful = runScenario(30_000 + 61_000, [
         { atMs: 31_000, controlKey: QUERY_TIMEOUT_MS_KEY, value: 15_000 },
       ]);
@@ -201,8 +208,16 @@ describe("Database Connection Saturation — genericity proof", () => {
       );
       expect(partial.status).toBe("degraded");
       expect(partial.values.dbStatus).toBe("warning");
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      expect(baseline.status).not.toBe("failed");
+      expect(baseline.failedAtMs).toBeNull();
+      expect(baseline.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        dbConnectionSaturationSimulation.failureCondition.sustainedSeconds,
+      );
+      expect(harmful.status).not.toBe("failed");
+      expect(harmful.failedAtMs).toBeNull();
+      expect(harmful.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        dbConnectionSaturationSimulation.failureCondition.sustainedSeconds,
+      );
       expect(harmful.values.dbStatus).toBe("critical");
 
       const goodScore = scoreOf(good).total;
@@ -210,22 +225,24 @@ describe("Database Connection Saturation — genericity proof", () => {
       const baselineScore = scoreOf(baseline).total;
       const harmfulScore = scoreOf(harmful).total;
 
-      // The genuinely-sustained good recovery clears every unresolved or
-      // failed outcome by a wide margin: recovery/reliability both carry
-      // their terminalOverrides.unresolved=0 penalty for any run that is
-      // neither resolved nor failed (partial) and the same floor applies
-      // via terminalOverrides.failed=0 for both terminal failures
-      // (baseline, harmful) — so recovery+reliability can never
-      // distinguish partial/baseline/harmful from each other; only
-      // good escapes that floor.
+      // The genuinely-sustained good recovery clears every unresolved
+      // outcome by a wide margin: recovery/reliability all carry the
+      // same terminalOverrides.unresolved=0 penalty for any run that
+      // never resolves — partial (never satisfies successCondition or
+      // failureCondition), and baseline/harmful (sustain a breach past
+      // the old failure window, but no longer auto-fail, so they too
+      // end the run merely unresolved) — so recovery+reliability can
+      // never distinguish partial/baseline/harmful from each other;
+      // only good escapes that floor.
       expect(goodScore).toBeGreaterThan(baselineScore);
       expect(goodScore).toBeGreaterThan(harmfulScore);
       expect(goodScore).toBeGreaterThan(partialScore);
 
-      // Baseline beats the harmful high-timeout path: both reach
-      // "failed" (so recovery/reliability tie at 0 for both, and
-      // customerImpact's wide >=50_000 catch-all band ties both at 200
-      // despite harmful's materially larger revenueLossUsd) — the real
+      // Baseline beats the harmful high-timeout path: both stay
+      // unresolved (so recovery/reliability tie at 0 for both via the
+      // same terminalOverrides.unresolved floor), and customerImpact's
+      // wide >=50_000 catch-all band ties both at 200 despite harmful's
+      // materially larger revenueLossUsd) — the real
       // differentiator is operationalEfficiency, where action-
       // classifications.ts's harmful tag for queryTimeoutMs >= 15_000
       // costs harmful 15 points (50 -> 35) that baseline's zero actions
@@ -233,10 +250,11 @@ describe("Database Connection Saturation — genericity proof", () => {
       expect(baselineScore).toBeGreaterThan(harmfulScore);
 
       // Counterintuitively, the "scaled-pool-only" partial improvement
-      // scores BELOW both terminal failures. It ties baseline/harmful's
-      // 0 on recovery and reliability (same terminalOverrides.unresolved
-      // floor — never resolving is scored no better than never
-      // recovering), but then also pays costEfficiency's bottom band:
+      // scores BELOW both unresolved baseline/harmful runs. It ties
+      // baseline/harmful's 0 on recovery and reliability (same
+      // terminalOverrides.unresolved floor — never resolving is scored
+      // no better than never recovering), but then also pays
+      // costEfficiency's bottom band:
       // scaling poolSize to 200 raises costIncreaseRatio to
       // (420-200)/200 = 1.1 (perUnitMonthlyUsd["poolSize:200"]=420
       // against a baselineMonthlyUsd of 200), past the `{ atMost: 1,

@@ -326,12 +326,15 @@ describe("Data Pipeline Freshness Collapse", () => {
         expect(eligibility).toEqual({ eligible: false });
       });
 
-      it("holding dropEvents long enough reaches automatic failure", () => {
+      it("holding dropEvents long enough stays active (never auto-fails), while consecutiveFailureSeconds proves the breach really did sustain", () => {
         const state = runScenario(SUSTAINED_LAG_MS + 32_000, [
           { atMs: LAG_ONSET_MS + 1_000, controlKey: DROP_EVENTS_KEY, value: true },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+          dataPipelineFreshnessCollapseSimulation.failureCondition.sustainedSeconds,
+        );
       });
     });
 

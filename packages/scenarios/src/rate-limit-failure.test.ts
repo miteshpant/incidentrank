@@ -134,10 +134,13 @@ describe("Rate-Limit Failure", () => {
     expect(state.values.rateLimitViolationRate).toBe(72);
   });
 
-  it("fails if rate-limit violations stay critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after rate-limit violations remain critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      rateLimitFailureSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak retry queue depth generically via numericWatchFields", () => {
@@ -213,15 +216,21 @@ describe("Rate-Limit Failure", () => {
       ]);
 
       // Baseline's violationRate (42) crosses the failure threshold and
-      // naturally ends via the failure condition's 60s sustain window,
-      // well before the full attempt length.
-      const baseline = runScenario(30_000 + 61_000);
+      // stays sustained-breached past the old 60s sustain window, but the
+      // engine no longer auto-fails on that alone -- the attempt remains
+      // active and, like the two partials, runs the full attempt length
+      // and ends "unresolved".
+      const baseline = runScenario(FULL_ATTEMPT_MS);
 
       expect(jitterOnly.status).not.toBe("resolved");
       expect(jitterOnly.status).not.toBe("failed");
       expect(fixedDelayOnly.status).not.toBe("resolved");
       expect(fixedDelayOnly.status).not.toBe("failed");
-      expect(baseline.status).toBe("failed");
+      expect(baseline.status).not.toBe("resolved");
+      expect(baseline.status).not.toBe("failed");
+      expect(baseline.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        rateLimitFailureSimulation.failureCondition.sustainedSeconds,
+      );
 
       const goodScore = scoreOf(good).total;
       const jitterScore = scoreOf(jitterOnly).total;

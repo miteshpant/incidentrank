@@ -219,12 +219,15 @@ describe("Cache Revalidation Herd", () => {
       expect(afterSecondWave.values.refreshFailureRatePct).toBe(65);
     });
 
-    it("fails if origin QPS stays at or above 9,000 for the full sustained window", () => {
+    it("stays active (never auto-fails) even after origin QPS remains at or above 9,000 past the old sustained window", () => {
       const state = runScenario(SYNCHRONIZED_EXPIRY_MS + 1_000 + 46_000, [
         { atMs: SYNCHRONIZED_EXPIRY_MS + 1_000, controlKey: API_INSTANCE_COUNT_KEY, value: 24 },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        cacheRevalidationHerdSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak origin QPS and peak concurrent refreshes generically via numericWatchFields", () => {

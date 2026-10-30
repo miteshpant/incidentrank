@@ -276,13 +276,14 @@ describe("Ledger Reconciliation Divergence", () => {
         expect(eligibility).toEqual({ eligible: false });
       });
 
-      it("holding the longest sustained window of auto-discard reaches automatic failure", () => {
+      it("holding the longest sustained window of auto-discard never auto-fails the attempt, even past the old sustained window", () => {
         const state = runScenario(SUSTAINED_DIVERGENCE_MS + 35_000, [
           { atMs: SUSTAINED_DIVERGENCE_MS + 1_000, controlKey: RECONCILIATION_MODE_KEY, value: "active-exception-routing" },
           { atMs: SUSTAINED_DIVERGENCE_MS + 2_000, controlKey: EXCEPTION_POLICY_KEY, value: "auto-discard" },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(30);
       });
     });
 
@@ -430,11 +431,13 @@ describe("Ledger Reconciliation Divergence", () => {
       expect(result.completionTier).toBe("optimal");
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("the discard trap, held past the old sustained-failure window, never auto-fails and still resolves to declared_unstable only because it's not Finish-eligible", () => {
       const state = runScenario(SUSTAINED_DIVERGENCE_MS + 31_000, [
         { atMs: SUSTAINED_DIVERGENCE_MS + 1_000, controlKey: RECONCILIATION_MODE_KEY, value: "active-exception-routing" },
         { atMs: SUSTAINED_DIVERGENCE_MS + 2_000, controlKey: EXCEPTION_POLICY_KEY, value: "auto-discard" },
       ]);
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(ledgerReconciliationDivergenceSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

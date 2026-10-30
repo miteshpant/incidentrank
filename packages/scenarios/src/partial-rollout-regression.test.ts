@@ -209,10 +209,13 @@ describe("Deployment Regression (partial-rollout-regression)", () => {
       expect(isolated.values.regressionHealth).toBe("unresolved");
     });
 
-    it("fails if customer success rate stays at or below 80% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after customer success rate remains at or below 80% past the old sustained window", () => {
       const state = runScenario(DEPENDENCY_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        partialRolloutRegressionSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak new-version error rate and shared dependency pressure generically via numericWatchFields", () => {
@@ -316,9 +319,10 @@ describe("Deployment Regression (partial-rollout-regression)", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, even past the old sustained failure window", () => {
       const state = runScenario(DEPENDENCY_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(partialRolloutRegressionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

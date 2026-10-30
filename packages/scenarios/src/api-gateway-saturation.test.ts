@@ -230,10 +230,13 @@ describe("API Gateway Saturation", () => {
       expect(state.values.gatewayStatus).toBe("warning");
     });
 
-    it("fails if gateway CPU stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after gateway CPU remains at or above 95% past the old sustained window", () => {
       const state = runScenario(TRAFFIC_GROWTH_MS + 3 * 60_000 + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        apiGatewaySaturationSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak gateway CPU and peak connection count generically via numericWatchFields", () => {
@@ -342,9 +345,10 @@ describe("API Gateway Saturation", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails even past the old sustained window, and remains declared_unstable under candidate_declared mode", () => {
       const state = runScenario(TRAFFIC_GROWTH_MS + 3 * 60_000 + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(apiGatewaySaturationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

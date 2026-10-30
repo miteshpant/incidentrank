@@ -260,12 +260,15 @@ describe("Abuse-Prevention False Positive Storm", () => {
         expect(eligibility).toEqual({ eligible: false });
       });
 
-      it("holding broad disablement through the investigation window reaches automatic failure", () => {
+      it("stays active (never auto-fails) even after holding broad disablement past the old sustained window", () => {
         const state = runScenario(PATCHED_RULE_AVAILABLE_MS + 50_000, [
           { atMs: FALSE_POSITIVE_ONSET_MS + 1_000, controlKey: RATE_LIMITER_MODE_KEY, value: "disabled" },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+          abusePreventionFalsePositiveStormSimulation.failureCondition.sustainedSeconds,
+        );
       });
 
       it("partial relaxation is an equally unsafe, separately-tracked violation with a smaller blast radius", () => {
@@ -394,7 +397,7 @@ describe("Abuse-Prevention False Positive Storm", () => {
       expect(eligibility).toEqual({ eligible: false });
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("a sustained-but-not-eligible broad-disablement run still resolves to declared_unstable in candidate_declared mode", () => {
       const state = runScenario(PATCHED_RULE_AVAILABLE_MS + 50_000, [
         { atMs: FALSE_POSITIVE_ONSET_MS + 1_000, controlKey: RATE_LIMITER_MODE_KEY, value: "disabled" },
       ]);

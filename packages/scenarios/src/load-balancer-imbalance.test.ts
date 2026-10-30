@@ -205,10 +205,13 @@ describe("Load Balancer Imbalance", () => {
       expect(afterSecondWave.values.globalSuccessRatePct).toBe(72);
     });
 
-    it("fails if global success rate stays at or below 75% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after global success rate remains at or below 75% past the old sustained window", () => {
       const state = runScenario(STALE_HEALTH_CHECK_COMPOUNDING_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        loadBalancerImbalanceSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak instance A connection count and latency generically via numericWatchFields", () => {
@@ -313,9 +316,13 @@ describe("Load Balancer Imbalance", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("declared_unstable still fires on a sustained breach even though the engine itself never auto-fails", () => {
       const state = runScenario(STALE_HEALTH_CHECK_COMPOUNDING_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        loadBalancerImbalanceSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(loadBalancerImbalanceSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

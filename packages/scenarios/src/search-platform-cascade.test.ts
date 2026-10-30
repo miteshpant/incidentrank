@@ -360,12 +360,14 @@ describe("Search Platform Cascade", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("stays active (never auto-fails) even after basic search success rate has been sustained below the failure floor past the old sustained window; candidate_declared mode still applies", () => {
       const state = runScenario(RANKING_DEGRADES_MS + 110_000, [
         { atMs: RANKING_DEGRADES_MS + 1_000, controlKey: QUERY_CONCURRENCY_KEY, value: 400 },
         { atMs: RANKING_DEGRADES_MS + 1_000, controlKey: API_CAPACITY_KEY, value: 400 },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(90);
       const result = evaluateCandidateDeclaredFinish(searchPlatformCascadeSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

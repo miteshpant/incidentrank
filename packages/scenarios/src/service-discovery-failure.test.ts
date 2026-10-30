@@ -210,12 +210,15 @@ describe("Service Discovery Failure", () => {
       expect(afterSecondWave.triggers.registrySecondWave).toBe(true);
     });
 
-    it("failure path: sustained extreme failure rate (retry amplification) automatically fails the attempt", () => {
+    it("harmful path: sustained extreme failure rate (retry amplification) never auto-fails even past the old sustained window", () => {
       const state = runScenario(REGISTRY_DEGRADES_MS + 1_000 + 61_000, [
         { atMs: REGISTRY_DEGRADES_MS + 1_000, controlKey: RETRY_COUNT_KEY, value: 20 },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        serviceDiscoveryFailureSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak connection failures generically via numericWatchFields", () => {
@@ -303,13 +306,14 @@ describe("Service Discovery Failure", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of completion mode", () => {
+    it("sustained breach alone never auto-fails, but Finish still declares unstable since nothing was ever sustained-healthy", () => {
       const state = runScenario(REGISTRY_DEGRADES_MS + 1_000 + 61_000, [
         { atMs: REGISTRY_DEGRADES_MS + 1_000, controlKey: RETRY_COUNT_KEY, value: 20 },
       ]);
       const result = evaluateCandidateDeclaredFinish(serviceDiscoveryFailureSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 
@@ -339,7 +343,7 @@ describe("Service Discovery Failure", () => {
         serviceDiscoveryFailureSimulation.successCondition.sustainedSeconds,
       );
       expect(baseline.status).not.toBe("failed");
-      expect(harmful.status).toBe("failed");
+      expect(harmful.status).not.toBe("failed");
 
       const goodScore = scoreOf(good);
       const baselineScore = scoreOf(baseline);

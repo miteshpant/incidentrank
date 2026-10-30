@@ -179,10 +179,13 @@ describe("Consistency vs Availability Incident", () => {
       expect(afterHeal.values.regionConnectivity).toBe("healthy");
     });
 
-    it("fails if the correctness-violating trap persists for the full sustained window", () => {
+    it("stays active (never auto-fails) even after the correctness-violating trap persists past the old sustained window", () => {
       const state = runScenario(CONNECTIVITY_DEGRADED_MS + 91_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        consistencyVsAvailabilityIncidentSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak correctness violations generically via numericWatchFields", () => {
@@ -302,9 +305,13 @@ describe("Consistency vs Availability Incident", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, even sustained well past the old failure window", () => {
       const state = runScenario(CONNECTIVITY_DEGRADED_MS + 91_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        consistencyVsAvailabilityIncidentSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(consistencyVsAvailabilityIncidentSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

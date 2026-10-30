@@ -583,9 +583,13 @@ describe("Privacy Deletion Backlog", () => {
       expect(state.values.endToEndCompletionPercent as number).toBeLessThan(100);
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("stays active (never auto-fails) in candidate_declared mode even after false completions sustain well past the old sustained window, and still resolves to declared_unstable", () => {
       const state = runScenario(SUSTAINED_BACKLOG_MS + 15 * 60_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        privacyDeletionBacklogSimulation.failureCondition!.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(privacyDeletionBacklogSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

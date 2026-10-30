@@ -221,10 +221,11 @@ describe("Cache Eviction Storm", () => {
       expect(afterSecondWave.values.hitRatioPct).toBe(18);
     });
 
-    it("fails if hit ratio stays at or below 20% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after hit ratio remains at or below 20% past the old sustained window", () => {
       const state = runScenario(DB_READ_PRESSURE_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
     });
 
     it("never auto-resolves even once the success condition is genuinely sustained — only an explicit Finish declaration can resolve it", () => {

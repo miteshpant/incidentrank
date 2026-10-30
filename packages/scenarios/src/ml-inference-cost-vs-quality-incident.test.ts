@@ -247,12 +247,13 @@ describe("ML Inference Cost vs Quality Incident", () => {
       expect(finish.outcome).toBe("declared_unstable");
     });
 
-    it("sustained trap exposure eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained trap exposure stays active (never auto-fails) even long after the old sustained window, though the breach is tracked as genuinely sustained", () => {
       const state = runScenario(SUSTAINED_MISROUTE_MS + 15 * 60_000, [
         { atMs: MISROUTE_ONSET_MS + 1_000, controlKey: ROUTING_POLICY_KEY, value: "blanket-small-model" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(30);
       const finish = evaluateCandidateDeclaredFinish(mlInferenceCostVsQualityIncidentSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -510,13 +511,14 @@ describe("ML Inference Cost vs Quality Incident", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("candidate_declared mode still reports declared_unstable even though the attempt never auto-failed", () => {
       const state = runScenario(SUSTAINED_MISROUTE_MS + 15 * 60_000, [
         { atMs: MISROUTE_ONSET_MS + 1_000, controlKey: ROUTING_POLICY_KEY, value: "blanket-small-model" },
       ]);
       const result = evaluateCandidateDeclaredFinish(mlInferenceCostVsQualityIncidentSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

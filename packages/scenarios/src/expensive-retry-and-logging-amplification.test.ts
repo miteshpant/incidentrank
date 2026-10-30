@@ -292,12 +292,15 @@ describe("Expensive Retry and Logging Amplification", () => {
       expect(finish.outcome).toBe("declared_unstable");
     });
 
-    it("sustained audit-off eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained audit-off stays active (never auto-fails) even once the breach has sustained well past the old failure window", () => {
       const state = runScenario(COST_SETTLING_FULLY_DONE_MS + 6 * 60_000, [
         { atMs: DEPLOY_REGRESSION_DETECTED_MS + 1_000, controlKey: LOGGING_LEVEL_KEY, value: "off" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        expensiveRetryAndLoggingAmplificationSimulation.failureCondition.sustainedSeconds,
+      );
       const finish = evaluateCandidateDeclaredFinish(expensiveRetryAndLoggingAmplificationSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -508,13 +511,13 @@ describe("Expensive Retry and Logging Amplification", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("declared_unstable still wins in candidate_declared mode even though the engine never auto-fails the attempt", () => {
       const state = runScenario(COST_SETTLING_FULLY_DONE_MS + 6 * 60_000, [
         { atMs: DEPLOY_REGRESSION_DETECTED_MS + 1_000, controlKey: LOGGING_LEVEL_KEY, value: "off" },
       ]);
       const result = evaluateCandidateDeclaredFinish(expensiveRetryAndLoggingAmplificationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
     });
   });
 

@@ -188,10 +188,13 @@ describe("Regional Failover Causes Global Overload", () => {
       expect(afterUncappedFailover.values.regionCCustomerSuccessPct).toBeLessThan(100);
     });
 
-    it("fails if second-region risk stays critical for the full sustained window", () => {
+    it("stays active (never auto-fails) even after second-region risk remains critical past the old sustained window", () => {
       const state = runScenario(REGION_A_FAILS_MS + 91_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        regionalFailoverSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak queue depth and DB utilization generically via numericWatchFields", () => {
@@ -245,13 +248,17 @@ describe("Regional Failover Causes Global Overload", () => {
       expect(state.values.containmentMechanism).toBe("retriggered");
     });
 
-    it("the unsafe-sequence retrigger, if sustained, eventually trips automatic failure just like the original trap", () => {
+    it("the unsafe-sequence retrigger, if sustained, breaches the old failure window but never auto-fails just like the original trap", () => {
       const state = runScenario(REGION_A_CAPACITY_RETURNS_MS + 110_000, [
         ...CAPACITY_MANAGED_ACTIONS,
         { atMs: REGION_A_CAPACITY_RETURNS_MS + 1_000, controlKey: REGION_A_RESTORATION_KEY, value: "full" },
         { atMs: REGION_A_CAPACITY_RETURNS_MS + 1_000, controlKey: TRAFFIC_RESTORE_PACE_KEY, value: "instant" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        regionalFailoverSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("REGION_A_RESTORATION_KEY left at its 'offline' default after capacity returns restores no traffic at all, even with pace set to gradual -- the candidate must actually act on the control, not just rely on Region A's own reported health", () => {
@@ -346,9 +353,10 @@ describe("Regional Failover Causes Global Overload", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("declared_unstable still fires regardless of how long the breach has sustained, even though the engine never auto-fails", () => {
       const state = runScenario(REGION_A_FAILS_MS + 91_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(regionalFailoverSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

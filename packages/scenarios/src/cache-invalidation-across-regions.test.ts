@@ -459,12 +459,14 @@ describe("Cache Invalidation Across Regions", () => {
       expect(eligibility).toEqual({ eligible: true, tier: "optimal" });
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("stays active (never auto-fails) even after Origin overload remains breached past the old sustained window, in candidate_declared mode", () => {
       const state = runScenario(INCIDENT_ONSET_MS + 65_000, [
         { atMs: INCIDENT_ONSET_MS + 1_000, controlKey: GLOBAL_CACHE_BYPASS_KEY, value: true },
         { atMs: INCIDENT_ONSET_MS + 2_000, controlKey: REFRESH_CONCURRENCY_KEY, value: "high" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
       const result = evaluateCandidateDeclaredFinish(cacheInvalidationAcrossRegionsSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

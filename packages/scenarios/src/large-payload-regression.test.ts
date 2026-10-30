@@ -226,10 +226,13 @@ describe("Large Payload Regression", () => {
       expect(afterSecondWave.values.errorRatePercent).toBe(14);
     });
 
-    it("fails if API memory stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after API memory remains at or above 95% past the old sustained window", () => {
       const state = runScenario(MEMORY_EXHAUSTION_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        largePayloadRegressionSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak memory and peak payload size generically via numericWatchFields", () => {
@@ -345,9 +348,10 @@ describe("Large Payload Regression", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails in candidate_declared mode even past the old sustained failure window, and Finish still reports declared_unstable", () => {
       const state = runScenario(MEMORY_EXHAUSTION_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(largePayloadRegressionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

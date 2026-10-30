@@ -117,10 +117,11 @@ describe("Cache Stampede", () => {
     expect(state.values.queuedRequests).toBe(80);
   });
 
-  it("fails if the request queue stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after the request queue remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
   });
 
   it("tracks peak queued requests generically via numericWatchFields", () => {

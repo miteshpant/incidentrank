@@ -221,10 +221,11 @@ describe("Distributed Coordination Failure", () => {
       );
     });
 
-    it("failure condition: an unmitigated backlog sustained past threshold fails the attempt", () => {
+    it("stays active (never auto-fails) even after the unmitigated backlog sustains past the old threshold", () => {
       const state = runScenario(STALENESS_WIDENS_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
     });
 
     it("zero-action immediate stop never resolves — automatic mode requires a real authored fix", () => {

@@ -140,14 +140,17 @@ describe("Cache Node Failure", () => {
     expect(state.status).not.toBe("resolved");
   });
 
-  it("aggressive warming eventually fails if sustained (it crosses the failure threshold)", () => {
+  it("aggressive warming never auto-fails even once sustained past the old failure threshold", () => {
     const state = runScenario(31_000 + 61_000, [
       { atMs: 31_000, controlKey: CACHE_NODE_COUNT_KEY, value: 4 },
       { atMs: 31_000, controlKey: CACHE_WARMING_MODE_KEY, value: "aggressive" },
     ]);
 
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      cacheNodeFailureSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("scaling application concurrency while the database is unprotected amplifies the overload (harmful)", () => {
@@ -185,10 +188,13 @@ describe("Cache Node Failure", () => {
     expect(lateState.status).toBe("critical");
   });
 
-  it("fails automatically if unmitigated long enough (automatic failure)", () => {
+  it("stays active (never auto-fails) even after the failure condition remains breached past the old sustained window", () => {
     const state = runScenario(31_000 + 3 * 60_000 + 60_000 + 5_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      cacheNodeFailureSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak db reads and cache node load generically via numericWatchFields", () => {
@@ -289,8 +295,22 @@ describe("Cache Node Failure", () => {
       // automatic-completion engine would otherwise let it run forever
       // without ever being "safe" by the scenario's own success bar.
       expect(masking.status).toBe("degraded");
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      // Baseline and harmful both sustain the failure condition well past
+      // its old 60s sustained window, but breaching failureCondition no
+      // longer auto-fails the attempt (only the 35-minute ATTEMPT_CEILING_MS
+      // does) — both remain active (critical), never "failed".
+      expect(baseline.status).not.toBe("failed");
+      expect(baseline.status).toBe("critical");
+      expect(baseline.failedAtMs).toBeNull();
+      expect(baseline.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        cacheNodeFailureSimulation.failureCondition.sustainedSeconds,
+      );
+      expect(harmful.status).not.toBe("failed");
+      expect(harmful.status).toBe("critical");
+      expect(harmful.failedAtMs).toBeNull();
+      expect(harmful.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        cacheNodeFailureSimulation.failureCondition.sustainedSeconds,
+      );
 
       const goodScore = scoreOf(good).total;
       const altGoodScore = scoreOf(altGood).total;
@@ -307,8 +327,9 @@ describe("Cache Node Failure", () => {
       // Both good paths substantially outscore every non-recovering
       // path. recovery/reliability are both zeroed by terminalOverrides
       // for any non-resolved outcome, which collapses masking and
-      // baseline to an identical total here (both unresolved/failed with
-      // otherwise-equal customerImpact/dataIntegrity/costEfficiency/
+      // baseline to an identical total here (both unresolved, neither
+      // ever auto-fails anymore, with otherwise-equal customerImpact/
+      // dataIntegrity/costEfficiency/
       // operationalEfficiency measures) — a legitimate tie given the
       // documented Phase 6.1 terminal-override limitation (phase6b.md
       // section 17), not a scoring bug: masking's database-survivable-

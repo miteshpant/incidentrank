@@ -277,10 +277,14 @@ describe("Cascading Failure Across Shared Platform", () => {
       expect(state.values.dbWriteSuccessRatePercent as number).toBeLessThan(50);
     });
 
-    it("left fully unaddressed through sustainedCascade, the attempt fails on connection exhaustion", () => {
+    it("left fully unaddressed through sustainedCascade, stays active (never auto-fails) even after connection exhaustion remains breached past the old sustained window", () => {
       const state = runScenario(SUSTAINED_CASCADE_MS + 35_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       expect(state.values.cumulativeConnectionExhaustionCount as number).toBeGreaterThanOrEqual(900);
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        cascadingFailureAcrossSharedPlatformSimulation.failureCondition.sustainedSeconds,
+      );
     });
   });
 
@@ -527,11 +531,15 @@ describe("Cascading Failure Across Shared Platform", () => {
       expect(result.completionTier).toBe("optimal");
     });
 
-    it("declares failed_unstable (via true failure) if left unaddressed long enough, never a false resolve", () => {
+    it("declares declared_unstable (never a false resolve) if left unaddressed long enough, even though the attempt stays active (never auto-fails)", () => {
       const state = runScenario(SUSTAINED_CASCADE_MS + 35_000);
       const result = evaluateCandidateDeclaredFinish(cascadingFailureAcrossSharedPlatformSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        cascadingFailureAcrossSharedPlatformSimulation.failureCondition.sustainedSeconds,
+      );
     });
   });
 

@@ -258,12 +258,15 @@ describe("Model Feature Freshness Degradation", () => {
       expect(finish.outcome).toBe("declared_unstable");
     });
 
-    it("sustained silent-permissive exposure eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained silent-permissive exposure never auto-fails the attempt, even though the failure condition stays sustained well past its old window", () => {
       const state = runScenario(SUSTAINED_LAG_MS + 15 * 60_000, [
         { atMs: LAG_ONSET_MS + 1_000, controlKey: FEATURE_FALLBACK_MODE_KEY, value: "permissive" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        modelFeatureFreshnessDegradationSimulation.failureCondition.sustainedSeconds,
+      );
       const finish = evaluateCandidateDeclaredFinish(modelFeatureFreshnessDegradationSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -557,13 +560,14 @@ describe("Model Feature Freshness Degradation", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("declared_unstable still wins in candidate_declared mode, without the engine auto-failing the attempt", () => {
       const state = runScenario(SUSTAINED_LAG_MS + 15 * 60_000, [
         { atMs: LAG_ONSET_MS + 1_000, controlKey: FEATURE_FALLBACK_MODE_KEY, value: "permissive" },
       ]);
       const result = evaluateCandidateDeclaredFinish(modelFeatureFreshnessDegradationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

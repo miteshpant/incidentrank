@@ -195,10 +195,13 @@ describe("Cross-Region Latency Spike", () => {
       expect(afterSustained.values.usCustomerLatencyMs).toBe(720);
     });
 
-    it("fails if US customer latency stays at or above 700ms for the full sustained window", () => {
+    it("stays active (never auto-fails) even after US customer latency remains at or above 700ms past the old sustained window", () => {
       const state = runScenario(SUSTAINED_DEGRADATION_MS + 91_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        crossRegionLatencySpikeSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak inter-region RTT and peak regional latency generically via numericWatchFields", () => {
@@ -313,9 +316,10 @@ describe("Cross-Region Latency Spike", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, even once sustained past the old window", () => {
       const state = runScenario(SUSTAINED_DEGRADATION_MS + 91_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(crossRegionLatencySpikeSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

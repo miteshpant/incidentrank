@@ -317,12 +317,15 @@ describe("Multi-Region Payment Platform Degradation", () => {
     });
 
     describe("Automatic failure", () => {
-      it("fails if divergent ledger authority persists severely for the full sustained window", () => {
+      it("stays active (never auto-fails) even after divergent ledger authority persists severely past the old sustained window", () => {
         const state = runScenario(REPLICATION_LAG_ONSET_MS + 61_000, [
           { atMs: REPLICATION_LAG_ONSET_MS + 1_000, controlKey: EU_TRAFFIC_PERCENTAGE_KEY, value: 0 },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+          multiRegionPaymentPlatformDegradationSimulation.failureCondition.sustainedSeconds,
+        );
       });
     });
 
@@ -381,10 +384,15 @@ describe("Multi-Region Payment Platform Degradation", () => {
       expect(result.completionTier).toBe("optimal");
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("a Finish issued after divergent ledger authority persists past the old sustained window still resolves to declared_unstable (never auto-failed)", () => {
       const state = runScenario(REPLICATION_LAG_ONSET_MS + 61_000, [
         { atMs: REPLICATION_LAG_ONSET_MS + 1_000, controlKey: EU_TRAFFIC_PERCENTAGE_KEY, value: 0 },
       ]);
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        multiRegionPaymentPlatformDegradationSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(multiRegionPaymentPlatformDegradationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

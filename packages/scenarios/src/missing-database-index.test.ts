@@ -203,10 +203,13 @@ describe("Missing Database Index", () => {
       expect(state.values.dbStatus).toBe("warning");
     });
 
-    it("fails if DB CPU stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after DB CPU remains at or above 95% past the old sustained window", () => {
       const state = runScenario(TRAFFIC_RISING_MS + 3 * 60_000 + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        missingDatabaseIndexSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak DB CPU and peak scanned rows generically via numericWatchFields", () => {
@@ -324,9 +327,10 @@ describe("Missing Database Index", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("sustained breach alone never auto-fails; a candidate_declared Finish from it is still declared_unstable", () => {
       const state = runScenario(TRAFFIC_RISING_MS + 3 * 60_000 + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(missingDatabaseIndexSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

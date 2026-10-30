@@ -341,10 +341,13 @@ describe("Enterprise-Wide Dependency Deprecation", () => {
       expect(eligibility).toEqual({ eligible: false });
     });
 
-    it("sustained deadline breach triggers automatic failure", () => {
+    it("stays active (never auto-fails) even after the deadline breach remains sustained past the old failure window", () => {
       const state = runScenario(DEADLINE_MS + 60_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        enterpriseWideDependencyDeprecationSimulation.failureCondition.sustainedSeconds,
+      );
     });
   });
 

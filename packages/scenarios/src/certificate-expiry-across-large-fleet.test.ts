@@ -747,9 +747,11 @@ describe("Certificate Expiry Across Large Fleet", () => {
       expect(state.values.modernCohortRotationStatus).toBe("pending");
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("never auto-fails even in candidate_declared mode, however long the breach sustains past the old window", () => {
       const state = runScenario(SUSTAINED_POST_EXPIRY_MS + 20 * 60_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(30);
       const result = evaluateCandidateDeclaredFinish(certificateExpiryAcrossLargeFleetSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

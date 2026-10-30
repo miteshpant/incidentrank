@@ -331,12 +331,15 @@ describe("Fraud Control Degradation During Payment Surge", () => {
         expect(eligibility).toEqual({ eligible: false });
       });
 
-      it("holding broad bypass through the sustained-surge window reaches automatic failure", () => {
+      it("holding broad bypass through the sustained-surge window stays active (never auto-fails) despite sustaining past the old failure window", () => {
         const state = runScenario(SUSTAINED_SURGE_MS + 50_000, [
           { atMs: SURGE_ONSET_MS + 1_000, controlKey: FRAUD_REVIEW_MODE_BY_RISK_TIER_KEY, value: "bypass-all" },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+          fraudControlDegradationSimulation.failureCondition!.sustainedSeconds,
+        );
       });
 
       it("provider-timeout-specific bypass (approve-on-timeout) is an equally unsafe, separately-tracked violation", () => {

@@ -325,14 +325,15 @@ describe("Backfill Overwhelms Production", () => {
         expect(eligibility).toEqual({ eligible: false });
       });
 
-      it("holding skipMarkComplete long enough reaches automatic failure", () => {
+      it("holding skipMarkComplete long enough sustains the failure condition but never auto-fails the attempt", () => {
         const state = runScenario(RECOVERY_WINDOW_1_MS + 35_000, [
           { atMs: CONTENTION_ONSET_MS + 1_000, controlKey: SKIP_MARK_COMPLETE_KEY, value: true },
         ]);
         expect(state.transitions.incidentState).toBe("skip-mark-complete-trap-catastrophic");
         expect(state.values.skippedRowCount as number).toBeGreaterThanOrEqual(20_000);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(30);
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
       });
 
       it("tracks peak skippedRowCount for scoring even if it were ever to (hypothetically) read lower later", () => {
@@ -541,10 +542,11 @@ describe("Backfill Overwhelms Production", () => {
       expect(result.completionTier).toBe("optimal");
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("the sustained skip-mark-complete trap is still declared_unstable in candidate_declared mode (never auto-failed, never accidentally eligible)", () => {
       const state = runScenario(RECOVERY_WINDOW_1_MS + 5_000, [
         { atMs: CONTENTION_ONSET_MS + 1_000, controlKey: SKIP_MARK_COMPLETE_KEY, value: true },
       ]);
+      expect(state.status).not.toBe("failed");
       const result = evaluateCandidateDeclaredFinish(backfillOverwhelmsProductionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

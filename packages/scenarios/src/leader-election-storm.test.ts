@@ -251,10 +251,13 @@ describe("Leader Election Storm", () => {
       expect(state.values.leaderChangesPerMinute).toBeGreaterThan(0);
     });
 
-    it("fails if quorumHealth stays critical for the full sustained window", () => {
+    it("stays active (never auto-fails) even after quorumHealth remains critical past the old sustained window", () => {
       const state = runScenario(JITTER_STARTS_MS + 91_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        leaderElectionStormSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak leader changes generically via numericWatchFields", () => {
@@ -369,9 +372,10 @@ describe("Leader Election Storm", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, but declaring Finish on an unsustained breach still yields declared_unstable", () => {
       const state = runScenario(JITTER_STARTS_MS + 91_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(leaderElectionStormSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

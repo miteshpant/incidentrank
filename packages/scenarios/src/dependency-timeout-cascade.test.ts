@@ -240,10 +240,13 @@ describe("Dependency Timeout Cascade", () => {
       expect(afterSecondWave.values.customerSuccessRatePercent).toBe(6);
     });
 
-    it("fails if customer success rate stays at or below 10% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after customer success rate remains at or below 10% past the old sustained window", () => {
       const state = runScenario(RETRY_AMPLIFICATION_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        dependencyTimeoutCascadeSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks monthly infrastructure cost that increases with elevated retries", () => {
@@ -344,9 +347,10 @@ describe("Dependency Timeout Cascade", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("candidate_declared mode still never auto-fails, even deep past the old sustained failure window", () => {
       const state = runScenario(RETRY_AMPLIFICATION_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(dependencyTimeoutCascadeSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

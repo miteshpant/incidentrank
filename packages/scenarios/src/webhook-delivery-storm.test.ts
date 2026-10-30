@@ -212,7 +212,7 @@ describe("Webhook Delivery Storm", () => {
       expect(state.values.deliveryIsolationState).toBe("isolated");
     });
 
-    it("fails if dispatcher worker utilization stays at or above 99% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after dispatcher worker utilization remains at or above 99% past the old sustained window", () => {
       const state = runScenario(PROVIDER_OUTAGE_MS + 2_000, [
         { atMs: PROVIDER_OUTAGE_MS + 1_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 999 },
       ]);
@@ -220,8 +220,11 @@ describe("Webhook Delivery Storm", () => {
         { atMs: PROVIDER_OUTAGE_MS + 1_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 999 },
       ]);
       expect(state.values.dispatcherWorkerUtilization).toBe(99);
-      expect(extended.status).toBe("failed");
-      expect(extended.failedAtMs).not.toBeNull();
+      expect(extended.status).not.toBe("failed");
+      expect(extended.failedAtMs).toBeNull();
+      expect(extended.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        webhookDeliveryStormSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak healthy-destination latency and peak backlog generically via numericWatchFields", () => {
@@ -308,11 +311,15 @@ describe("Webhook Delivery Storm", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails in candidate_declared mode; sustained breach still resolves as declared_unstable on Finish", () => {
       const state = runScenario(PROVIDER_OUTAGE_MS + 61_000, [
         { atMs: PROVIDER_OUTAGE_MS + 1_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 999 },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        webhookDeliveryStormSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(webhookDeliveryStormSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

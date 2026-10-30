@@ -391,14 +391,20 @@ describe("Cross-Service Retry Amplification", () => {
       expect(result.outcome).toBe("declared_unstable");
     });
 
-    it("automatic failure still wins over any Finish declaration once the failure condition is sustained", () => {
+    it("stays active (never auto-fails) even after the failure condition remains sustained past its old window, and Finish still reports declared_unstable", () => {
       const state = runScenario(INCIDENT_START_MS + 20_000 + 61_000, [
         { atMs: INCIDENT_START_MS + 1_000, controlKey: GATEWAY_RETRIES_KEY, value: 3 },
         { atMs: INCIDENT_START_MS + 1_000, controlKey: SERVICE_A_RETRIES_KEY, value: 3 },
         { atMs: INCIDENT_START_MS + 1_000, controlKey: SERVICE_B_RETRIES_KEY, value: 3 },
         { atMs: INCIDENT_START_MS + 1_000, controlKey: SERVICE_C_RETRIES_KEY, value: 3 },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      // The breach genuinely sustained past the scenario's own
+      // failureCondition.sustainedSeconds (60s) — it just no longer
+      // terminates the attempt on its own; only the uniform 35-minute
+      // ATTEMPT_CEILING_MS does that now.
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
       const result = evaluateCandidateDeclaredFinish(crossServiceRetryAmplificationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
       expect(result.completionTier).toBeNull();

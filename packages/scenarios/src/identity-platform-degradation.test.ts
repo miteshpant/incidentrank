@@ -285,12 +285,12 @@ describe("Identity Platform Degradation", () => {
         expect(eligibility).toEqual({ eligible: false });
       });
 
-      it("holding broad bypass through the sustained-pressure window reaches automatic failure", () => {
+      it("holding broad bypass through the sustained-pressure window never auto-fails (only the 35-minute ceiling can end the attempt)", () => {
         const state = runScenario(SUSTAINED_PRESSURE_MS + 50_000, [
           { atMs: DEGRADATION_ONSET_MS + 1_000, controlKey: MFA_POLICY_BY_RISK_TIER_KEY, value: "bypass-all" },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
       });
 
       it("privileged-action-specific bypass (allow-with-cached-risk) is an equally unsafe, separately-tracked violation", () => {

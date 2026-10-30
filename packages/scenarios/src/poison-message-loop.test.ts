@@ -187,8 +187,16 @@ describe("Poison Message Loop", () => {
       expect(
         slow.transitions.consecutiveSuccessSeconds,
       ).toBeGreaterThanOrEqual(poisonMessageLoopSimulation.successCondition.sustainedSeconds);
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      expect(baseline.status).not.toBe("failed");
+      expect(baseline.failedAtMs).toBeNull();
+      expect(
+        baseline.transitions.consecutiveFailureSeconds,
+      ).toBeGreaterThanOrEqual(poisonMessageLoopSimulation.failureCondition.sustainedSeconds);
+      expect(harmful.status).not.toBe("failed");
+      expect(harmful.failedAtMs).toBeNull();
+      expect(
+        harmful.transitions.consecutiveFailureSeconds,
+      ).toBeGreaterThanOrEqual(poisonMessageLoopSimulation.failureCondition.sustainedSeconds);
 
       const goodScore = scoreOf(good).total;
       const slowScore = scoreOf(slow).total;
@@ -201,10 +209,13 @@ describe("Poison Message Loop", () => {
     });
   });
 
-  it("fails if the healthy message backlog stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after the healthy message backlog remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      poisonMessageLoopSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak healthy message backlog generically via numericWatchFields", () => {

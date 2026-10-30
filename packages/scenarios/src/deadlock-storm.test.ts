@@ -184,17 +184,22 @@ describe("Deadlock Storm", () => {
       expect(fixed.values.dbStatus).toBe("normal");
     });
 
-    it("fails automatically if checkout failure rate stays at/above 20% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after checkout failure rate holds at/above 20% past the old sustained window", () => {
       // Default controls (aggressive retry, no lock-order fix, no
       // serialization) land on the critical-default fallback rule, whose
       // checkoutFailureRate (7) does not breach the failure threshold —
       // use the explicit no-retry path instead, whose checkoutFailureRate
-      // (22) does.
+      // (22) does. The breach sustains well past the old 60s window, but
+      // the engine no longer auto-fails on it — only the attempt ceiling
+      // can terminate an attempt now.
       const state = runScenario(CONFLICT_MS + 61_000, [
         { atMs: CONFLICT_MS + 1_000, controlKey: DEADLOCK_RETRY_POLICY_KEY, value: "off" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        deadlockStormSimulation.failureCondition.sustainedSeconds,
+      );
     });
   });
 
@@ -247,11 +252,12 @@ describe("Deadlock Storm", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires even though completion is candidate_declared", () => {
+    it("a sustained breach never auto-fails, and Finish from it still declares unstable under candidate_declared completion", () => {
       const state = runScenario(CONFLICT_MS + 61_000, [
         { atMs: CONFLICT_MS + 1_000, controlKey: DEADLOCK_RETRY_POLICY_KEY, value: "off" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(deadlockStormSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });
@@ -288,10 +294,18 @@ describe("Deadlock Storm", () => {
       // surge (bounding retries is a real, if incomplete, mitigation),
       // while baseline (default aggressive retry) and harmful (scaled
       // concurrency on top of aggressive retry) both breach the failure
-      // threshold once the surge compounds them.
+      // threshold once the surge compounds them -- the breach sustains,
+      // but the engine no longer auto-fails on it, so all three paths
+      // remain active (never "failed").
       expect(partial.status).not.toBe("failed");
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      expect(baseline.status).not.toBe("failed");
+      expect(harmful.status).not.toBe("failed");
+      expect(baseline.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        deadlockStormSimulation.failureCondition.sustainedSeconds,
+      );
+      expect(harmful.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        deadlockStormSimulation.failureCondition.sustainedSeconds,
+      );
 
       const optimalScore = scoreOf(optimal).total;
       const acceptableScore = scoreOf(acceptable).total;
@@ -305,22 +319,29 @@ describe("Deadlock Storm", () => {
       expect(baselineScore).toBeGreaterThan(harmfulScore);
     });
 
-    it("a failed attempt never outscores an unresolved-but-active one, however long it ran (terminalOverride guard)", () => {
-      const baseline = runScenario(CONFLICT_MS + LONG_WINDOW_MS);
-      const fastFail = runScenario(CONFLICT_MS + 61_000, [
+    it("an attempt that runs out the uniform 35-minute ceiling always scores customerImpact via the failed terminalOverride, regardless of config (terminalOverride guard)", () => {
+      // The sustained-breach auto-fail is gone — the only way to reach
+      // status="failed" now is the uniform real-time ATTEMPT_CEILING_MS
+      // (35 min from incidentStartedAtMs), identical for every config.
+      // Drive two different control configs past that ceiling and confirm
+      // neither can hide behind its own raw revenueLossUsd: both must
+      // land on customerImpact's terminalOverride (failed: 20).
+      const ATTEMPT_CEILING_MS = 35 * 60_000;
+      const baseline = runScenario(CONFLICT_MS + ATTEMPT_CEILING_MS + 10_000);
+      const harmfulConfig = runScenario(CONFLICT_MS + ATTEMPT_CEILING_MS + 10_000, [
         { atMs: CONFLICT_MS + 1_000, controlKey: DEADLOCK_RETRY_POLICY_KEY, value: "off" },
       ]);
 
       expect(baseline.status).toBe("failed");
-      expect(fastFail.status).toBe("failed");
+      expect(harmfulConfig.status).toBe("failed");
       // Both are failed attempts; customerImpact's terminalOverride
-      // (failed: 20) means neither can hide behind a short runtime's
-      // deceptively low raw revenueLossUsd — see scoring.ts.
+      // (failed: 20) means neither can hide behind its own raw
+      // revenueLossUsd — see scoring.ts.
       expect(scoreOf(baseline).breakdown.customerImpact).toBe(20);
-      expect(scoreOf(fastFail).breakdown.customerImpact).toBe(20);
+      expect(scoreOf(harmfulConfig).breakdown.customerImpact).toBe(20);
     });
 
-    it("records the actual executed totals for good/acceptable/partial/baseline/harmful/failed paths", () => {
+    it("records the actual executed totals for good/acceptable/partial/baseline/harmful/still-breached paths", () => {
       const optimal = runScenario(CONFLICT_MS + 20_000, [
         { atMs: CONFLICT_MS + 1_000, controlKey: TRANSACTION_LOCK_ORDERING_KEY, value: "canonical" },
       ]);
@@ -336,7 +357,10 @@ describe("Deadlock Storm", () => {
       const harmful = runScenario(CONFLICT_MS + LONG_WINDOW_MS, [
         { atMs: CONFLICT_MS + 1_000, controlKey: SERVICE_CONCURRENCY_KEY, value: 32 },
       ]);
-      const failed = runScenario(CONFLICT_MS + 61_000, [
+      // Formerly a "failed" baseline path; the sustained breach no longer
+      // auto-fails, so this stays active (still critical) past the old
+      // 61s sustained window instead.
+      const stillBreached = runScenario(CONFLICT_MS + 61_000, [
         { atMs: CONFLICT_MS + 1_000, controlKey: DEADLOCK_RETRY_POLICY_KEY, value: "off" },
       ]);
 
@@ -345,9 +369,9 @@ describe("Deadlock Storm", () => {
       expect(scoreOf(optimal).total).toBe(865);
       expect(scoreOf(acceptable).total).toBe(845);
       expect(scoreOf(partial).total).toBe(550);
-      expect(scoreOf(baseline).total).toBe(370);
-      expect(scoreOf(harmful).total).toBe(280);
-      expect(scoreOf(failed).total).toBe(370);
+      expect(scoreOf(baseline).total).toBe(510);
+      expect(scoreOf(harmful).total).toBe(420);
+      expect(scoreOf(stillBreached).total).toBe(550);
     });
   });
 

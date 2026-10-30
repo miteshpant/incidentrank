@@ -131,10 +131,13 @@ describe("Bad Configuration Rollout", () => {
     );
   });
 
-  it("fails if the request rejection rate stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after the request rejection rate remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      badConfigurationRolloutSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak affected user count generically via numericWatchFields", () => {
@@ -171,11 +174,12 @@ describe("Bad Configuration Rollout", () => {
 
   it("scores good (revert) > baseline (does nothing) > harmful (scale-to-8 without revert)", () => {
     // Baseline: no candidate actions at all. The incident never recovers
-    // and ultimately fails via failureCondition.
+    // and stays critical — it no longer auto-fails via failureCondition,
+    // but it also never resolves on its own.
     const baselineState = runScenario(30_000 + 61_000);
     // Harmful: scales API service instances to 8 without ever reverting
     // the bad config — wastes money and never fixes the actual problem,
-    // so it must fail exactly like the baseline, only worse.
+    // so it must remain unresolved exactly like the baseline, only worse.
     const harmfulState = runScenario(30_000 + 61_000, [
       { atMs: 31_000, controlKey: API_SERVICE_INSTANCES_KEY, value: 8 },
     ]);
@@ -184,8 +188,8 @@ describe("Bad Configuration Rollout", () => {
       { atMs: 31_000, controlKey: CONFIG_REVERT_ENABLED_KEY, value: true },
     ]);
 
-    expect(baselineState.status).toBe("failed");
-    expect(harmfulState.status).toBe("failed");
+    expect(baselineState.status).not.toBe("failed");
+    expect(harmfulState.status).not.toBe("failed");
     expect(goodState.status).not.toBe("resolved");
     const goodFinish = evaluateCandidateDeclaredFinish(
       badConfigurationRolloutSimulation,

@@ -193,12 +193,15 @@ describe("Dependency Rate-Limit Exhaustion", () => {
       expect(state.values.quotaStatus).toBe("critical");
     });
 
-    it("fails if the quota is fully exhausted and sustained for the full failure window", () => {
+    it("stays active (never auto-fails) even after the quota stays fully exhausted past the old sustained failure window", () => {
       const state = runScenario(PROVIDER_THROTTLING_MS + 1_000 + 61_000, [
         { atMs: PROVIDER_THROTTLING_MS + 1_000, controlKey: RETRY_AGGRESSIVENESS_KEY, value: "aggressive" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        dependencyRateLimitExhaustionSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak 429 rate and peak retry volume generically via numericWatchFields", () => {
@@ -304,11 +307,12 @@ describe("Dependency Rate-Limit Exhaustion", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode -- Finish still reports declared_unstable", () => {
       const state = runScenario(PROVIDER_THROTTLING_MS + 1_000 + 61_000, [
         { atMs: PROVIDER_THROTTLING_MS + 1_000, controlKey: RETRY_AGGRESSIVENESS_KEY, value: "aggressive" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(dependencyRateLimitExhaustionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });
@@ -385,9 +389,11 @@ describe("Dependency Rate-Limit Exhaustion", () => {
       // override -- no synthetic resolvedAtMs is ever fabricated for
       // baseline or the harmful trap, since neither is Finish-eligible.
       // Both measured at the SAME elapsed time (50s post-throttling --
-      // just under the 60s sustained-failure window, so the harmful
-      // path is captured while still "critical," not yet auto-failed)
-      // for a fair apples-to-apples revenue-loss comparison.
+      // just under the old 60s sustained-failure window, so the harmful
+      // path is captured while still "critical" -- the engine never
+      // auto-fails on this anymore, but this timing keeps the comparison
+      // consistent with the other scoring cases below) for a fair
+      // apples-to-apples revenue-loss comparison.
       const compareUntilMs = PROVIDER_THROTTLING_MS + 50_000;
       const baselineState = runScenario(compareUntilMs);
       const baselineScore = scoreAuthoredAttempt(

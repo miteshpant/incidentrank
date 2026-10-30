@@ -136,10 +136,13 @@ describe("Deployment Regression", () => {
     expect(state.values.memoryUsageMb).toBe(1_400);
   });
 
-  it("fails if error rate stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after error rate remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      deploymentRegressionSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak error rate generically via numericWatchFields", () => {
@@ -207,8 +210,11 @@ describe("Deployment Regression", () => {
         { atMs: 31_000, controlKey: DEBUG_LOGGING_ENABLED_KEY, value: true },
       ]);
 
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      // Neither run auto-fails anymore — breaching failureCondition no
+      // longer ends the attempt (only ATTEMPT_CEILING_MS does). Both stay
+      // active, unresolved, so extractScoringInputs scores them as-is.
+      expect(baseline.status).not.toBe("failed");
+      expect(harmful.status).not.toBe("failed");
 
       const baselineScore = scoreOf(baseline);
       const harmfulScore = scoreOf(harmful);

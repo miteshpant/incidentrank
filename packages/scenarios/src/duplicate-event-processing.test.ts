@@ -192,15 +192,20 @@ describe("Duplicate Event Processing", () => {
       expect(state.values.duplicateSafetyStatus).toBe("unsafe-duplicating");
     });
 
-    it("fails if duplicate order count reaches 500 and stays there for the sustained window", () => {
+    it("stays active (never auto-fails) even after duplicate order count reaches 500 and stays there past the old sustained window", () => {
       // Drive the harmful compounding-scaling trap long enough to cross
-      // the failure threshold and sustain it.
+      // the failure threshold and sustain it well past the old
+      // sustainedSeconds bar. The breach is real and tracked, but it no
+      // longer terminates the attempt on its own.
       const state = runScenario(SUSTAINED_REDELIVERY_MS + 61_000, [
         { atMs: ACK_FAILURES_BEGIN_MS + 1_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 16 },
       ]);
       expect(state.values.duplicateOrderCount).toBe(540);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        duplicateEventProcessingSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak duplicate order count and peak redelivery volume generically via numericWatchFields", () => {
@@ -324,11 +329,12 @@ describe("Duplicate Event Processing", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, and still routes to declared_unstable on Finish", () => {
       const state = runScenario(SUSTAINED_REDELIVERY_MS + 61_000, [
         { atMs: ACK_FAILURES_BEGIN_MS + 1_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 16 },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(duplicateEventProcessingSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

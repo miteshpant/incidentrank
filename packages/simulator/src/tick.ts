@@ -14,6 +14,16 @@ function nextEventId(state: SimulationState, suffix: string): string {
 }
 
 /**
+ * Uniform real-time ceiling applied to every scenario, regardless of its
+ * authored failureCondition/sustainedSeconds — a backstop against an
+ * abandoned attempt, not a skill test. A candidate who is actively working
+ * the problem must never be auto-failed for merely breaching a metric
+ * threshold; only running out of this ceiling (or the author-defined
+ * successCondition never being met) ends the attempt automatically.
+ */
+export const ATTEMPT_CEILING_MS = 35 * 60 * 1000;
+
+/**
  * Advances the simulation by exactly one tick (one simulated second).
  * Pure function: given identical state + scenario definition, always
  * produces identical next state + events. Entirely scenario-agnostic —
@@ -101,6 +111,11 @@ export function tickOnce(
   // evaluation a second time. See docs/implementation_plan/
   // phase7.action.md's core doctrine: "The system may fail a candidate
   // automatically, but it must never pass a candidate automatically."
+  //
+  // consecutiveFailureSeconds is tracked for scoring/telemetry (how long a
+  // candidate spent with the failure condition true) but, deliberately,
+  // breaching it no longer ends the attempt — see ATTEMPT_CEILING_MS
+  // below, the only automatic-failure trigger left in the engine.
   const acceptableCondition = scenario.completion?.acceptableCondition;
 
   const meetsSuccess =
@@ -133,19 +148,21 @@ export function tickOnce(
   if (status !== "resolved" && status !== "failed") {
     if (
       incidentStartedAtMs !== null &&
-      consecutiveFailureSeconds >= scenario.failureCondition.sustainedSeconds
+      nextTimeMs - incidentStartedAtMs >= ATTEMPT_CEILING_MS
     ) {
       // Failure is always automatic, in every completion mode — a
-      // candidate cannot stay in an attempt past a true failure condition
+      // candidate cannot stay in an attempt past the attempt ceiling
       // merely by not having clicked Finish (docs/implementation_plan/
-      // phase6.1.md's "Failure Remains Automatic").
+      // phase6.1.md's "Failure Remains Automatic"). This is the only
+      // automatic-failure trigger left in the engine — breaching
+      // failureCondition itself no longer ends the attempt.
       status = "failed";
       failedAtMs = nextTimeMs;
       events.push({
         id: nextEventId(state, "incident-failed"),
         timestampMs: nextTimeMs,
         type: "INCIDENT_FAILED",
-        message: "Incident failed: failure condition remained true.",
+        message: "Incident failed: time limit reached.",
       });
     } else if (incidentStartedAtMs === null) {
       status = "healthy";

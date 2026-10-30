@@ -208,10 +208,13 @@ describe("Rate-Limit Misconfiguration", () => {
       expect(state.values.rateLimitStatus).toBe("protected");
     });
 
-    it("fails if legitimate tenant success stays at or below 50% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after legitimate tenant success stays at or below 50% past the old sustained window", () => {
       const state = runScenario(BURST_DOMINATION_DEEPENS_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        rateLimitMisconfigurationSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak burster share generically via numericWatchFields", () => {
@@ -338,9 +341,10 @@ describe("Rate-Limit Misconfiguration", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, and a Finish there still declares unstable", () => {
       const state = runScenario(BURST_DOMINATION_DEEPENS_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(rateLimitMisconfigurationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

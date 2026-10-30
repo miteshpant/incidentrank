@@ -327,12 +327,15 @@ describe("Authorization Policy Rollout Failure", () => {
       expect(failOpenScore.total).toBeLessThan(baselineScore.total);
     });
 
-    it("sustained fail-open-all eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained fail-open-all stays active (never auto-fails) but accumulates a sustained breach past the old sustained window", () => {
       const state = runScenario(SUSTAINED_ROLLOUT_MS + 40_000, [
         { atMs: REGRESSION_ONSET_MS + 1_000, controlKey: FAIL_OPEN_MODE_KEY, value: "fail-open-all" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        authorizationPolicyRolloutFailureSimulation.failureCondition.sustainedSeconds,
+      );
       const finish = evaluateCandidateDeclaredFinish(authorizationPolicyRolloutFailureSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -596,13 +599,14 @@ describe("Authorization Policy Rollout Failure", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("fail-open-all still declares unstable in candidate_declared mode even though the attempt itself never auto-fails", () => {
       const state = runScenario(SUSTAINED_ROLLOUT_MS + 40_000, [
         { atMs: REGRESSION_ONSET_MS + 1_000, controlKey: FAIL_OPEN_MODE_KEY, value: "fail-open-all" },
       ]);
       const result = evaluateCandidateDeclaredFinish(authorizationPolicyRolloutFailureSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

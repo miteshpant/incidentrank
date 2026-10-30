@@ -209,10 +209,11 @@ describe("Memory Leak", () => {
     expect(state.values.serviceStatus).toBe("warning");
   });
 
-  it("fails if memory stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after memory remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
   });
 
   it("tracks peak memory usage generically via numericWatchFields", () => {

@@ -213,10 +213,13 @@ describe("API Traffic Spike", () => {
       expect(state.values.trafficSpikeHealth).toBe("unresolved");
     });
 
-    it("fails if DB connection utilization stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after DB connection utilization remains at or above 95% past the old sustained window", () => {
       const state = runScenario(POOL_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        apiTrafficSpikeSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak DB connection utilization and peak queue depth generically via numericWatchFields", () => {
@@ -350,9 +353,9 @@ describe("API Traffic Spike", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails, so candidate_declared Finish on a sustained-critical pool still falls back to declared_unstable on ineligibility", () => {
       const state = runScenario(POOL_SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
       const result = evaluateCandidateDeclaredFinish(apiTrafficSpikeSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

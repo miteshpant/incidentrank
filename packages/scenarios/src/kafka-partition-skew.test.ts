@@ -202,10 +202,13 @@ describe("Kafka Partition Skew", () => {
     expect(state.status).not.toBe("resolved");
   });
 
-  it("fails if hot-partition lag stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after hot-partition lag remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      kafkaPartitionSkewSimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak hot-partition lag generically via numericWatchFields", () => {

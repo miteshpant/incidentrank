@@ -564,9 +564,11 @@ describe("Data Retention Policy Misconfiguration", () => {
       expect(state.values.financialRecordsComplianceRatePercent as number).toBeLessThan(100);
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("stays active (never auto-fails) even after the wrongly-deleted count stays past the failure threshold for well beyond the old sustained window, and still resolves candidate_declared Finish to declared_unstable", () => {
       const state = runScenario(SUSTAINED_MISCONFIGURATION_MS + 15 * 60_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(30);
       const result = evaluateCandidateDeclaredFinish(dataRetentionPolicyMisconfigurationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

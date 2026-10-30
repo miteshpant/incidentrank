@@ -279,12 +279,15 @@ describe("Multi-Tenant Control Plane Overload", () => {
       expect(state.peaks.peakValues.schedulerQueueDepth).toBeGreaterThan(0);
     });
 
-    it("fails if the worker-scaling trap's real metadata write loss combined with an unthrottled hot tenant persists for the full sustained window", () => {
+    it("stays active (never auto-fails) even after the worker-scaling trap's real metadata write loss combined with an unthrottled hot tenant persists past the old sustained window", () => {
       const state = runScenario(CONTROL_PLANE_SATURATION_MS + 61_000, [
         { atMs: HOT_TENANT_CHURN_BEGINS_MS + 1_000, controlKey: WORKER_CONCURRENCY_KEY, value: "scaled-up" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        multiTenantControlPlaneOverloadSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     describe("Immediate-Finish audit", () => {
@@ -354,11 +357,12 @@ describe("Multi-Tenant Control Plane Overload", () => {
       expect(result.outcome).toBe("declared_unstable");
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, but Finish from this trap still declares unstable", () => {
       const state = runScenario(CONTROL_PLANE_SATURATION_MS + 61_000, [
         { atMs: HOT_TENANT_CHURN_BEGINS_MS + 1_000, controlKey: WORKER_CONCURRENCY_KEY, value: "scaled-up" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(multiTenantControlPlaneOverloadSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

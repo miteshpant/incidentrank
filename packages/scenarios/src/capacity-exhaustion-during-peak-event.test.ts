@@ -288,15 +288,19 @@ describe("Capacity Exhaustion During Peak Event", () => {
       expect(eligibility).toEqual({ eligible: false });
     });
 
-    it("eventually reaches automatic failure once enough critical traffic has been dropped", () => {
+    it("stays active (never auto-fails) even once critical traffic drops have sustained well past the old 45s failure window", () => {
       // Run long enough for cumulativeCriticalTrafficDroppedCount (520,
-      // held for the failureCondition's 45s sustain window) to trip
-      // automatic failure.
+      // held well past the failureCondition's 45s sustain window) to
+      // prove the breach really sustained -- it just no longer
+      // terminates the attempt. The only automatic-failure trigger left
+      // is the uniform ATTEMPT_CEILING_MS, which this duration does not
+      // reach.
       const state = runScenario(RANDOM_SHED_SUSTAINED_MS + 120_000, [
         { atMs: PEAK_EVENT_ONSET_MS + 1_000, controlKey: LOAD_SHEDDING_KEY, value: "random-shed" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(45);
       const finish = evaluateCandidateDeclaredFinish(capacityExhaustionDuringPeakEventSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -521,13 +525,13 @@ describe("Capacity Exhaustion During Peak Event", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("declared_unstable still wins in candidate_declared mode even though the engine never auto-fails the attempt", () => {
       const state = runScenario(RANDOM_SHED_SUSTAINED_MS + 120_000, [
         { atMs: PEAK_EVENT_ONSET_MS + 1_000, controlKey: LOAD_SHEDDING_KEY, value: "random-shed" },
       ]);
       const result = evaluateCandidateDeclaredFinish(capacityExhaustionDuringPeakEventSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
     });
   });
 

@@ -128,10 +128,13 @@ describe("Kafka Consumer Lag", () => {
     expect(state.values.consumerStatus).toBe("warning");
   });
 
-  it("fails if lag stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after lag remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      kafkaConsumerLagSimulation.failureCondition!.sustainedSeconds,
+    );
   });
 
   it("tracks peak consumer lag generically via numericWatchFields", () => {
@@ -219,9 +222,12 @@ describe("Kafka Consumer Lag", () => {
 
       // Baseline: no mitigation at all — rules.ts's "lag-critical-default"
       // (lag 8_000, errorRate 12) sustains past failureCondition's 60s
-      // window at lag>=7_500 and auto-fails.
+      // window at lag>=7_500, but the engine no longer auto-fails on a
+      // sustained breach (only the uniform attempt-ceiling can terminate
+      // an attempt now), so it simply remains unresolved.
       const baseline = runScenario(30_000 + 61_000);
-      expect(baseline.status).toBe("failed");
+      expect(baseline.status).not.toBe("failed");
+      expect(baseline.status).not.toBe("resolved");
 
       // Harmful: action-classifications.ts explicitly marks
       // maxPollRecords>=5000 while slowRecordsPresent as "harmful", and

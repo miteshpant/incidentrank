@@ -131,10 +131,13 @@ describe("Thundering Herd", () => {
     expect(state.values.gatewayStatus).toBe("warning");
   });
 
-  it("fails if rejected requests stay critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after rejected requests remain critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      thunderingHerdSimulation.failureCondition!.sustainedSeconds,
+    );
   });
 
   it("tracks peak rejected requests generically via numericWatchFields", () => {

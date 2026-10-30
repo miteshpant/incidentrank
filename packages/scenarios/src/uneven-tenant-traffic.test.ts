@@ -212,10 +212,13 @@ describe("Uneven Tenant Traffic", () => {
       expect(afterSecondWave.values.sharedDataLayerUtilizationPct).toBe(99);
     });
 
-    it("fails if shared data layer utilization stays at or above 98% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after shared data layer utilization remains at or above 98% past the old sustained window", () => {
       const state = runScenario(DATA_LAYER_SATURATING_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        unevenTenantTrafficSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak other-tenant latency and peak hot-tenant QPS generically via numericWatchFields", () => {
@@ -344,9 +347,13 @@ describe("Uneven Tenant Traffic", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails even past the old sustained failure window, and still declares unstable under candidate_declared mode", () => {
       const state = runScenario(DATA_LAYER_SATURATING_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        unevenTenantTrafficSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(unevenTenantTrafficSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

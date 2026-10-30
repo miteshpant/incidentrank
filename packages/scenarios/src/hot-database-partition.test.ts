@@ -236,10 +236,13 @@ describe("Hot Database Partition", () => {
       expect(afterSecondWave.values.partitionAQueueDepth).toBe(1_400);
     });
 
-    it("fails if Partition A's queue depth stays at or above 1200 for the full sustained window", () => {
+    it("stays active (never auto-fails) even after Partition A's queue depth remains at or above 1200 past the old sustained window", () => {
       const state = runScenario(SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        hotDatabasePartitionSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak Partition A request rate and peak Partition B latency generically via numericWatchFields", () => {
@@ -378,9 +381,13 @@ describe("Hot Database Partition", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails even past the old sustained window, but candidate_declared Finish still reports declared_unstable", () => {
       const state = runScenario(SATURATION_MS + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        hotDatabasePartitionSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(hotDatabasePartitionSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

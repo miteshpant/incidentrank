@@ -262,12 +262,15 @@ describe("Privilege Escalation via Stale Authorization Cache", () => {
       expect(finish.outcome).toBe("declared_unstable");
     });
 
-    it("sustained fail-open eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained fail-open never auto-fails the attempt, even long past the old sustained window, but still accrues consecutiveFailureSeconds", () => {
       const state = runScenario(SUSTAINED_UNCONVERGED_MS + 6 * 60_000, [
         { atMs: REVOCATION_ONSET_MS + 1_000, controlKey: CONVERGENCE_UNCERTAINTY_MODE_KEY, value: "fail-open" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        privilegeEscalationViaStaleAuthorizationCacheSimulation.failureCondition.sustainedSeconds,
+      );
       const finish = evaluateCandidateDeclaredFinish(privilegeEscalationViaStaleAuthorizationCacheSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -558,13 +561,13 @@ describe("Privilege Escalation via Stale Authorization Cache", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("declared_unstable still wins in candidate_declared mode even though sustained fail-open never auto-fails the attempt", () => {
       const state = runScenario(SUSTAINED_UNCONVERGED_MS + 6 * 60_000, [
         { atMs: REVOCATION_ONSET_MS + 1_000, controlKey: CONVERGENCE_UNCERTAINTY_MODE_KEY, value: "fail-open" },
       ]);
       const result = evaluateCandidateDeclaredFinish(privilegeEscalationViaStaleAuthorizationCacheSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
     });
   });
 

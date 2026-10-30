@@ -218,10 +218,13 @@ describe("Replication Backlog", () => {
       expect(afterSecondWave.values.replicationLagMs).toBe(95_000);
     });
 
-    it("fails if storage pressure stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after storage pressure remains at or above 95% past the old sustained window", () => {
       const state = runScenario(STORAGE_PRESSURE_CRITICAL_MS + 46_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        replicationBacklogSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak replication lag and peak stale-read age generically via numericWatchFields", () => {
@@ -326,9 +329,12 @@ describe("Replication Backlog", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("sustained storage-pressure breach never auto-fails, and Finish still declares unstable in candidate_declared mode", () => {
       const state = runScenario(STORAGE_PRESSURE_CRITICAL_MS + 46_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        replicationBacklogSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(replicationBacklogSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

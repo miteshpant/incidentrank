@@ -131,10 +131,11 @@ describe("Read Replica Lag", () => {
     expect(state.values.replicationLagMs).toBe(2_200);
   });
 
-  it("fails if lag stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after lag remains critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
   });
 
   it("tracks peak replication lag generically via numericWatchFields", () => {
@@ -196,13 +197,17 @@ describe("Read Replica Lag", () => {
 
     it("the always-primary harmful trap scores worse than doing nothing, via the harmfulChangeCount penalty", () => {
       // lag-critical-default (baseline, no action) and always-primary-harmful
-      // both land in the "unresolved-at-scoring-time" bucket here: baseline
-      // fails outright at 89_000ms (replicationLagMs=8_000 sustained 60s),
-      // and always-primary-harmful *also* fails at 89_000ms, since routing
-      // every read AND write to the primary during the burst pushes
-      // replicationLagMs to 9_500ms (still >= the 7_000ms failureCondition
-      // threshold). Both failedAtMs cases hit the scorer's
-      // terminalOverrides: { failed: 0 } for recovery and reliability
+      // both land in the "unresolved-at-scoring-time" bucket here: neither
+      // the engine's removed sustained-breach trigger nor any other
+      // mechanism ever auto-fails these runs (the engine's only remaining
+      // automatic-failure trigger is the uniform attempt-ceiling, far past
+      // this window) — baseline stays critical with replicationLagMs=8_000
+      // sustained well past the old 60s window, and always-primary-harmful
+      // likewise stays critical, since routing every read AND write to the
+      // primary during the burst pushes replicationLagMs to 9_500ms (still
+      // >= the 7_000ms failureCondition threshold, just no longer
+      // terminal). Both null-failedAtMs cases hit the scorer's
+      // terminalOverrides: { unresolved: 0 } for recovery and reliability
       // alike, and revenueLossUsd/customerImpact never climbs out of the
       // scoring config's top <=5000 band in this short window for either
       // (baseline's 350/min and harmful's 550/min revenueLossRatePerMinute
@@ -218,8 +223,10 @@ describe("Read Replica Lag", () => {
         { atMs: 31_000, controlKey: READ_ROUTING_MODE_KEY, value: "always-primary" },
       ]);
 
-      expect(baseline.status).toBe("failed");
-      expect(harmful.status).toBe("failed");
+      expect(baseline.status).not.toBe("failed");
+      expect(baseline.failedAtMs).toBeNull();
+      expect(harmful.status).not.toBe("failed");
+      expect(harmful.failedAtMs).toBeNull();
       expect(harmful.numberOfHarmfulChanges).toBeGreaterThan(
         baseline.numberOfHarmfulChanges,
       );

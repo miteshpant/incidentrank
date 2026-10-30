@@ -136,10 +136,11 @@ describe("Database Lock Contention", () => {
     expect(state.values.blockedTransactions).toBe(310);
   });
 
-  it("fails if blocked transactions stay critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after blocked transactions remain critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
   });
 
   it("tracks peak blocked transactions generically via numericWatchFields", () => {
@@ -214,8 +215,9 @@ describe("Database Lock Contention", () => {
 
     // Baseline: no candidate actions at all. contention-critical-default
     // (rules.ts) holds blockedTransactions at 180, which is >= 150 and
-    // once sustained 60s (failureCondition.sustainedSeconds) drives the
-    // incident to failed.
+    // once sustained 60s (failureCondition.sustainedSeconds) is a genuine
+    // breach — but the engine no longer auto-fails on that alone, so the
+    // attempt simply stays unresolved past the old sustained window.
     const FAIL_WINDOW_MS = 30_000 + 61_000;
 
     const goodState = runScenario(50_000, goodActions);
@@ -233,8 +235,17 @@ describe("Database Lock Contention", () => {
       // partial sequence genuinely idles mid-incident rather than ever
       // terminating.
       expect(partialState.status).toBe("degraded");
-      expect(harmfulState.status).toBe("failed");
-      expect(baselineState.status).toBe("failed");
+      // Harmful and baseline both sustain the failureCondition breach
+      // well past its 60s sustainedSeconds window, but the engine no
+      // longer auto-fails on that alone — only the 35-minute attempt
+      // ceiling can, and this run is nowhere near it — so both stay
+      // active rather than terminating.
+      expect(harmfulState.status).not.toBe("failed");
+      expect(harmfulState.failedAtMs).toBeNull();
+      expect(harmfulState.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
+      expect(baselineState.status).not.toBe("failed");
+      expect(baselineState.failedAtMs).toBeNull();
+      expect(baselineState.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
     });
 
     const goodFinish = evaluateCandidateDeclaredFinish(
@@ -273,8 +284,9 @@ describe("Database Lock Contention", () => {
     });
 
     it("scores the never-resolving partial sequence the same as doing nothing", () => {
-      // Both land on recovery=0 and reliability=0 via `unresolved`/
-      // `failed` terminalOverrides respectively, and both land in
+      // Both land on recovery=0 and reliability=0 via the `unresolved`
+      // terminalOverrides (neither ever resolves or auto-fails), and
+      // both land in
       // customerImpact's top `atMost: 5_000` band (revenueLossUsd ~102
       // for partial vs. ~362 for baseline over this short window — a
       // real difference the bands are simply too coarse to reflect).
@@ -288,9 +300,10 @@ describe("Database Lock Contention", () => {
       expect(partialScore.total).toBe(baselineScore.total);
     });
 
-    it("scores the oversized-chunk harmful trap below the unmitigated baseline failure", () => {
-      // Both harmful and baseline fail (recovery=0, reliability=0 via
-      // the `failed` terminalOverrides), and customerImpact is tied at
+    it("scores the oversized-chunk harmful trap below the unmitigated unresolved baseline", () => {
+      // Neither harmful nor baseline ever resolves or auto-fails
+      // (recovery=0, reliability=0 via the `unresolved` terminalOverrides
+      // on both), and customerImpact is tied at
       // 200 for both (561.67 and 361.66 revenueLossUsd both land inside
       // the same top `atMost: 5_000` band — again too coarse to show the
       // real difference from "severe-contention" at 550/min vs.

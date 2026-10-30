@@ -219,10 +219,13 @@ describe("Storage IOPS Saturation", () => {
       expect(afterSecondWave.values.checkpointQueueDepth).toBe(18);
     });
 
-    it("fails if storage IOPS utilization stays at or above 95% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after storage IOPS utilization remains at or above 95% past the old sustained window", () => {
       const state = runScenario(BATCH_RAMPING_MS + 3 * 60_000 + 61_000);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        storageIopsSaturationSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak IOPS utilization and peak batch backlog generically via numericWatchFields", () => {
@@ -326,9 +329,13 @@ describe("Storage IOPS Saturation", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails even past the old sustained window, and candidate_declared mode still classifies it declared_unstable", () => {
       const state = runScenario(BATCH_RAMPING_MS + 3 * 60_000 + 61_000);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        storageIopsSaturationSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(storageIopsSaturationSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

@@ -262,10 +262,11 @@ describe("Runaway Cloud Spend During Healthy Traffic", () => {
       expect(finish.outcome).toBe("declared_unstable");
     });
 
-    it("sustained floor breach eventually reaches automatic failure regardless of cost looking excellent", () => {
+    it("sustained floor breach never auto-fails the attempt, even though it stays breached well past the old sustained window", () => {
       const state = runScenario(SUSTAINED_UNADDRESSED_MS + 6 * 60_000, UNSAFE_MIN_COST_ACTIONS);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(45);
       const finish = evaluateCandidateDeclaredFinish(runawayCloudSpendDuringHealthyTrafficSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });

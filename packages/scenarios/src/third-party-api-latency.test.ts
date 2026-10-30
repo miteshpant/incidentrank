@@ -134,10 +134,13 @@ describe("Third-Party API Latency", () => {
     expect(state.values.cacheFallbackHitRate).toBe(0);
   });
 
-  it("fails if checkout thread pool stays critical for the full sustained window", () => {
+  it("stays active (never auto-fails) even after checkout thread pool stays critical past the old sustained window", () => {
     const state = runScenario(30_000 + 61_000);
-    expect(state.status).toBe("failed");
-    expect(state.failedAtMs).not.toBeNull();
+    expect(state.status).not.toBe("failed");
+    expect(state.failedAtMs).toBeNull();
+    expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      thirdPartyApiLatencySimulation.failureCondition.sustainedSeconds,
+    );
   });
 
   it("tracks peak checkout thread pool utilization generically via numericWatchFields", () => {
@@ -217,7 +220,10 @@ describe("Third-Party API Latency", () => {
     // Baseline: no candidate actions at all. vendor-slow-default
     // (rules.ts) holds checkoutServiceThreadPoolUtilization at 85, which
     // is >= 80 and once sustained 60s (failureCondition.sustainedSeconds)
-    // drives the incident to failed.
+    // used to drive the incident to failed. A sustained failureCondition
+    // breach no longer auto-terminates an attempt (only the uniform
+    // ATTEMPT_CEILING_MS backstop does) — the baseline instead idles,
+    // critical and unresolved, for the run.
     const FAIL_WINDOW_MS = 30_000 + 61_000;
 
     const goodState = runScenario(50_000, goodActions);
@@ -235,8 +241,20 @@ describe("Third-Party API Latency", () => {
       // the partial sequence genuinely idles mid-incident rather than
       // ever terminating.
       expect(partialState.status).toBe("degraded");
-      expect(harmfulState.status).toBe("failed");
-      expect(baselineState.status).toBe("failed");
+      // Harmful and baseline both sustain failureCondition's breach well
+      // past sustainedSeconds, but a sustained breach alone never
+      // auto-fails an attempt anymore — both stay active, critical, and
+      // unresolved (never "failed") for the whole run.
+      expect(harmfulState.status).not.toBe("failed");
+      expect(harmfulState.failedAtMs).toBeNull();
+      expect(harmfulState.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        thirdPartyApiLatencySimulation.failureCondition.sustainedSeconds,
+      );
+      expect(baselineState.status).not.toBe("failed");
+      expect(baselineState.failedAtMs).toBeNull();
+      expect(baselineState.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        thirdPartyApiLatencySimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     const goodFinish = evaluateCandidateDeclaredFinish(
@@ -269,15 +287,17 @@ describe("Third-Party API Latency", () => {
       // became true rather than the moment its sustain window finished,
       // which can push reliability's criticalTimeRatio measure into a
       // lower band (see autoscaling-failure.test.ts's equivalent note);
-      // partial = baseline = 550 (both unresolved, so terminalOverrides
-      // zero out recovery and reliability entirely for both).
+      // partial = baseline = 550 (both unresolved — baseline never
+      // auto-fails despite sustaining the breach well past
+      // failureCondition.sustainedSeconds — so terminalOverrides zero out
+      // recovery and reliability entirely for both).
       expect(goodScore.total).toBeGreaterThan(partialScore.total);
       expect(goodScore.total).toBeGreaterThan(baselineScore.total);
     });
 
     it("scores the never-resolving partial sequence the same as doing nothing", () => {
-      // Both land on recovery=0 and reliability=0 via the `unresolved`/
-      // `failed` terminalOverrides respectively, both land in
+      // Both land on recovery=0 and reliability=0 via the `unresolved`
+      // terminalOverrides (neither ever auto-fails or resolves), both land in
       // customerImpact's top `atMost: 5_000` band (revenueLossUsd stays
       // well under $5k over this short incident window regardless of
       // mitigation), both score dataIntegrity's flat 200 (single
@@ -294,8 +314,10 @@ describe("Third-Party API Latency", () => {
 
     it("scores the harmful lengthened-timeout sequence below both the baseline and the partial sequence", () => {
       // harmful = 535, strictly below partial/baseline's 550. Both
-      // harmful and baseline reach "failed" via the same
-      // failureCondition, so recovery/reliability are 0 for both and
+      // harmful and baseline sustain the same failureCondition breach
+      // well past sustainedSeconds without ever auto-failing, landing in
+      // the same `unresolved` terminalOverrides bucket, so
+      // recovery/reliability are 0 for both and
       // customerImpact/dataIntegrity/costEfficiency land in the same
       // bands — the only dimension that differs is
       // operationalEfficiency, where the harmful sequence's one harmful

@@ -165,12 +165,15 @@ describe("Quorum Loss", () => {
       expect(state.values.quorumSafetyMechanism).toBe("structural-refusal");
     });
 
-    it("fails if unsafe writes without quorum accumulate and stay sustained", () => {
+    it("stays active (never auto-fails) even after unsafe writes without quorum accumulate and stay sustained past the old failure window", () => {
       const state = runScenario(QUORUM_LOST_MS + 61_000, [
         { atMs: QUORUM_THREATENED_MS + 1_000, controlKey: QUORUM_REQUIREMENT_KEY, value: "relaxed-any-reachable" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        quorumLossSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak unsafe write count via numericWatchFields", () => {
@@ -270,11 +273,11 @@ describe("Quorum Loss", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("never auto-fails regardless of candidate_declared mode, but the unsafe-writes trap still declares unstable via ineligibility", () => {
       const state = runScenario(QUORUM_LOST_MS + 61_000, [
         { atMs: QUORUM_THREATENED_MS + 1_000, controlKey: QUORUM_REQUIREMENT_KEY, value: "relaxed-any-reachable" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
       const result = evaluateCandidateDeclaredFinish(quorumLossSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

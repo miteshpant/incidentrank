@@ -560,11 +560,15 @@ describe("Audit Log Integrity Failure", () => {
       expect(state.values.eventCompletenessPercent as number).toBeLessThan(100);
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("stays active (never auto-fails) even in candidate_declared mode after the failure condition sustains well past its window", () => {
       const state = runScenario(SUSTAINED_DEGRADATION_MS + 15 * 60_000, [
         { atMs: DEGRADATION_DISCOVERED_MS + 1_000, controlKey: REPORT_PUBLICATION_MODE_KEY, value: "publish-as-is" },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        auditLogIntegrityFailureSimulation.failureCondition.sustainedSeconds,
+      );
       const result = evaluateCandidateDeclaredFinish(auditLogIntegrityFailureSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

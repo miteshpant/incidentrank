@@ -318,13 +318,16 @@ describe("Service-to-Service Credential Rotation Failure", () => {
       expect(state.values.cumulativeUnauthenticatedCallCount as number).toBeGreaterThan(0);
     });
 
-    it("sustained bypass eventually reaches automatic failure regardless of other metrics", () => {
+    it("sustained bypass never auto-fails the attempt, even once the old sustained window is long past", () => {
       const state = runScenario(SUSTAINED_GAP_MS + 40_000, [
         { atMs: ROTATION_STARTED_MS + 1_000, controlKey: OLD_CREDENTIAL_VALIDITY_KEY, value: "revoked" },
         { atMs: ROTATION_STARTED_MS + 2_000, controlKey: CREDENTIAL_VALIDATION_MODE_KEY, value: "disabled-temporarily" },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        serviceToServiceCredentialRotationFailureSimulation.failureCondition.sustainedSeconds,
+      );
       const finish = evaluateCandidateDeclaredFinish(serviceToServiceCredentialRotationFailureSimulation, state);
       expect(finish.outcome).toBe("declared_unstable");
     });
@@ -541,14 +544,15 @@ describe("Service-to-Service Credential Rotation Failure", () => {
   });
 
   describe("Completion mode: candidate_declared with a real acceptable tier", () => {
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("candidate_declared still resolves to declared_unstable on a sustained bypass, even though the attempt never auto-fails", () => {
       const state = runScenario(SUSTAINED_GAP_MS + 40_000, [
         { atMs: ROTATION_STARTED_MS + 1_000, controlKey: OLD_CREDENTIAL_VALIDITY_KEY, value: "revoked" },
         { atMs: ROTATION_STARTED_MS + 2_000, controlKey: CREDENTIAL_VALIDATION_MODE_KEY, value: "disabled-temporarily" },
       ]);
       const result = evaluateCandidateDeclaredFinish(serviceToServiceCredentialRotationFailureSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
     });
   });
 

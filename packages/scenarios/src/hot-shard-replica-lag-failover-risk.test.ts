@@ -367,12 +367,15 @@ describe("Hot Shard + Replica Lag + Failover Risk", () => {
     });
 
     describe("Automatic failure", () => {
-      it("fails if the stranded-write backlog is left unsafely climbing for the full sustained window", () => {
+      it("stays active (never auto-fails) even after the stranded-write backlog has been unsafely climbing past the old sustained window", () => {
         const state = runScenario(UNSAFE_FAILOVER_SUSTAINED_MS + 61_000, [
           { atMs: REPLICA_LAG_ONSET_MS + 1_000, controlKey: FAILOVER_SHARD2_KEY, value: true },
         ]);
-        expect(state.status).toBe("failed");
-        expect(state.failedAtMs).not.toBeNull();
+        expect(state.status).not.toBe("failed");
+        expect(state.failedAtMs).toBeNull();
+        expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+          60,
+        );
       });
     });
 
@@ -439,10 +442,12 @@ describe("Hot Shard + Replica Lag + Failover Risk", () => {
       expect(result.completionTier).toBe("optimal");
     });
 
-    it("automatic failure still wins even in candidate_declared mode", () => {
+    it("an unsafe failover left sustained well past the old sustained window still never resolves in candidate_declared mode (no auto-fail, but also never Finish-eligible)", () => {
       const state = runScenario(UNSAFE_FAILOVER_SUSTAINED_MS + 61_000, [
         { atMs: REPLICA_LAG_ONSET_MS + 1_000, controlKey: FAILOVER_SHARD2_KEY, value: true },
       ]);
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(hotShardReplicaLagFailoverRiskSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });

@@ -216,14 +216,17 @@ describe("Payment Retry Storm — 14. alternative recovery", () => {
 });
 
 describe("Payment Retry Storm — 15. bad configuration", () => {
-  it("can trigger failure with a clearly harmful configuration", () => {
+  it("stays active (never auto-fails) even after a clearly harmful configuration breaches the failure threshold past the old sustained window", () => {
     const { finalState } = runScenario(66_000 + 3 * MINUTE_MS + 1_000, [
       { atMs: 65_000, controlKey: PAYMENT_INSTANCES_KEY, value: 24 },
       { atMs: 65_000, controlKey: RETRIES_KEY, value: 5 },
     ]);
 
-    expect(finalState.status).toBe("failed");
-    expect(finalState.failedAtMs).not.toBeNull();
+    expect(finalState.status).not.toBe("failed");
+    expect(finalState.failedAtMs).toBeNull();
+    expect(finalState.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+      paymentRetryStormSimulation.failureCondition.sustainedSeconds,
+    );
   });
 });
 

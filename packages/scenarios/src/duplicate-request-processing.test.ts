@@ -216,12 +216,15 @@ describe("Duplicate Request Processing", () => {
       expect(state.values.duplicateSideEffectStatus).toBe("duplicating");
     });
 
-    it("fails if duplicate request rate stays at or above 50% for the full sustained window", () => {
+    it("stays active (never auto-fails) even after duplicate request rate remains at or above 50% past the old sustained window", () => {
       const state = runScenario(SUSTAINED_RETRY_PRESSURE_MS + 61_000, [
         { atMs: LATENCY_RISING_MS + 1_000, controlKey: CLIENT_RETRY_COUNT_KEY, value: 10 },
       ]);
-      expect(state.status).toBe("failed");
-      expect(state.failedAtMs).not.toBeNull();
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
+      expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
+        duplicateRequestProcessingSimulation.failureCondition.sustainedSeconds,
+      );
     });
 
     it("tracks peak duplicate request rate generically via numericWatchFields", () => {
@@ -325,11 +328,12 @@ describe("Duplicate Request Processing", () => {
       expect(result.completionTier).toBeNull();
     });
 
-    it("automatic failure still fires regardless of candidate_declared mode", () => {
+    it("sustained breach never auto-fails; a Finish declared from that state still resolves as declared_unstable", () => {
       const state = runScenario(SUSTAINED_RETRY_PRESSURE_MS + 61_000, [
         { atMs: LATENCY_RISING_MS + 1_000, controlKey: CLIENT_RETRY_COUNT_KEY, value: 10 },
       ]);
-      expect(state.status).toBe("failed");
+      expect(state.status).not.toBe("failed");
+      expect(state.failedAtMs).toBeNull();
       const result = evaluateCandidateDeclaredFinish(duplicateRequestProcessingSimulation, state);
       expect(result.outcome).toBe("declared_unstable");
     });
