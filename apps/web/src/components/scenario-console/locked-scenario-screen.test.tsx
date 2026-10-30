@@ -21,10 +21,14 @@ describe("LockedScenarioScreen", () => {
     );
   });
 
-  it("never fakes a payment flow", () => {
+  it("never fakes a payment flow — upgrading always routes through the real /pricing page, no inline checkout", () => {
     render(<LockedScenarioScreen scenario={dbConnectionSaturation} />);
 
-    expect(screen.queryByRole("button", { name: /buy|purchase|upgrade now|checkout/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /buy|purchase|checkout/i })).toBeNull();
+    expect(screen.getByRole("link", { name: /upgrade to pro/i })).toHaveAttribute(
+      "href",
+      "/pricing",
+    );
   });
 
   it("shows candidate-safe skills and architecture topology, never rules or scoring", () => {
@@ -40,10 +44,28 @@ describe("LockedScenarioScreen", () => {
 });
 
 describe("LockedScenarioScreen — Phase 8 Incident Pass states", () => {
-  it("shows the default 'coming soon' copy with no access reason", () => {
+  it("shows upgrade-to-Pro copy and a /pricing link with no access reason", () => {
     render(<LockedScenarioScreen scenario={dbConnectionSaturation} />);
-    expect(screen.getByText(/coming soon/i)).toBeInTheDocument();
+    expect(screen.getByText(/upgrade to pro to unlock it/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /upgrade to pro/i })).toHaveAttribute(
+      "href",
+      "/pricing",
+    );
     expect(screen.queryByRole("button", { name: /use incident pass/i })).toBeNull();
+  });
+
+  it("shows upgrade-to-Pro copy and a /pricing link for paid_scenario_locked", () => {
+    render(
+      <LockedScenarioScreen
+        scenario={dbConnectionSaturation}
+        access={{ allowed: false, reason: "paid_scenario_locked" }}
+      />,
+    );
+    expect(screen.getByText(/upgrade to pro to unlock it/i)).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /upgrade to pro/i })).toHaveAttribute(
+      "href",
+      "/pricing",
+    );
   });
 
   it("shows the 'Use Incident Pass' affordance when a pass is available", () => {

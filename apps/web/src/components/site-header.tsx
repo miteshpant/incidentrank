@@ -36,9 +36,39 @@ function useHasOrganizations(isSignedIn: boolean | undefined): boolean {
   return isSignedIn ? hasOrganizations : false;
 }
 
+/**
+ * Backs the small "Upgrade to Pro" header badge — shown only to a
+ * signed-in user with no active Pro/Founding entitlement, and only
+ * while payments are actually enabled (so the badge never links
+ * somewhere dead). Mirrors useHasOrganizations's fetch-on-sign-in shape.
+ */
+function useShowUpgradeBadge(isSignedIn: boolean | undefined): boolean {
+  const [showBadge, setShowBadge] = useState(false);
+
+  useEffect(() => {
+    if (!isSignedIn) return undefined;
+
+    let cancelled = false;
+    fetch("/api/me/entitlement")
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { entitlement?: "pro" | "founding_lifetime" | null; paymentsEnabled?: boolean } | null) => {
+        if (!cancelled) {
+          setShowBadge(Boolean(data?.paymentsEnabled) && !data?.entitlement);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [isSignedIn]);
+
+  return isSignedIn ? showBadge : false;
+}
+
 export function SiteHeader() {
   const { isSignedIn } = useAuth();
   const hasOrganizations = useHasOrganizations(isSignedIn);
+  const showUpgradeBadge = useShowUpgradeBadge(isSignedIn);
 
   return (
     <header className="border-b border-border">
@@ -70,6 +100,11 @@ export function SiteHeader() {
               Profile
             </Link>
             <UserButton afterSignOutUrl="/" />
+            {showUpgradeBadge && (
+              <Link href="/pricing" className="text-muted hover:text-foreground">
+                Upgrade to Pro
+              </Link>
+            )}
           </SignedIn>
           <SignedOut>
             <SignInButton mode="modal">
