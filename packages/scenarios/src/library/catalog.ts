@@ -492,6 +492,81 @@ import {
   checkoutPaymentInventoryRedisContentionCandidateUI,
   CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING,
 } from "../checkout-payment-inventory-redis-contention";
+import {
+  connectionPoolStarvation,
+  connectionPoolStarvationCandidateUI,
+  CONNECTION_POOL_STARVATION_SCORING,
+} from "../connection-pool-starvation";
+import {
+  staleFeatureFlagKillSwitch,
+  staleFeatureFlagKillSwitchCandidateUI,
+  STALE_FEATURE_FLAG_KILL_SWITCH_SCORING,
+} from "../stale-feature-flag-kill-switch";
+import {
+  retryBudgetExhaustion,
+  retryBudgetExhaustionCandidateUI,
+  RETRY_BUDGET_EXHAUSTION_SCORING,
+} from "../retry-budget-exhaustion";
+import {
+  cronJobOverlapDoubleRun,
+  cronJobOverlapDoubleRunCandidateUI,
+  CRON_JOB_OVERLAP_DOUBLE_RUN_SCORING,
+} from "../cron-job-overlap-double-run";
+import {
+  corsMisconfigurationBlocksPartners,
+  corsMisconfigurationBlocksPartnersCandidateUI,
+  CORS_MISCONFIGURATION_BLOCKS_PARTNERS_SCORING,
+} from "../cors-misconfiguration-blocks-partners";
+import {
+  gracefulShutdownDropsInFlightRequests,
+  gracefulShutdownDropsInFlightRequestsCandidateUI,
+  GRACEFUL_SHUTDOWN_DROPS_IN_FLIGHT_REQUESTS_SCORING,
+} from "../graceful-shutdown-drops-in-flight-requests";
+import {
+  geoDnsFailoverFlapping,
+  geoDnsFailoverFlappingCandidateUI,
+  GEO_DNS_FAILOVER_FLAPPING_SCORING,
+} from "../geo-dns-failover-flapping";
+import {
+  orphanedBackgroundWorkerQueueGrowth,
+  orphanedBackgroundWorkerQueueGrowthCandidateUI,
+  ORPHANED_BACKGROUND_WORKER_QUEUE_GROWTH_SCORING,
+} from "../orphaned-background-worker-queue-growth";
+import {
+  multiAzStorageFailureDuringMigration,
+  multiAzStorageFailureDuringMigrationCandidateUI,
+  MULTI_AZ_STORAGE_FAILURE_DURING_MIGRATION_SCORING,
+} from "../multi-az-storage-failure-during-migration";
+import {
+  apiVersionSunsetBreaksSilentConsumers,
+  apiVersionSunsetBreaksSilentConsumersCandidateUI,
+  API_VERSION_SUNSET_BREAKS_SILENT_CONSUMERS_SCORING,
+} from "../api-version-sunset-breaks-silent-consumers";
+import {
+  sessionAffinityLossAfterCacheFailover,
+  sessionAffinityLossAfterCacheFailoverCandidateUI,
+  SESSION_AFFINITY_LOSS_AFTER_CACHE_FAILOVER_SCORING,
+} from "../session-affinity-loss-after-cache-failover";
+import {
+  writeAmplificationFromMisconfiguredCompaction,
+  writeAmplificationFromMisconfiguredCompactionCandidateUI,
+  WRITE_AMPLIFICATION_FROM_MISCONFIGURED_COMPACTION_SCORING,
+} from "../write-amplification-from-misconfigured-compaction";
+import {
+  crossTeamSchemaContractDrift,
+  crossTeamSchemaContractDriftCandidateUI,
+  CROSS_TEAM_SCHEMA_CONTRACT_DRIFT_SCORING,
+} from "../cross-team-schema-contract-drift";
+import {
+  regulatoryDataResidencyViolationDuringFailover,
+  regulatoryDataResidencyViolationDuringFailoverCandidateUI,
+  REGULATORY_DATA_RESIDENCY_VIOLATION_DURING_FAILOVER_SCORING,
+} from "../regulatory-data-residency-violation-during-failover";
+import {
+  platformWideClockSkewBreaksDistributedConsensus,
+  platformWideClockSkewBreaksDistributedConsensusCandidateUI,
+  PLATFORM_WIDE_CLOCK_SKEW_BREAKS_DISTRIBUTED_CONSENSUS_SCORING,
+} from "../platform-wide-clock-skew-breaks-distributed-consensus";
 import type { BuiltInScenarioCatalog } from "./types";
 
 /**
@@ -1032,5 +1107,81 @@ export const BUILT_IN_SCENARIO_CATALOG: BuiltInScenarioCatalog = {
     definition: checkoutPaymentInventoryRedisContention,
     candidateUI: checkoutPaymentInventoryRedisContentionCandidateUI,
     scoring: CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING,
+  },
+  // Phase 10G — first weekly batch (15 scenarios).
+  [connectionPoolStarvation.slug]: {
+    definition: connectionPoolStarvation,
+    candidateUI: connectionPoolStarvationCandidateUI,
+    scoring: CONNECTION_POOL_STARVATION_SCORING,
+  },
+  [staleFeatureFlagKillSwitch.slug]: {
+    definition: staleFeatureFlagKillSwitch,
+    candidateUI: staleFeatureFlagKillSwitchCandidateUI,
+    scoring: STALE_FEATURE_FLAG_KILL_SWITCH_SCORING,
+  },
+  [retryBudgetExhaustion.slug]: {
+    definition: retryBudgetExhaustion,
+    candidateUI: retryBudgetExhaustionCandidateUI,
+    scoring: RETRY_BUDGET_EXHAUSTION_SCORING,
+  },
+  [cronJobOverlapDoubleRun.slug]: {
+    definition: cronJobOverlapDoubleRun,
+    candidateUI: cronJobOverlapDoubleRunCandidateUI,
+    scoring: CRON_JOB_OVERLAP_DOUBLE_RUN_SCORING,
+  },
+  [corsMisconfigurationBlocksPartners.slug]: {
+    definition: corsMisconfigurationBlocksPartners,
+    candidateUI: corsMisconfigurationBlocksPartnersCandidateUI,
+    scoring: CORS_MISCONFIGURATION_BLOCKS_PARTNERS_SCORING,
+  },
+  [gracefulShutdownDropsInFlightRequests.slug]: {
+    definition: gracefulShutdownDropsInFlightRequests,
+    candidateUI: gracefulShutdownDropsInFlightRequestsCandidateUI,
+    scoring: GRACEFUL_SHUTDOWN_DROPS_IN_FLIGHT_REQUESTS_SCORING,
+  },
+  [geoDnsFailoverFlapping.slug]: {
+    definition: geoDnsFailoverFlapping,
+    candidateUI: geoDnsFailoverFlappingCandidateUI,
+    scoring: GEO_DNS_FAILOVER_FLAPPING_SCORING,
+  },
+  [orphanedBackgroundWorkerQueueGrowth.slug]: {
+    definition: orphanedBackgroundWorkerQueueGrowth,
+    candidateUI: orphanedBackgroundWorkerQueueGrowthCandidateUI,
+    scoring: ORPHANED_BACKGROUND_WORKER_QUEUE_GROWTH_SCORING,
+  },
+  [multiAzStorageFailureDuringMigration.slug]: {
+    definition: multiAzStorageFailureDuringMigration,
+    candidateUI: multiAzStorageFailureDuringMigrationCandidateUI,
+    scoring: MULTI_AZ_STORAGE_FAILURE_DURING_MIGRATION_SCORING,
+  },
+  [apiVersionSunsetBreaksSilentConsumers.slug]: {
+    definition: apiVersionSunsetBreaksSilentConsumers,
+    candidateUI: apiVersionSunsetBreaksSilentConsumersCandidateUI,
+    scoring: API_VERSION_SUNSET_BREAKS_SILENT_CONSUMERS_SCORING,
+  },
+  [sessionAffinityLossAfterCacheFailover.slug]: {
+    definition: sessionAffinityLossAfterCacheFailover,
+    candidateUI: sessionAffinityLossAfterCacheFailoverCandidateUI,
+    scoring: SESSION_AFFINITY_LOSS_AFTER_CACHE_FAILOVER_SCORING,
+  },
+  [writeAmplificationFromMisconfiguredCompaction.slug]: {
+    definition: writeAmplificationFromMisconfiguredCompaction,
+    candidateUI: writeAmplificationFromMisconfiguredCompactionCandidateUI,
+    scoring: WRITE_AMPLIFICATION_FROM_MISCONFIGURED_COMPACTION_SCORING,
+  },
+  [crossTeamSchemaContractDrift.slug]: {
+    definition: crossTeamSchemaContractDrift,
+    candidateUI: crossTeamSchemaContractDriftCandidateUI,
+    scoring: CROSS_TEAM_SCHEMA_CONTRACT_DRIFT_SCORING,
+  },
+  [regulatoryDataResidencyViolationDuringFailover.slug]: {
+    definition: regulatoryDataResidencyViolationDuringFailover,
+    candidateUI: regulatoryDataResidencyViolationDuringFailoverCandidateUI,
+    scoring: REGULATORY_DATA_RESIDENCY_VIOLATION_DURING_FAILOVER_SCORING,
+  },
+  [platformWideClockSkewBreaksDistributedConsensus.slug]: {
+    definition: platformWideClockSkewBreaksDistributedConsensus,
+    candidateUI: platformWideClockSkewBreaksDistributedConsensusCandidateUI,
+    scoring: PLATFORM_WIDE_CLOCK_SKEW_BREAKS_DISTRIBUTED_CONSENSUS_SCORING,
   },
 };

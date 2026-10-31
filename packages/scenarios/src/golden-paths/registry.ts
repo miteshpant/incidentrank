@@ -1,4 +1,19 @@
 import type { ScenarioGoldenPath } from "./types";
+import { connectionPoolStarvationGoldenPath } from "./connection-pool-starvation";
+import { staleFeatureFlagKillSwitchGoldenPath } from "./stale-feature-flag-kill-switch";
+import { retryBudgetExhaustionGoldenPath } from "./retry-budget-exhaustion";
+import { cronJobOverlapDoubleRunGoldenPath } from "./cron-job-overlap-double-run";
+import { corsMisconfigurationBlocksPartnersGoldenPath } from "./cors-misconfiguration-blocks-partners";
+import { gracefulShutdownDropsInFlightRequestsGoldenPath } from "./graceful-shutdown-drops-in-flight-requests";
+import { geoDnsFailoverFlappingGoldenPath } from "./geo-dns-failover-flapping";
+import { orphanedBackgroundWorkerQueueGrowthGoldenPath } from "./orphaned-background-worker-queue-growth";
+import { multiAzStorageFailureDuringMigrationGoldenPath } from "./multi-az-storage-failure-during-migration";
+import { apiVersionSunsetBreaksSilentConsumersGoldenPath } from "./api-version-sunset-breaks-silent-consumers";
+import { sessionAffinityLossAfterCacheFailoverGoldenPath } from "./session-affinity-loss-after-cache-failover";
+import { writeAmplificationFromMisconfiguredCompactionGoldenPath } from "./write-amplification-from-misconfigured-compaction";
+import { crossTeamSchemaContractDriftGoldenPath } from "./cross-team-schema-contract-drift";
+import { regulatoryDataResidencyViolationDuringFailoverGoldenPath } from "./regulatory-data-residency-violation-during-failover";
+import { platformWideClockSkewBreaksDistributedConsensusGoldenPath } from "./platform-wide-clock-skew-breaks-distributed-consensus";
 import { abusePreventionFalsePositiveStormGoldenPath } from "./abuse-prevention-false-positive-storm";
 import { analyticsWarehouseQueryContentionGoldenPath } from "./analytics-warehouse-query-contention";
 import { apiGatewaySaturationGoldenPath } from "./api-gateway-saturation";
@@ -209,4 +224,20 @@ export const GOLDEN_PATHS: Record<string, ScenarioGoldenPath> = {
   [webhookDeliveryStormGoldenPath.scenarioSlug]: webhookDeliveryStormGoldenPath,
   [checkoutPaymentInventoryRedisContentionGoldenPath.scenarioSlug]:
     checkoutPaymentInventoryRedisContentionGoldenPath,
+  // Phase 10G — first weekly batch (15 scenarios).
+  [connectionPoolStarvationGoldenPath.scenarioSlug]: connectionPoolStarvationGoldenPath,
+  [staleFeatureFlagKillSwitchGoldenPath.scenarioSlug]: staleFeatureFlagKillSwitchGoldenPath,
+  [retryBudgetExhaustionGoldenPath.scenarioSlug]: retryBudgetExhaustionGoldenPath,
+  [cronJobOverlapDoubleRunGoldenPath.scenarioSlug]: cronJobOverlapDoubleRunGoldenPath,
+  [corsMisconfigurationBlocksPartnersGoldenPath.scenarioSlug]: corsMisconfigurationBlocksPartnersGoldenPath,
+  [gracefulShutdownDropsInFlightRequestsGoldenPath.scenarioSlug]: gracefulShutdownDropsInFlightRequestsGoldenPath,
+  [geoDnsFailoverFlappingGoldenPath.scenarioSlug]: geoDnsFailoverFlappingGoldenPath,
+  [orphanedBackgroundWorkerQueueGrowthGoldenPath.scenarioSlug]: orphanedBackgroundWorkerQueueGrowthGoldenPath,
+  [multiAzStorageFailureDuringMigrationGoldenPath.scenarioSlug]: multiAzStorageFailureDuringMigrationGoldenPath,
+  [apiVersionSunsetBreaksSilentConsumersGoldenPath.scenarioSlug]: apiVersionSunsetBreaksSilentConsumersGoldenPath,
+  [sessionAffinityLossAfterCacheFailoverGoldenPath.scenarioSlug]: sessionAffinityLossAfterCacheFailoverGoldenPath,
+  [writeAmplificationFromMisconfiguredCompactionGoldenPath.scenarioSlug]: writeAmplificationFromMisconfiguredCompactionGoldenPath,
+  [crossTeamSchemaContractDriftGoldenPath.scenarioSlug]: crossTeamSchemaContractDriftGoldenPath,
+  [regulatoryDataResidencyViolationDuringFailoverGoldenPath.scenarioSlug]: regulatoryDataResidencyViolationDuringFailoverGoldenPath,
+  [platformWideClockSkewBreaksDistributedConsensusGoldenPath.scenarioSlug]: platformWideClockSkewBreaksDistributedConsensusGoldenPath,
 };
