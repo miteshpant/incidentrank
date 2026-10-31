@@ -112,7 +112,7 @@ describe("POST /api/attempts — paid-scenario practice gate", () => {
     vi.stubEnv("DEV_UNLOCK_PAID_SCENARIOS", undefined);
 
     const response = await POST(
-      buildRequest("app.incidentrank.com", "database-connection-saturation"),
+      buildRequest("app.incidentrank.com", "kafka-consumer-lag"),
     );
 
     expect(response.status).toBe(200);
@@ -160,8 +160,10 @@ describe("POST /api/attempts — persisted is_free is authoritative (Phase 10F)"
   it.each([
     ["kafka-consumer-lag"],
     ["payment-retry-storm"],
-    ["database-connection-saturation"],
-  ])("the 3 currently-free built-in scenarios remain free after Phase 10F: %s", async (slug) => {
+    ["primary-database-failover"],
+    ["backfill-overwhelms-production"],
+    ["regional-failover-causes-global-overload"],
+  ])("the currently-free built-in scenarios remain free after Phase 10F: %s", async (slug) => {
     const response = await POST(buildRequest(slug));
     expect(response.status).toBe(200);
     const body = await response.json();
@@ -261,11 +263,11 @@ describe("POST /api/attempts — idempotent against an existing in-progress atte
   }
 
   it("a second POST for the same scenario returns the existing in-progress attempt, not a new row", async () => {
-    const first = await POST(buildPostRequest("database-connection-saturation"));
+    const first = await POST(buildPostRequest("payment-retry-storm"));
     const firstBody = await first.json();
     expect(first.status).toBe(200);
 
-    const second = await POST(buildPostRequest("database-connection-saturation"));
+    const second = await POST(buildPostRequest("payment-retry-storm"));
     const secondBody = await second.json();
     expect(second.status).toBe(200);
 
@@ -281,7 +283,7 @@ describe("POST /api/attempts — idempotent against an existing in-progress atte
   });
 
   it("a different scenario still gets its own new attempt even with an existing in-progress attempt for another scenario", async () => {
-    const first = await POST(buildPostRequest("database-connection-saturation"));
+    const first = await POST(buildPostRequest("payment-retry-storm"));
     const firstBody = await first.json();
 
     const second = await POST(buildPostRequest("kafka-consumer-lag"));
@@ -299,10 +301,10 @@ describe("POST /api/attempts — idempotent against an existing in-progress atte
   });
 
   it("GET ?scenarioSlug= finds the existing in-progress attempt for resume", async () => {
-    const created = await POST(buildPostRequest("database-connection-saturation"));
+    const created = await POST(buildPostRequest("payment-retry-storm"));
     const createdBody = await created.json();
 
-    const response = await GET(buildGetRequest("database-connection-saturation"));
+    const response = await GET(buildGetRequest("payment-retry-storm"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -310,7 +312,7 @@ describe("POST /api/attempts — idempotent against an existing in-progress atte
   });
 
   it("GET ?scenarioSlug= returns null when no in-progress attempt exists for that scenario", async () => {
-    const response = await GET(buildGetRequest("database-connection-saturation"));
+    const response = await GET(buildGetRequest("payment-retry-storm"));
     const body = await response.json();
 
     expect(response.status).toBe(200);
@@ -318,7 +320,7 @@ describe("POST /api/attempts — idempotent against an existing in-progress atte
   });
 
   it("unscoped GET (no scenarioSlug) still returns the full attempts history list, unaffected", async () => {
-    await POST(buildPostRequest("database-connection-saturation"));
+    await POST(buildPostRequest("payment-retry-storm"));
 
     const response = await GET(buildGetRequest());
     const body = await response.json();

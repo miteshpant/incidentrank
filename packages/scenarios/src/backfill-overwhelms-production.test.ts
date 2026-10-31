@@ -119,8 +119,8 @@ const NAIVE_CONCURRENCY_ONLY_ACTIONS: TimedAction[] = [
 
 describe("Backfill Overwhelms Production", () => {
   describe("Definition", () => {
-    it("validates and carries real library metadata as a paid senior_staff scenario", () => {
-      expect(backfillOverwhelmsProduction.isFree).toBe(false);
+    it("validates and carries real library metadata as a free senior_staff scenario", () => {
+      expect(backfillOverwhelmsProduction.isFree).toBe(true);
       expect(backfillOverwhelmsProduction.library?.category).toBe("Databases & Storage");
       expect(backfillOverwhelmsProduction.library?.tags.length).toBeGreaterThan(0);
       expect(backfillOverwhelmsProduction.library?.skills.length).toBeGreaterThan(0);

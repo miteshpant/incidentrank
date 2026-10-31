@@ -45,12 +45,12 @@ describe("ScenarioPracticePage", () => {
 
   it("renders the practice console for a known free built-in scenario", async () => {
     const element = await ScenarioPracticePage({
-      params: Promise.resolve({ slug: "database-connection-saturation" }),
+      params: Promise.resolve({ slug: "kafka-consumer-lag" }),
     });
     render(element);
 
     expect(
-      screen.getByRole("heading", { name: "Database Connection Saturation" }),
+      screen.getByRole("heading", { name: "Kafka Consumer Lag" }),
     ).toBeInTheDocument();
   });
 

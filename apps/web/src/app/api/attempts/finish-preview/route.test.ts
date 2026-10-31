@@ -14,7 +14,7 @@ import type { POST as PostHandler } from "./route";
 describe("POST /api/attempts/finish-preview — publishing lifecycle gate", () => {
   let POST: typeof PostHandler;
   let testDb: Db;
-  const FREE_SLUG = "database-connection-saturation";
+  const FREE_SLUG = "kafka-consumer-lag";
 
   beforeAll(async () => {
     ({ POST } = await import("./route"));

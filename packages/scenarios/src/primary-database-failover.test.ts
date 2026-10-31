@@ -94,8 +94,8 @@ const splitPrimaryActions: TimedAction[] = [
 
 describe("Primary Database Failover", () => {
   describe("Definition", () => {
-    it("validates and carries real library metadata as a paid staff-difficulty scenario", () => {
-      expect(primaryDatabaseFailover.isFree).toBe(false);
+    it("validates and carries real library metadata as a free staff-difficulty scenario", () => {
+      expect(primaryDatabaseFailover.isFree).toBe(true);
       expect(primaryDatabaseFailover.library?.category).toBe("Databases & Storage");
       expect(primaryDatabaseFailover.library?.tags.length).toBeGreaterThan(0);
       expect(primaryDatabaseFailover.library?.skills.length).toBeGreaterThan(0);

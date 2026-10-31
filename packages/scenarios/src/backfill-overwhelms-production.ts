@@ -33,7 +33,7 @@ export const backfillOverwhelmsProduction: ScenarioDefinition = {
     "A large historical backfill has been running at low concurrency against the Primary Database for days, working toward a real migration deadline. Live customer traffic has now entered its daily peak, and the two workloads are competing directly for the same database's connection pool and row/table locks. Four business invariants govern every decision here: (1) customer writes must remain correct and available within the authored SLO — production correctness is never negotiable; (2) the backfill may slow or pause temporarily if that is what safety requires; (3) historical rows must not be skipped or silently marked complete — any mechanism that marks a row 'done' without actually backfilling it is a permanent, irreversible correctness violation, tracked as a historical count that never resets once incurred; (4) the migration deadline genuinely matters — simply shutting the backfill off forever and never resuming it is not an optimal outcome — but the deadline never outranks production correctness, and a resumed backfill must stay within a safe production resource budget rather than simply being turned back up to full speed. Decide how to contain database pressure, protect the live workload, reshape the backfill's footprint rather than merely killing it, and resume it at a rate production can safely absorb.",
   difficulty: "senior_staff",
   estimatedMinutes: 25,
-  isFree: false,
+  isFree: true,
   structure: "linear",
   simulation: backfillOverwhelmsProductionSimulation,
   library: {

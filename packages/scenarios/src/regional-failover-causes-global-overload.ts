@@ -30,7 +30,7 @@ export const regionalFailoverCausesGlobalOverload: ScenarioDefinition = {
     "Region A has failed and can no longer serve its own traffic. The global router's automatic failover is shifting Region A's traffic into Region B and Region C — both still healthy, both still serving their own normal customers, and NEITHER sized with enough reserve capacity to absorb all of Region A's load on top of that. Business rules for this incident: critical customer operations must remain available, no matter which region ends up serving them; optional, low-priority traffic may be shed rather than forwarded; healthy regions must not be driven into failure by the mitigation itself; and a partial, contained loss of service (Region A staying offline a while longer, or some optional traffic going unserved) is explicitly preferable to letting the incident spread into a global collapse. Decide how much of Region A's traffic the automatic failover should actually be allowed to redirect, what to do with the rest, and how to bring Region A back without re-triggering the same overload in Region B or Region C.",
   difficulty: "principal",
   estimatedMinutes: 20,
-  isFree: false,
+  isFree: true,
   structure: "linear",
   simulation: regionalFailoverSimulation,
   library: {

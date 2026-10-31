@@ -27,7 +27,7 @@ export const dbConnectionSaturation: ScenarioDefinition = {
     "A sudden traffic spike is exhausting your primary database's connection pool. Requests are queuing, latency is climbing, and a scheduled batch job is about to make it worse. Diagnose the bottleneck and restore healthy throughput before the failure cascades.",
   difficulty: "senior",
   estimatedMinutes: 15,
-  isFree: true,
+  isFree: false,
   structure: "linear",
   simulation: dbConnectionSaturationSimulation,
   library: {

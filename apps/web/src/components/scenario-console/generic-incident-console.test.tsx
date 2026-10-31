@@ -91,7 +91,11 @@ describe("GenericIncidentConsole", () => {
       />,
     );
 
-    expect(screen.getByText("Free")).toBeInTheDocument();
+    // database-connection-saturation is paid (one free scenario per
+    // difficulty level now lives on a different Senior slug,
+    // payment-retry-storm) — this just proves the badge reflects
+    // entry.definition.isFree, whichever value that currently is.
+    expect(screen.getByText(entry.definition.isFree ? "Free" : "🔒 Paid")).toBeInTheDocument();
     for (const skill of entry.definition.library!.skills) {
       expect(screen.getByText(skill)).toBeInTheDocument();
     }

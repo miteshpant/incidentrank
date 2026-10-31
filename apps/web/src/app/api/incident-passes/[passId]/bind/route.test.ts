@@ -6,7 +6,7 @@ import type { POST as PostHandler } from "./route";
 
 const TEST_AUTH_ID = "test-incident-pass-bind-route";
 const PAID_SCENARIO_SLUG = "rate-limit-misconfiguration";
-const FREE_SCENARIO_SLUG = "database-connection-saturation";
+const FREE_SCENARIO_SLUG = "kafka-consumer-lag";
 
 vi.mock("@clerk/nextjs/server", () => ({
   auth: async () => ({ userId: TEST_AUTH_ID }),

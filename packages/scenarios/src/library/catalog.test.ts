@@ -48,40 +48,66 @@ describe("BUILT_IN_SCENARIO_CATALOG", () => {
     }
   });
 
-  it("marks exactly 3 IncidentRank-owned launch scenarios as free, explicitly in source — never inferred by order", () => {
-    // Per docs/implementation_plan/phase6.md: "The 3 free scenarios should
-    // be explicitly marked in source/config, not inferred by order" and
-    // "Add a test asserting: exactly 3 IncidentRank-owned launch scenarios
-    // are free." Prevents accidental entitlement drift as more paid
-    // scenarios are added in later batches.
+  it("marks exactly 5 IncidentRank-owned scenarios as free (one per difficulty level), explicitly in source — never inferred by order", () => {
+    // Per docs/implementation_plan/phase6.md: "free scenarios should be
+    // explicitly marked in source/config, not inferred by order." Updated
+    // post-Phase-10G to one free scenario per difficulty level
+    // (intermediate/senior/staff/senior_staff/principal) — an explicit
+    // editorial choice (phase10f.md §13: "the content/admin layer should
+    // allow us to choose which incident is currently free," made here by
+    // code literal rather than the admin override path). Prevents
+    // accidental entitlement drift as more paid scenarios are added in
+    // later batches.
     const INTENDED_FREE_SLUGS = new Set([
-      "payment-retry-storm",
-      "database-connection-saturation",
       "kafka-consumer-lag",
+      "payment-retry-storm",
+      "primary-database-failover",
+      "backfill-overwhelms-production",
+      "regional-failover-causes-global-overload",
     ]);
 
     const freeEntries = listBuiltInScenarioEntries(BUILT_IN_SCENARIO_CATALOG).filter(
       (entry) => entry.definition.isFree,
     );
 
-    expect(freeEntries.length).toBe(3);
+    expect(freeEntries.length).toBe(5);
 
     const freeSlugs = new Set(freeEntries.map((e) => e.definition.slug));
     expect(freeSlugs).toEqual(INTENDED_FREE_SLUGS);
   });
 
-  it("defaults every non-free-launch scenario to paid", () => {
+  it("the one free scenario per level covers intermediate/senior/staff/senior_staff/principal exactly once each", () => {
     const INTENDED_FREE_SLUGS = new Set([
-      "payment-retry-storm",
-      "database-connection-saturation",
       "kafka-consumer-lag",
+      "payment-retry-storm",
+      "primary-database-failover",
+      "backfill-overwhelms-production",
+      "regional-failover-causes-global-overload",
+    ]);
+
+    const freeEntries = listBuiltInScenarioEntries(BUILT_IN_SCENARIO_CATALOG).filter((entry) =>
+      INTENDED_FREE_SLUGS.has(entry.definition.slug),
+    );
+    const difficulties = freeEntries.map((e) => e.definition.difficulty).sort();
+    expect(difficulties).toEqual(
+      ["intermediate", "principal", "senior", "senior_staff", "staff"].sort(),
+    );
+  });
+
+  it("defaults every non-free scenario to paid", () => {
+    const INTENDED_FREE_SLUGS = new Set([
+      "kafka-consumer-lag",
+      "payment-retry-storm",
+      "primary-database-failover",
+      "backfill-overwhelms-production",
+      "regional-failover-causes-global-overload",
     ]);
 
     for (const entry of listBuiltInScenarioEntries(BUILT_IN_SCENARIO_CATALOG)) {
       if (INTENDED_FREE_SLUGS.has(entry.definition.slug)) continue;
       expect(
         entry.definition.isFree,
-        `"${entry.definition.slug}" is not an intended free launch scenario but has isFree=true`,
+        `"${entry.definition.slug}" is not an intended free scenario but has isFree=true`,
       ).toBe(false);
     }
   });

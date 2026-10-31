@@ -79,8 +79,8 @@ const CAPACITY_MANAGED_ACTIONS: TimedAction[] = [
 
 describe("Regional Failover Causes Global Overload", () => {
   describe("Definition", () => {
-    it("validates and carries real library metadata as a paid principal scenario", () => {
-      expect(regionalFailoverCausesGlobalOverload.isFree).toBe(false);
+    it("validates and carries real library metadata as a free principal scenario", () => {
+      expect(regionalFailoverCausesGlobalOverload.isFree).toBe(true);
       expect(regionalFailoverCausesGlobalOverload.library?.category).toBe("Distributed Systems");
       expect(regionalFailoverCausesGlobalOverload.library?.tags.length).toBeGreaterThan(0);
       expect(regionalFailoverCausesGlobalOverload.library?.skills.length).toBeGreaterThan(0);

@@ -99,7 +99,7 @@ describe("POST /api/attempts/score-preview — paid-scenario practice gate", () 
       method: "POST",
       headers: { host: "app.incidentrank.com", "content-type": "application/json" },
       body: JSON.stringify({
-        scenarioSlug: "database-connection-saturation",
+        scenarioSlug: "kafka-consumer-lag",
         scoringInputs: {
           incidentStartedAtMs: 0,
           resolvedAtMs: 60_000,
@@ -125,7 +125,7 @@ describe("POST /api/attempts/score-preview — paid-scenario practice gate", () 
 describe("POST /api/attempts/score-preview — publishing lifecycle gate", () => {
   let POST: typeof PostHandler;
   let testDb: Db;
-  const FREE_SLUG = "database-connection-saturation";
+  const FREE_SLUG = "kafka-consumer-lag";
 
   beforeAll(async () => {
     ({ POST } = await import("./route"));
