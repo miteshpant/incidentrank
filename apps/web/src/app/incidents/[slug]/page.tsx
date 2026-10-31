@@ -9,7 +9,10 @@ import {
 } from "@/lib/practice-access";
 import { isDevUnlockPaidScenarios } from "@/lib/server/dev-unlock";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
-import { getActiveScenarioBySlug } from "@/lib/server/scenario-registry";
+import {
+  getActiveScenarioBySlug,
+  isBuiltInScenarioCurrentlyPublished,
+} from "@/lib/server/scenario-registry";
 import { getScenarioPassAccess } from "@/lib/server/pass-access";
 import { evaluatePaidPracticeEntitlement } from "@/lib/server/stripe/entitlements";
 import { db } from "@/lib/server/db";
@@ -39,6 +42,10 @@ export default async function ScenarioPracticePage({
   const { slug } = await params;
   const entry = getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, slug);
   if (!entry) notFound();
+  // Phase 10G §4: a draft or scheduled-but-not-yet-released scenario
+  // must never be reachable here, even though this page resolves
+  // directly from the catalog rather than through getActiveScenarioBySlug.
+  if (!(await isBuiltInScenarioCurrentlyPublished(slug))) notFound();
 
   const devUnlockPaid = await isDevUnlockPaidScenarios();
 

@@ -124,6 +124,46 @@ export async function resolveBuiltInScenarioIsFree(slug: string): Promise<boolea
 }
 
 /**
+ * Phase 10G §4 — the publishing-lifecycle visibility gate: a scenario is
+ * candidate-visible only when `status='published'` AND either
+ * `publishedAt` is unset (no schedule gate — the default for every row
+ * that predates this phase, so existing behavior is unchanged) or
+ * `publishedAt` has already passed. Every path that resolves a scenario
+ * for a candidate (built-in or org-owned) must apply this, not just
+ * `isActive`/`status==='published'` alone, or a scheduled-but-not-yet-
+ * released scenario would be playable the moment its row exists.
+ */
+export function isScenarioCurrentlyPublished(
+  row: Pick<Scenario, "status" | "publishedAt">,
+): boolean {
+  if (row.status !== "published") return false;
+  if (row.publishedAt === null) return true;
+  return row.publishedAt.getTime() <= Date.now();
+}
+
+/**
+ * Phase 10G §4: the authoritative "may an anonymous practice caller
+ * currently reach this built-in scenario" check — used by
+ * score-preview/finish-preview, which resolve scenarios directly from
+ * BUILT_IN_SCENARIO_CATALOG (never through getActiveScenarioBySlug) and
+ * so previously bypassed the publishing-lifecycle gate entirely. Scoped
+ * to ownershipType="incidentrank" for the same slug-namespacing reason
+ * as resolveBuiltInScenarioIsFree. A brand-new catalog entry with no
+ * seeded row yet is treated as published (matching
+ * resolveBuiltInScenarioIsFree's own fallback), since the only way to
+ * reach this function at all is if the slug already resolved via
+ * getBuiltInScenarioEntry — the row simply hasn't been seeded yet.
+ */
+export async function isBuiltInScenarioCurrentlyPublished(slug: string): Promise<boolean> {
+  const row = await db.query.scenarios.findFirst({
+    where: and(eq(scenarios.slug, slug), eq(scenarios.ownershipType, "incidentrank")),
+    columns: { status: true, publishedAt: true },
+  });
+  if (!row) return true;
+  return isScenarioCurrentlyPublished(row);
+}
+
+/**
  * Phase 10F: resolves the candidate-facing display descriptor (metrics/
  * controls/components, including any roleInIncident tags) for the same
  * (scenario, version) pair resolveSimulationDefinition resolves — used
@@ -195,6 +235,7 @@ export async function getActiveScenarioBySlug(
     ),
   });
   if (!row) return null;
+  if (!isScenarioCurrentlyPublished(row)) return null;
 
   const version = await resolveCurrentVersion(row);
   return version === null ? null : { ...row, version };
@@ -216,6 +257,7 @@ export async function getActiveScenarioById(
     where: and(eq(scenarios.id, scenarioId), eq(scenarios.isActive, true)),
   });
   if (!row) return null;
+  if (!isScenarioCurrentlyPublished(row)) return null;
 
   if (isPlayableBuiltinScenario(row)) {
     const version = await resolveCurrentVersion(row);
@@ -250,11 +292,12 @@ export async function listAssessableScenarios(
 
   const eligible = rows.filter(
     (row) =>
-      isPlayableBuiltinScenario(row) ||
-      (organizationId !== undefined &&
-        row.ownershipType === "organization" &&
-        row.organizationId === organizationId &&
-        row.status === "published"),
+      isScenarioCurrentlyPublished(row) &&
+      (isPlayableBuiltinScenario(row) ||
+        (organizationId !== undefined &&
+          row.ownershipType === "organization" &&
+          row.organizationId === organizationId &&
+          row.status === "published")),
   );
 
   const withVersions = await Promise.all(

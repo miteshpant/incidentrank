@@ -498,16 +498,22 @@ export const scenarios = pgTable("scenarios", {
   visibility: scenarioVisibilityEnum("visibility").notNull().default("public"),
   status: scenarioStatusEnum("status").notNull().default("published"),
 
-  // Phase 10F — additive catalog/editorial metadata. None of these are
-  // read by any entitlement/access-control or runtime code path; they
-  // exist for querying/admin visibility only (docs/implementation_plan/
-  // phase10f.md §11/§13/§14). `isFree` in particular does NOT drive
-  // evaluatePracticeAccess (apps/web/src/lib/practice-access.ts) in this
-  // phase — that remains driven by the compiled ScenarioDefinition's own
-  // isFree literal, exactly as today; this column is a mirror kept in
-  // sync by packages/db/src/seed.ts, not a second source of truth.
+  // Phase 10F — additive catalog/editorial metadata.
+  // Phase 10F correction: `isFree` IS now authoritative at every
+  // evaluatePracticeAccess call site (apps/web/src/lib/practice-access.ts)
+  // — it is read directly from this row, not derived from the compiled
+  // ScenarioDefinition literal. `structure`/`domain` remain query/admin-
+  // visibility metadata only, not read by any runtime/access-control
+  // path.
   structure: scenarioStructureEnum("structure").notNull().default("linear"),
   isFree: boolean("is_free").notNull().default(false),
+  // Phase 10G: set true whenever an admin explicitly changes `isFree`
+  // through the admin scenario editor — packages/db/src/seed.ts checks
+  // this flag and skips re-syncing `isFree` from the compiled
+  // ScenarioDefinition literal for any row where it's true, so an
+  // editorial free/paid decision survives every future seed run instead
+  // of being silently clobbered back to the code default.
+  isFreeOverriddenByAdmin: boolean("is_free_overridden_by_admin").notNull().default(false),
   domain: scenarioDomainEnum("domain"),
   releaseWeek: text("release_week"),
   publishedAt: timestamp("published_at", { withTimezone: true }),

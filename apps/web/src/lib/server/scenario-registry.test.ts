@@ -5,6 +5,8 @@ import { paymentRetryStorm, dbConnectionSaturation } from "@incidentrank/scenari
 import {
   getActiveScenarioById,
   getActiveScenarioBySlug,
+  isBuiltInScenarioCurrentlyPublished,
+  isScenarioCurrentlyPublished,
   listAssessableScenarios,
   resolveSimulationDefinition,
 } from "./scenario-registry";
@@ -193,5 +195,117 @@ describe("scenario-registry — data-driven resolution", () => {
 
       await testDb.delete(scenarios).where(eq(scenarios.id, orgScenario.id));
     });
+  });
+});
+
+/**
+ * Phase 10G §4 — publishing lifecycle. A scenario is candidate-visible
+ * only when status='published' AND (publishedAt IS NULL OR publishedAt
+ * <= now). Uses a real seeded built-in row (kafka-consumer-lag) as the
+ * test subject, mutating and restoring its status/publishedAt rather
+ * than inserting a throwaway row — getActiveScenarioBySlug/
+ * getActiveScenarioById/listAssessableScenarios only ever resolve a
+ * built-in scenario when BOTH the catalog recognizes the slug AND the
+ * row is ownershipType="incidentrank" (see the privacy tests above), so
+ * a freshly-inserted row with no real catalog entry would never resolve
+ * through those paths at all.
+ */
+describe("scenario-registry — publishing lifecycle (Phase 10G)", () => {
+  const PUBLISHED_SLUG = "kafka-consumer-lag";
+
+  async function getRow() {
+    const row = await testDb.query.scenarios.findFirst({
+      where: and(eq(scenarios.slug, PUBLISHED_SLUG), eq(scenarios.ownershipType, "incidentrank")),
+    });
+    if (!row) throw new Error("expected kafka-consumer-lag to already be seeded");
+    return row;
+  }
+
+  afterEach(async () => {
+    // Always restore the baseline published state, regardless of which
+    // assertion ran, so this suite never leaves a real catalog scenario
+    // invisible for any other test file sharing this database.
+    await testDb
+      .update(scenarios)
+      .set({ status: "published", publishedAt: null })
+      .where(and(eq(scenarios.slug, PUBLISHED_SLUG), eq(scenarios.ownershipType, "incidentrank")));
+  });
+
+  it("isScenarioCurrentlyPublished: published with no publishedAt is visible (default/unchanged behavior)", () => {
+    expect(isScenarioCurrentlyPublished({ status: "published", publishedAt: null })).toBe(true);
+  });
+
+  it("isScenarioCurrentlyPublished: published with a past publishedAt is visible", () => {
+    expect(
+      isScenarioCurrentlyPublished({ status: "published", publishedAt: new Date(Date.now() - 60_000) }),
+    ).toBe(true);
+  });
+
+  it("isScenarioCurrentlyPublished: published with a future publishedAt is NOT visible (scheduled)", () => {
+    expect(
+      isScenarioCurrentlyPublished({ status: "published", publishedAt: new Date(Date.now() + 60_000) }),
+    ).toBe(false);
+  });
+
+  it("isScenarioCurrentlyPublished: draft is never visible regardless of publishedAt", () => {
+    expect(isScenarioCurrentlyPublished({ status: "draft", publishedAt: null })).toBe(false);
+    expect(
+      isScenarioCurrentlyPublished({ status: "draft", publishedAt: new Date(Date.now() - 60_000) }),
+    ).toBe(false);
+  });
+
+  it("isScenarioCurrentlyPublished: archived is never visible regardless of publishedAt", () => {
+    expect(isScenarioCurrentlyPublished({ status: "archived", publishedAt: null })).toBe(false);
+  });
+
+  it("getActiveScenarioBySlug returns null for a scheduled-but-not-yet-released scenario, and resolves once it passes", async () => {
+    const row = await getRow();
+    await testDb
+      .update(scenarios)
+      .set({ publishedAt: new Date(Date.now() + 60 * 60 * 1000) })
+      .where(eq(scenarios.id, row.id));
+
+    expect(await getActiveScenarioBySlug(PUBLISHED_SLUG)).toBeNull();
+    expect(await isBuiltInScenarioCurrentlyPublished(PUBLISHED_SLUG)).toBe(false);
+
+    await testDb
+      .update(scenarios)
+      .set({ publishedAt: new Date(Date.now() - 60 * 60 * 1000) })
+      .where(eq(scenarios.id, row.id));
+
+    const resolved = await getActiveScenarioBySlug(PUBLISHED_SLUG);
+    expect(resolved).not.toBeNull();
+    expect(await isBuiltInScenarioCurrentlyPublished(PUBLISHED_SLUG)).toBe(true);
+  });
+
+  it("getActiveScenarioBySlug and getActiveScenarioById return null for a draft built-in scenario", async () => {
+    const row = await getRow();
+    await testDb.update(scenarios).set({ status: "draft" }).where(eq(scenarios.id, row.id));
+
+    expect(await getActiveScenarioBySlug(PUBLISHED_SLUG)).toBeNull();
+    expect(await getActiveScenarioById(row.id)).toBeNull();
+  });
+
+  it("getActiveScenarioBySlug and getActiveScenarioById return null for an archived built-in scenario", async () => {
+    const row = await getRow();
+    await testDb.update(scenarios).set({ status: "archived" }).where(eq(scenarios.id, row.id));
+
+    expect(await getActiveScenarioBySlug(PUBLISHED_SLUG)).toBeNull();
+    expect(await getActiveScenarioById(row.id)).toBeNull();
+  });
+
+  it("listAssessableScenarios excludes a scheduled-but-not-yet-released built-in scenario", async () => {
+    const row = await getRow();
+    await testDb
+      .update(scenarios)
+      .set({ publishedAt: new Date(Date.now() + 60 * 60 * 1000) })
+      .where(eq(scenarios.id, row.id));
+
+    const assessable = await listAssessableScenarios();
+    expect(assessable.some((s) => s.id === row.id)).toBe(false);
+  });
+
+  it("isBuiltInScenarioCurrentlyPublished defaults to true when no row has been seeded yet (fresh catalog entry)", async () => {
+    expect(await isBuiltInScenarioCurrentlyPublished("no-such-seeded-row-slug")).toBe(true);
   });
 });

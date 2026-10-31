@@ -1,0 +1,1 @@
+ALTER TABLE "scenarios" ADD COLUMN "is_free_overridden_by_admin" boolean DEFAULT false NOT NULL;
