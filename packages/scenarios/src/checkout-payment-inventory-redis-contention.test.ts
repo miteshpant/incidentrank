@@ -303,8 +303,24 @@ describe("Checkout/Payment/Inventory Redis Contention — reference incident", (
         { atMs: CONTENTION_BEGINS_MS + 1_000, controlKey: REDIS_CONNECTION_POOL_KEY, value: 512 },
       ]);
 
-      expect(scoreOf(correlated).breakdown.dataIntegrity).toBe(150);
-      expect(scoreOf(guessed).breakdown.dataIntegrity).toBe(60);
+      expect(scoreOf(correlated).breakdown.dataIntegrity).toBe(200);
+      expect(scoreOf(guessed).breakdown.dataIntegrity).toBe(80);
+    });
+
+    it("uses the same catalog-wide fixed maxPoints split as every other scenario (Phase 10G correction of the Phase 10F '150/50' bug)", () => {
+      const correlated = runScenario(CONTENTION_BEGINS_MS + 20_000, [
+        { atMs: CONTENTION_BEGINS_MS + 4_000, controlKey: REDIS_CONNECTION_POOL_KEY, value: 512 },
+      ]);
+      const result = scoreOf(correlated);
+
+      expect(result.maxPoints).toEqual({
+        recovery: 300,
+        customerImpact: 200,
+        dataIntegrity: 200,
+        reliability: 150,
+        costEfficiency: 100,
+        operationalEfficiency: 50,
+      });
     });
   });
 

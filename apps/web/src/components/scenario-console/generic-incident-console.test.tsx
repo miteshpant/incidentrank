@@ -41,13 +41,13 @@ beforeEach(() => {
           JSON.stringify({
             outcome: "resolved",
             completionTier: "optimal",
-            score: { total: 965, breakdown: {} },
+            score: { total: 965, breakdown: {}, maxPoints: {} },
           }),
           { status: 200 },
         );
       }
       return new Response(
-        JSON.stringify({ score: { total: 0, breakdown: {} } }),
+        JSON.stringify({ score: { total: 0, breakdown: {}, maxPoints: {} } }),
         { status: 200 },
       );
     }),
@@ -175,11 +175,11 @@ describe("GenericIncidentConsole", () => {
       const url = typeof input === "string" ? input : input.toString();
       if (url.includes("/finish-preview")) {
         return new Response(
-          JSON.stringify({ outcome: "declared_unstable", completionTier: null, score: { total: 410, breakdown: {} } }),
+          JSON.stringify({ outcome: "declared_unstable", completionTier: null, score: { total: 410, breakdown: {}, maxPoints: {} } }),
           { status: 200 },
         );
       }
-      return new Response(JSON.stringify({ score: { total: 0, breakdown: {} } }), { status: 200 });
+      return new Response(JSON.stringify({ score: { total: 0, breakdown: {}, maxPoints: {} } }), { status: 200 });
     });
 
     render(
@@ -220,13 +220,13 @@ describe("GenericIncidentConsole", () => {
           JSON.stringify({
             outcome: "resolved",
             completionTier: "optimal",
-            score: { total: 965, breakdown: {} },
+            score: { total: 965, breakdown: {}, maxPoints: {} },
             recoveryTimeMs: 12_000,
           }),
           { status: 200 },
         );
       }
-      return new Response(JSON.stringify({ score: { total: 0, breakdown: {} } }), { status: 200 });
+      return new Response(JSON.stringify({ score: { total: 0, breakdown: {}, maxPoints: {} } }), { status: 200 });
     });
 
     render(

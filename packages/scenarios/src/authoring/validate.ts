@@ -67,7 +67,14 @@ const STATE_CONDITION_OPERATORS = new Set([
   "greater_than",
   "greater_than_or_equal",
 ]);
-const SCORING_DIMENSIONS = new Set([
+/**
+ * Phase 10G: exported alongside SCORE_MAX_BY_DIMENSION so
+ * validateBuiltInScenario can check "all 6 required dimensions present"
+ * without re-deriving the dimension set from SCORE_MAX_BY_DIMENSION's
+ * own keys (which would work today but ties correctness to object key
+ * enumeration order/behavior rather than an explicit, authoritative set).
+ */
+export const SCORING_DIMENSIONS = new Set([
   "recovery",
   "customerImpact",
   "dataIntegrity",
@@ -75,7 +82,16 @@ const SCORING_DIMENSIONS = new Set([
   "costEfficiency",
   "operationalEfficiency",
 ]);
-const SCORE_MAX_BY_DIMENSION: Record<string, number> = {
+/**
+ * Phase 10G: exported so both validateBuiltInScenario
+ * (packages/scenarios/src/library/validate-built-in.ts) and server-side
+ * score-result reconstruction (apps/web/src/lib/server/
+ * finish-attempt.ts's rebuildFinishResultFromRow, which has no persisted
+ * per-dimension maxPoints column to read back) can reuse the exact same
+ * catalog-wide fixed split authored scenarios already enforce, rather
+ * than each maintaining a separate copy of this table.
+ */
+export const SCORE_MAX_BY_DIMENSION: Record<string, number> = {
   recovery: 300,
   customerImpact: 200,
   dataIntegrity: 200,
@@ -454,7 +470,14 @@ function validateOutcomeCondition(
   });
 }
 
-function validateScoringDimension(
+/**
+ * Phase 10G: exported so validateBuiltInScenario can run the exact same
+ * per-dimension checks (fixed maxPoints, known measure, bands-or-
+ * penalties shape, override ranges) against a built-in scenario's
+ * AuthoredScoringConfig — the type built-in and org-authored scenarios
+ * share for scoring — rather than re-implementing this logic.
+ */
+export function validateScoringDimension(
   config: AuthoredScoringDimensionConfig,
   path: string,
   errors: AuthoredScenarioValidationError[],

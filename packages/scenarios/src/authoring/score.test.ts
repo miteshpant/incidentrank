@@ -80,6 +80,34 @@ describe("scoreAuthoredAttempt", () => {
     expect(resultA).toEqual(resultB);
   });
 
+  describe("maxPoints (Phase 10G)", () => {
+    // Phase 10G: the client must never own a competing hardcoded copy of
+    // each dimension's maxPoints (the "150 / 50" bug) — the server-side
+    // scorer is the single source of truth, and must report the exact
+    // authored ceiling it actually used.
+    it("reports each dimension's authored maxPoints exactly, for a standard-weight scenario", () => {
+      const scenario = buildValidAuthoredScenario();
+      const result = scoreAuthoredAttempt(scenario.scoring, baseInputs());
+
+      for (const dimensionConfig of scenario.scoring.dimensions) {
+        expect(result.maxPoints[dimensionConfig.dimension]).toBe(dimensionConfig.maxPoints);
+      }
+    });
+
+    it("reports a non-standard maxPoints value exactly as authored, without assuming any fixed catalog-wide split", () => {
+      const nonStandardConfig = {
+        dimensions: [
+          { dimension: "recovery" as const, maxPoints: 123, bands: [{ points: 123 }] },
+          { dimension: "customerImpact" as const, maxPoints: 456, bands: [{ points: 456 }] },
+        ],
+      };
+      const result = scoreAuthoredAttempt(nonStandardConfig, baseInputs());
+
+      expect(result.maxPoints.recovery).toBe(123);
+      expect(result.maxPoints.customerImpact).toBe(456);
+    });
+  });
+
   describe("declared_unstable scoring (Phase 6.1)", () => {
     // Phase 6.1's binding decision: a candidate-declared "Finish" while
     // the system was not in an acceptable state maps to resolvedAtMs=null

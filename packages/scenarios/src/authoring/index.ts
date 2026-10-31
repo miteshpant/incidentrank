@@ -43,7 +43,12 @@ export type {
 } from "./errors";
 export { AuthoredScenarioValidationException } from "./errors";
 
-export { validateAuthoredScenario } from "./validate";
+export {
+  validateAuthoredScenario,
+  validateScoringDimension,
+  SCORE_MAX_BY_DIMENSION,
+  SCORING_DIMENSIONS,
+} from "./validate";
 export { compileAuthoredScenario } from "./compile";
 export type { CompileAuthoredScenarioResult } from "./compile";
 export { scoreAuthoredAttempt } from "./score";

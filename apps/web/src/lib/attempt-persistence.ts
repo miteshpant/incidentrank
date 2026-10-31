@@ -208,6 +208,8 @@ export async function persistCheckpoint(
 export interface ServerScoreResult {
   total: number;
   breakdown: Record<string, number>;
+  /** Phase 10G — each dimension's authored maxPoints ceiling, server-provided so the client never owns a competing hardcoded copy (see result-screen.tsx). */
+  maxPoints: Record<string, number>;
 }
 
 /**

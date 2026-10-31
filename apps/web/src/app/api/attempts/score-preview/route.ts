@@ -4,7 +4,10 @@ import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentran
 import { scoreAuthoredAttempt } from "@incidentrank/scenarios/authoring";
 import { evaluatePracticeAccess } from "@/lib/server/practice-access";
 import { isDevUnlockPaidScenariosRequest } from "@/lib/server/dev-unlock";
-import { resolveBuiltInScenarioIsFree } from "@/lib/server/scenario-registry";
+import {
+  isBuiltInScenarioCurrentlyPublished,
+  resolveBuiltInScenarioIsFree,
+} from "@/lib/server/scenario-registry";
 
 interface ScorePreviewBody {
   scenarioSlug?: unknown;
@@ -46,6 +49,12 @@ export async function POST(request: Request) {
   if (!entry) {
     return NextResponse.json({ error: "Unknown scenario" }, { status: 404 });
   }
+  // Phase 10G §4: a draft or scheduled-but-not-yet-released scenario
+  // must never be reachable here, even though this route resolves
+  // directly from the catalog rather than through getActiveScenarioBySlug.
+  if (!(await isBuiltInScenarioCurrentlyPublished(body.scenarioSlug))) {
+    return NextResponse.json({ error: "Unknown scenario" }, { status: 404 });
+  }
 
   const devUnlockPaid = isDevUnlockPaidScenariosRequest(request.headers.get("host"));
   // Phase 10F: persisted scenarios.is_free is authoritative, not the
@@ -61,5 +70,7 @@ export async function POST(request: Request) {
   }
 
   const result = scoreAuthoredAttempt(entry.scoring, body.scoringInputs);
-  return NextResponse.json({ score: { total: result.total, breakdown: result.breakdown } });
+  return NextResponse.json({
+    score: { total: result.total, breakdown: result.breakdown, maxPoints: result.maxPoints },
+  });
 }

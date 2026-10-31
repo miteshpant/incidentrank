@@ -112,7 +112,7 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
           return new Response(null, { status: 500 });
         }
         return new Response(
-          JSON.stringify({ score: { total: 950, breakdown: {} } }),
+          JSON.stringify({ score: { total: 950, breakdown: {}, maxPoints: {} } }),
           { status: 200 },
         );
       }),
@@ -148,5 +148,45 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
     expect(screen.getByText(/^950$/)).toBeInTheDocument();
     expect(screen.queryByText(/couldn't load your score/i)).not.toBeInTheDocument();
     expect(callCount).toBe(2);
+  });
+
+  it("renders each dimension's score denominator from the server-provided maxPoints, never a hardcoded client constant (Phase 10G)", async () => {
+    // A deliberately non-standard maxPoints split — if the result screen
+    // still had its own hardcoded SCORE_DIMENSION_MAX (the Phase 10F
+    // "150 / 50" bug), this would render the wrong denominator despite
+    // the server sending the correct one.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            score: {
+              total: 321,
+              breakdown: { recovery: 111, operationalEfficiency: 22 },
+              maxPoints: { recovery: 333, operationalEfficiency: 44 },
+            },
+          }),
+          { status: 200 },
+        ),
+      ),
+    );
+
+    render(
+      <GenericIncidentConsole scenario={scenario} simulation={simulation} candidateUI={candidateUI} />,
+    );
+    acknowledgeIncident();
+    advanceSeconds(35 * 60);
+
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(screen.getByText(/111 \/ 333/)).toBeInTheDocument();
+    expect(screen.getByText(/22 \/ 44/)).toBeInTheDocument();
+    // The old hardcoded constants (300 for recovery, 50 for
+    // operationalEfficiency) must never appear instead.
+    expect(screen.queryByText(/111 \/ 300/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/22 \/ 50/)).not.toBeInTheDocument();
   });
 });

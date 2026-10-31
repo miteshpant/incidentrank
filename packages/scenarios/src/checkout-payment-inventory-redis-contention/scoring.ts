@@ -2,11 +2,27 @@ import type { AuthoredScoringConfig } from "../authoring/schema";
 
 /**
  * Checkout/Payment/Inventory/Redis parallel reference incident's own
- * scoring configuration (Phase 10F). Every dimension except
- * operationalEfficiency uses the same generic, data-driven scorer every
- * other scenario uses (packages/scenarios/src/authoring/score.ts) — zero
- * new scoring logic was added for this scenario, per the binding "zero
- * slug branching" scoring architecture decision.
+ * scoring configuration (Phase 10F, corrected in Phase 10G). Every
+ * dimension uses the same generic, data-driven scorer every other
+ * scenario uses (packages/scenarios/src/authoring/score.ts) — zero new
+ * scoring logic was added for this scenario, per the binding "zero slug
+ * branching" scoring architecture decision.
+ *
+ * Phase 10G correction: every dimension's maxPoints is the SAME fixed
+ * value every scenario in the catalog uses (recovery=300,
+ * customerImpact=200, dataIntegrity=200, reliability=150,
+ * costEfficiency=100, operationalEfficiency=50 — see
+ * validateAuthoredScenario's SCORE_MAX_BY_DIMENSION, packages/scenarios/
+ * src/authoring/validate.ts, and validateBuiltInScenario's reuse of the
+ * same table for built-ins). Phase 10F originally authored
+ * operationalEfficiency at 150 to make the inferior-remediation penalty
+ * "feel" larger — this silently violated the fixed-max invariant every
+ * org-authored scenario already enforces (built-ins were never checked
+ * against it), and surfaced as a genuinely wrong "150 / 50" on the
+ * result screen. Band/penalty shapes below are rescaled to the standard
+ * ceiling per dimension so the same investigation-quality signal
+ * (correlated-then-fixed vs. guessed-fix vs. inferior-remediation)
+ * still holds, just within the catalog-standard point budget.
  *
  * Investigation quality/prioritization is scored explicitly via the
  * existing `finalStringEquals` measure against the `diagnosisPath` state
@@ -20,15 +36,15 @@ export const CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING: AuthoredScorin
   dimensions: [
     {
       dimension: "recovery",
-      maxPoints: 250,
+      maxPoints: 300,
       measure: "recoveryTimeSeconds",
       terminalOverrides: { failed: 0, unresolved: 0 },
       bands: [
-        { atMost: 90, points: 250 },
-        { atMost: 150, points: 200 },
-        { atMost: 240, points: 150 },
-        { atMost: 360, points: 90 },
-        { points: 30 },
+        { atMost: 90, points: 300 },
+        { atMost: 150, points: 240 },
+        { atMost: 240, points: 180 },
+        { atMost: 360, points: 110 },
+        { points: 40 },
       ],
     },
     {
@@ -52,11 +68,11 @@ export const CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING: AuthoredScorin
       // hand — not derived from roleInIncident, not computed by any
       // generic "did they touch root_cause" heuristic.
       dimension: "dataIntegrity",
-      maxPoints: 150,
+      maxPoints: 200,
       measure: { type: "finalStringEquals", field: "diagnosisPath", value: "correlated-then-fixed" },
       bands: [
-        { atMost: 0, points: 60 },
-        { points: 150 },
+        { atMost: 0, points: 80 },
+        { points: 200 },
       ],
     },
     {
@@ -85,7 +101,7 @@ export const CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING: AuthoredScorin
     },
     {
       dimension: "operationalEfficiency",
-      maxPoints: 150,
+      maxPoints: 50,
       penalties: [
         // Chasing an inferior single-service remediation instead of the
         // shared-dependency fix is explicitly penalized here, in
@@ -95,10 +111,12 @@ export const CHECKOUT_PAYMENT_INVENTORY_REDIS_CONTENTION_SCORING: AuthoredScorin
         // diagnosis was ultimately reached; the two are intentionally
         // not the same dimension, mirroring how harmfulChangeCount and
         // a scenario's own data-integrity measure stay independent
-        // elsewhere in this codebase.
-        { measure: "harmfulChangeCount", atLeast: 1, subtractPoints: 20 },
-        { measure: "configurationChangeCount", atLeast: 6, subtractPoints: 15 },
-        { measure: "configurationChangeCount", atLeast: 9, subtractPoints: 30 },
+        // elsewhere in this codebase. Penalty amounts rescaled from
+        // Phase 10F's non-standard 150-point ceiling to this dimension's
+        // standard 50-point one (same proportions: ~13%/10%/20% of max).
+        { measure: "harmfulChangeCount", atLeast: 1, subtractPoints: 7 },
+        { measure: "configurationChangeCount", atLeast: 6, subtractPoints: 5 },
+        { measure: "configurationChangeCount", atLeast: 9, subtractPoints: 10 },
       ],
     },
   ],

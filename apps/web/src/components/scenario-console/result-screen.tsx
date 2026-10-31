@@ -25,14 +25,6 @@ const SCORE_DIMENSION_LABELS: Record<string, string> = {
   operationalEfficiency: "Operational Efficiency",
 };
 
-const SCORE_DIMENSION_MAX: Record<string, number> = {
-  recovery: 300,
-  customerImpact: 200,
-  dataIntegrity: 200,
-  reliability: 150,
-  costEfficiency: 100,
-  operationalEfficiency: 50,
-};
 
 interface GenericResultScreenProps {
   state: SimulationState;
@@ -307,7 +299,7 @@ export function GenericResultScreen({
                     <dt className="text-muted">{label}</dt>
                     <dd className="font-mono">
                       {serverScore.breakdown[dimension] ?? 0} /{" "}
-                      {SCORE_DIMENSION_MAX[dimension]}
+                      {serverScore.maxPoints[dimension] ?? 0}
                     </dd>
                   </div>
                 ))}

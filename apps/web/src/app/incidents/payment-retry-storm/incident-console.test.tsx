@@ -59,13 +59,13 @@ beforeEach(() => {
           JSON.stringify({
             outcome: "resolved",
             completionTier: "optimal",
-            score: { total: 965, breakdown: {} },
+            score: { total: 965, breakdown: {}, maxPoints: {} },
           }),
           { status: 200 },
         );
       }
       return new Response(
-        JSON.stringify({ score: { total: 0, breakdown: {} } }),
+        JSON.stringify({ score: { total: 0, breakdown: {}, maxPoints: {} } }),
         { status: 200 },
       );
     }),

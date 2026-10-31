@@ -10,6 +10,7 @@ import {
   type ReplayActionGroup,
   type SimulationState,
 } from "@incidentrank/simulator";
+import { SCORE_MAX_BY_DIMENSION } from "@incidentrank/scenarios/authoring";
 import { db } from "./db";
 import { resolveSimulationDefinition } from "./scenario-registry";
 import { persistTerminalAttempt } from "./terminal-attempt";
@@ -18,7 +19,7 @@ import { materializeBenchmarkAttemptFactSafely } from "./benchmark/materialize";
 export type FinishableAttempt = Attempt & { scenario: Scenario };
 
 export interface FinishResult extends CandidateDeclaredFinishResult {
-  score: { total: number; breakdown: Record<string, number> } | null;
+  score: { total: number; breakdown: Record<string, number>; maxPoints: Record<string, number> } | null;
   /** Same formula/value persistTerminalAttempt persists and scores
    * against — never recomputed client-side from state.resolvedAtMs,
    * which the engine no longer ever writes (Phase 7.1). Null whenever
@@ -213,6 +214,12 @@ function rebuildFinishResultFromRow(row: Attempt): FinishResult {
               costEfficiency: row.costEfficiencyScore ?? 0,
               operationalEfficiency: row.operationalEfficiencyScore ?? 0,
             },
+            // Phase 10G: no per-dimension maxPoints column is persisted
+            // on `attempts` — every scenario in the catalog uses the
+            // same fixed split (SCORE_MAX_BY_DIMENSION), so it's reused
+            // here rather than adding a new column to store a value
+            // that's already a catalog-wide constant.
+            maxPoints: SCORE_MAX_BY_DIMENSION,
           }
         : null,
     recoveryTimeMs: row.recoveryTimeMs,

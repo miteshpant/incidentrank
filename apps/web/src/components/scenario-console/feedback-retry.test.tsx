@@ -72,7 +72,7 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
             JSON.stringify({
               outcome: "resolved",
               completionTier: "optimal",
-              score: { total: 965, breakdown: {} },
+              score: { total: 965, breakdown: {}, maxPoints: {} },
             }),
             { status: 200 },
           );
@@ -183,7 +183,7 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
             JSON.stringify({
               outcome: "resolved",
               completionTier: "optimal",
-              score: { total: 965, breakdown: {} },
+              score: { total: 965, breakdown: {}, maxPoints: {} },
             }),
             { status: 200 },
           );

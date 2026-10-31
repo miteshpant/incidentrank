@@ -12,6 +12,18 @@ import type {
 export interface AuthoredScoreResult {
   total: number;
   breakdown: Record<AuthoredScoringDimension, number>;
+  /**
+   * Phase 10G: each dimension's authored maxPoints ceiling, passed
+   * through so the client never needs its own hardcoded copy of these
+   * values (the Phase 10F "150 / 50" bug — a client-side constant
+   * silently diverging from what a scenario actually authored). Every
+   * scenario in the catalog currently uses the same fixed per-dimension
+   * split (see validateAuthoredScenario's SCORE_MAX_BY_DIMENSION), but
+   * this is still derived from the real config rather than re-asserting
+   * that invariant here — this function has no opinion on what values
+   * are "standard."
+   */
+  maxPoints: Record<AuthoredScoringDimension, number>;
 }
 
 /** The implicit measure each fixed dimension used before `measure` existed — preserved exactly for any dimension config that omits it. */
@@ -44,6 +56,7 @@ export function scoreAuthoredAttempt(
   inputs: ScoringInputs,
 ): AuthoredScoreResult {
   const breakdown = {} as Record<AuthoredScoringDimension, number>;
+  const maxPoints = {} as Record<AuthoredScoringDimension, number>;
   const isNaturalRecovery = config.naturalRecoveryCondition
     ? matchesNaturalRecovery(config.naturalRecoveryCondition, inputs)
     : false;
@@ -54,10 +67,11 @@ export function scoreAuthoredAttempt(
       inputs,
       isNaturalRecovery,
     );
+    maxPoints[dimensionConfig.dimension] = dimensionConfig.maxPoints;
   }
 
   const total = Object.values(breakdown).reduce((sum, v) => sum + v, 0);
-  return { total: clamp(total, 0, 1000), breakdown };
+  return { total: clamp(total, 0, 1000), breakdown, maxPoints };
 }
 
 function scoreDimension(

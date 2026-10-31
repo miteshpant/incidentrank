@@ -7,6 +7,8 @@ import { getDraftVersion, getLatestPublishedVersion } from "./scenario-access";
 export interface AttemptScoreResult {
   total: number;
   breakdown: Record<string, number>;
+  /** Phase 10G — see AuthoredScoreResult.maxPoints's doc comment (packages/scenarios/src/authoring/score.ts). */
+  maxPoints: Record<string, number>;
 }
 
 /**
@@ -44,7 +46,7 @@ export async function scoreAttempt(
       );
     }
     const result = scoreAuthoredAttempt(entry.scoring, inputs);
-    return { total: result.total, breakdown: result.breakdown };
+    return { total: result.total, breakdown: result.breakdown, maxPoints: result.maxPoints };
   }
 
   const published = await getLatestPublishedVersion(attempt.scenarioId);
@@ -56,5 +58,5 @@ export async function scoreAttempt(
 
   const authored = versionRow.definitionJson as AuthoredScenario;
   const result = scoreAuthoredAttempt(authored.scoring, inputs);
-  return { total: result.total, breakdown: result.breakdown };
+  return { total: result.total, breakdown: result.breakdown, maxPoints: result.maxPoints };
 }
