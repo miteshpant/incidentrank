@@ -16,21 +16,32 @@ import { GOLDEN_PATHS } from "./registry";
 describe("catalog-wide no-auto-success regression", () => {
   const entries = listBuiltInScenarioEntries(BUILT_IN_SCENARIO_CATALOG);
 
+  // Phase 10G §6: fails with a clear message (not a raw `Cannot read
+  // properties of undefined (reading 'finishAtMs')`) when a scenario is
+  // registered in the catalog but never got a GOLDEN_PATHS entry.
+  it("has a golden-path fixture for every built-in scenario", () => {
+    const missing = entries
+      .map((entry) => entry.definition.slug)
+      .filter((slug) => !GOLDEN_PATHS[slug]);
+    expect(missing).toEqual([]);
+  });
+
   it.each(entries.map((entry) => [entry.definition.slug, entry] as const))(
     "%s: safe state sustains without auto-resolving; only Finish resolves it",
     (slug, entry) => {
-      const goldenPath = GOLDEN_PATHS[slug]!;
+      const goldenPath = GOLDEN_PATHS[slug];
+      expect(goldenPath, `missing golden path for ${slug}`).toBeDefined();
 
       // Advance well past finishAtMs with no Finish call — the success
       // condition should already be sustained by finishAtMs (that's what
       // makes finishAtMs valid), so extending further simulation time
       // keeps proving the same thing: the engine never writes "resolved"
       // on its own, no matter how long the safe state is held.
-      const extendedElapsedMs = goldenPath.finishAtMs + 5 * 60_000;
+      const extendedElapsedMs = goldenPath!.finishAtMs + 5 * 60_000;
       const { state: extendedState } = replayAttempt({
         scenario: entry.definition.simulation,
         elapsedMs: extendedElapsedMs,
-        actionGroups: goldenPath.actions.map((action) => ({
+        actionGroups: goldenPath!.actions.map((action) => ({
           elapsedMs: action.atMs,
           changes: [{ controlKey: action.controlKey, value: action.value }],
         })),
@@ -41,8 +52,8 @@ describe("catalog-wide no-auto-success regression", () => {
       // finishAtMs, is what actually resolves it.
       const { state: finishState } = replayAttempt({
         scenario: entry.definition.simulation,
-        elapsedMs: goldenPath.finishAtMs,
-        actionGroups: goldenPath.actions.map((action) => ({
+        elapsedMs: goldenPath!.finishAtMs,
+        actionGroups: goldenPath!.actions.map((action) => ({
           elapsedMs: action.atMs,
           changes: [{ controlKey: action.controlKey, value: action.value }],
         })),

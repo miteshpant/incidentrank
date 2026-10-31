@@ -31,13 +31,24 @@ function runPipeline(entry: ReturnType<typeof listBuiltInScenarioEntries>[number
 describe("catalog-wide deterministic replay proof", () => {
   const entries = listBuiltInScenarioEntries(BUILT_IN_SCENARIO_CATALOG);
 
+  // Phase 10G §6: fails with a clear message (not a raw `Cannot read
+  // properties of undefined (reading 'finishAtMs')`) when a scenario is
+  // registered in the catalog but never got a GOLDEN_PATHS entry.
+  it("has a golden-path fixture for every built-in scenario", () => {
+    const missing = entries
+      .map((entry) => entry.definition.slug)
+      .filter((slug) => !GOLDEN_PATHS[slug]);
+    expect(missing).toEqual([]);
+  });
+
   it.each(entries.map((entry) => [entry.definition.slug, entry] as const))(
     "%s: replay -> completion -> scoring pipeline is deterministic across two independent runs",
     (slug, entry) => {
-      const goldenPath = GOLDEN_PATHS[slug]!;
+      const goldenPath = GOLDEN_PATHS[slug];
+      expect(goldenPath, `missing golden path for ${slug}`).toBeDefined();
 
-      const runA = runPipeline(entry, goldenPath);
-      const runB = runPipeline(entry, goldenPath);
+      const runA = runPipeline(entry, goldenPath!);
+      const runB = runPipeline(entry, goldenPath!);
 
       expect(runA.state).toEqual(runB.state);
       expect(runA.finish).toEqual(runB.finish);
@@ -46,8 +57,8 @@ describe("catalog-wide deterministic replay proof", () => {
 
       // Sanity: the pipeline actually reached the expected outcome/tier
       // (not just "equal to itself" vacuously).
-      expect(runA.finish.outcome).toBe(goldenPath.expectedOutcome);
-      expect(runA.finish.completionTier).toBe(goldenPath.expectedCompletionTier);
+      expect(runA.finish.outcome).toBe(goldenPath!.expectedOutcome);
+      expect(runA.finish.completionTier).toBe(goldenPath!.expectedCompletionTier);
     },
   );
 });
