@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, like } from "drizzle-orm";
-import { createDb, users, type Db } from "@incidentrank/db";
+import { analyticsEvents, createDb, users, type Db } from "@incidentrank/db";
 import type { POST as PostHandler } from "./route";
 
 const TEST_AUTH_USER = "test-account-delete-route-user";
@@ -27,6 +27,23 @@ describe("POST /api/account/delete", () => {
 
   afterEach(async () => {
     mockAuth.userId = null;
+    // getOrCreateCurrentUser() fires a fire-and-forget signup_completed
+    // analytics event the first time this route's auth mock creates a
+    // fresh user row; analytics_events.userId has no FK to users (by
+    // design, so real analytics survive account deletion), so without
+    // this cleanup that row accumulates as permanent garbage every run.
+    const anonymized = await testDb.query.users.findFirst({
+      where: like(users.authProviderId, "anonymized_deleted-%"),
+    });
+    if (anonymized) {
+      await testDb.delete(analyticsEvents).where(eq(analyticsEvents.userId, anonymized.id));
+    }
+    const notYetAnonymized = await testDb.query.users.findFirst({
+      where: like(users.authProviderId, `${TEST_AUTH_USER}%`),
+    });
+    if (notYetAnonymized) {
+      await testDb.delete(analyticsEvents).where(eq(analyticsEvents.userId, notYetAnonymized.id));
+    }
     await testDb.delete(users).where(like(users.authProviderId, `${TEST_AUTH_USER}%`));
     await testDb.delete(users).where(like(users.authProviderId, "anonymized_deleted-%"));
   });

@@ -6,6 +6,7 @@ import type { ScenarioSimulationDefinition, StateValue } from "@incidentrank/sim
 import type { CandidateUIDescriptor, ScenarioDefinition } from "@incidentrank/scenarios";
 import { useIncidentAttempt, type ResumeSeed } from "@/lib/use-incident-attempt";
 import { findActiveAttempt, fetchResumeSeed } from "@/lib/attempt-persistence";
+import { trackEvent } from "@/lib/analytics";
 import { formatUsd } from "@/lib/format";
 import { IncidentHeader } from "@/app/incidents/payment-retry-storm/incident-header";
 import { ArchitectureView } from "@/app/incidents/payment-retry-storm/architecture-view";
@@ -263,7 +264,13 @@ function GenericIncidentConsoleActive({
             </p>
             <button
               type="button"
-              onClick={() => setFinishDialogOpen(true)}
+              onClick={() => {
+                trackEvent("finish_clicked", {
+                  scenarioSlug: scenario.slug,
+                  practiceOrAssessment: "practice",
+                });
+                setFinishDialogOpen(true);
+              }}
               disabled={!canFinish}
               className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
             >

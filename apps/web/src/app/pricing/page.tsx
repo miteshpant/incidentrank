@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { SiteHeader } from "@/components/site-header";
+import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 import { PricingContent } from "./pricing-content";
 
 // Per-request: entitlement state and Founding capacity both change live.
@@ -8,6 +9,7 @@ export const instant = false;
 export default function PricingPage() {
   return (
     <main className="flex flex-1 flex-col">
+      <PageViewTracker />
       <SiteHeader />
 
       <section className="mx-auto w-full max-w-3xl flex-1 px-6 py-16">

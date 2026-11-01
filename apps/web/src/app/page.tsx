@@ -1,9 +1,11 @@
 import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
+import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 
 export default function HomePage() {
   return (
     <main className="flex flex-1 flex-col">
+      <PageViewTracker />
       <SiteHeader />
 
       <section className="mx-auto flex max-w-5xl flex-1 flex-col justify-center px-6 py-24">

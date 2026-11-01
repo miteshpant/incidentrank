@@ -1,6 +1,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import {
+  analyticsEvents,
   createDb,
   users,
   attempts,
@@ -12,6 +13,19 @@ import type { POST as PostHandler } from "./route";
 import { bindIncidentPass, grantIncidentPass } from "@/lib/server/incident-passes";
 
 const TEST_AUTH_ID = "test-paid-practice-gate";
+
+// getOrCreateCurrentUser() fires a fire-and-forget signup_completed
+// analytics event the first time any describe block below lets the route
+// create this file's shared test user; analytics_events.userId has no FK
+// to users.id (by design), so that row would otherwise outlive the user
+// row each afterEach deletes.
+async function deleteTestUserAndAnalytics(testDb: Db, authProviderId: string) {
+  const user = await testDb.query.users.findFirst({ where: eq(users.authProviderId, authProviderId) });
+  if (user) {
+    await testDb.delete(analyticsEvents).where(eq(analyticsEvents.userId, user.id));
+  }
+  await testDb.delete(users).where(eq(users.authProviderId, authProviderId));
+}
 
 vi.mock("@clerk/nextjs/server", () => ({
   auth: async () => ({ userId: TEST_AUTH_ID }),
@@ -56,7 +70,7 @@ describe("POST /api/attempts — paid-scenario practice gate", () => {
 
   afterEach(async () => {
     vi.unstubAllEnvs();
-    await testDb.delete(users).where(eq(users.authProviderId, TEST_AUTH_ID));
+    await deleteTestUserAndAnalytics(testDb, TEST_AUTH_ID);
   });
 
   function buildRequest(host: string, scenarioSlug: string) {
@@ -146,7 +160,7 @@ describe("POST /api/attempts — persisted is_free is authoritative (Phase 10F)"
 
   afterEach(async () => {
     vi.unstubAllEnvs();
-    await testDb.delete(users).where(eq(users.authProviderId, TEST_AUTH_ID));
+    await deleteTestUserAndAnalytics(testDb, TEST_AUTH_ID);
   });
 
   function buildRequest(scenarioSlug: string) {
@@ -244,7 +258,7 @@ describe("POST /api/attempts — idempotent against an existing in-progress atte
   }, 30_000);
 
   afterEach(async () => {
-    await testDb.delete(users).where(eq(users.authProviderId, TEST_AUTH_ID));
+    await deleteTestUserAndAnalytics(testDb, TEST_AUTH_ID);
   });
 
   function buildPostRequest(scenarioSlug: string) {
@@ -361,6 +375,7 @@ describe("POST /api/attempts — Incident Pass consumption", () => {
     });
     if (user) {
       await testDb.delete(incidentPasses).where(eq(incidentPasses.userId, user.id));
+      await testDb.delete(analyticsEvents).where(eq(analyticsEvents.userId, user.id));
     }
     await testDb.delete(users).where(eq(users.authProviderId, TEST_AUTH_ID));
   });

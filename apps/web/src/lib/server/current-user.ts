@@ -3,6 +3,7 @@ import { auth, currentUser } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { users, type User } from "@incidentrank/db";
 import { db } from "./db";
+import { recordAnalyticsEvent } from "./analytics";
 
 /**
  * Returns the local IncidentRank user row for the signed-in Clerk identity,
@@ -32,7 +33,10 @@ export async function getOrCreateCurrentUser(): Promise<User | null> {
     .onConflictDoNothing({ target: users.authProviderId })
     .returning();
 
-  if (created) return created;
+  if (created) {
+    void recordAnalyticsEvent({ eventName: "signup_completed", userId: created.id });
+    return created;
+  }
 
   // Lost a race with a concurrent request creating the same user row.
   const row = await db.query.users.findFirst({

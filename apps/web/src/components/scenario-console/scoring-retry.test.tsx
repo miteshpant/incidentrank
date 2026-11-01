@@ -103,7 +103,17 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
     let callCount = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
+      vi.fn(async (input: RequestInfo | URL) => {
+        // Phase 10G: acknowledging/finishing now also fires fire-and-
+        // forget analytics calls through the same global fetch — those
+        // must never count toward this test's score-preview call
+        // sequence, or an analytics call could consume the "first call
+        // fails" slot this test depends on. Always succeed them as a
+        // no-op 204, same as the real route does for a best-effort event.
+        if (String(input).includes("/api/analytics/events")) {
+          return new Response(null, { status: 204 });
+        }
+
         callCount += 1;
         if (callCount === 1) {
           // First request fails outright — the exact case that used to

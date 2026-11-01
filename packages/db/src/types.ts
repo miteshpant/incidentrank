@@ -20,6 +20,7 @@ import type {
   benchmarkAttemptFacts,
   benchmarkActionFacts,
   benchmarkProjectionFailures,
+  analyticsEvents,
   organizationMembers,
   organizations,
   organizationStripeCustomers,
@@ -146,3 +147,6 @@ export type BenchmarkProjectionFailure =
   typeof benchmarkProjectionFailures.$inferSelect;
 export type NewBenchmarkProjectionFailure =
   typeof benchmarkProjectionFailures.$inferInsert;
+
+export type AnalyticsEvent = typeof analyticsEvents.$inferSelect;
+export type NewAnalyticsEvent = typeof analyticsEvents.$inferInsert;

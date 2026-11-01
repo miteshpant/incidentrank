@@ -9,6 +9,7 @@ import {
   UserButton,
   useAuth,
 } from "@clerk/nextjs";
+import { trackEvent } from "@/lib/analytics";
 
 /**
  * Only fetched when signed in, and only to decide whether to show the
@@ -110,6 +111,7 @@ export function SiteHeader() {
             <SignInButton mode="modal">
               <button
                 type="button"
+                onClick={() => trackEvent("signup_clicked")}
                 className="rounded border border-border px-3 py-1.5 text-muted hover:border-foreground/40 hover:text-foreground"
               >
                 Sign in

@@ -241,7 +241,15 @@ describe("Guest play (signed out)", () => {
       await Promise.resolve();
     });
 
-    expect(fetch).not.toHaveBeenCalled();
+    // Phase 10G: fire-and-forget analytics tracking (incident_acknowledged/
+    // incident_started) legitimately calls fetch here too — this
+    // assertion's real intent, per its own name, is that /api/attempts
+    // itself is never touched before resolution, not that fetch is
+    // never called at all.
+    const attemptsCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter(([url]) => typeof url === "string" && url.startsWith("/api/attempts"));
+    expect(attemptsCalls).toHaveLength(0);
   });
 
   it("requests a stateless finish-preview evaluation (never /api/attempts) once Finish Incident is confirmed", async () => {

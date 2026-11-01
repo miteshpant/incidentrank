@@ -18,6 +18,7 @@ import { evaluatePaidPracticeEntitlement } from "@/lib/server/stripe/entitlement
 import { db } from "@/lib/server/db";
 import { GenericIncidentConsole } from "@/components/scenario-console/generic-incident-console";
 import { LockedScenarioScreen } from "@/components/scenario-console/locked-scenario-screen";
+import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 
 // Per-scenario, per-request routing decision (unknown slug -> notFound(),
 // locked vs. playable) — never a meaningful static/prerendered version,
@@ -83,11 +84,14 @@ export default async function ScenarioPracticePage({
       });
       if (existingAttempt) {
         return (
-          <GenericIncidentConsole
-            scenario={entry.definition}
-            simulation={entry.definition.simulation}
-            candidateUI={entry.candidateUI}
-          />
+          <>
+            <PageViewTracker eventName="incident_view" scenarioSlug={slug} />
+            <GenericIncidentConsole
+              scenario={entry.definition}
+              simulation={entry.definition.simulation}
+              candidateUI={entry.candidateUI}
+            />
+          </>
         );
       }
 
@@ -109,19 +113,25 @@ export default async function ScenarioPracticePage({
   );
   if (!access.allowed) {
     return (
-      <LockedScenarioScreen
-        scenario={entry.definition}
-        access={access}
-        availablePassId={availablePassId}
-      />
+      <>
+        <PageViewTracker eventName="incident_view" scenarioSlug={slug} />
+        <LockedScenarioScreen
+          scenario={entry.definition}
+          access={access}
+          availablePassId={availablePassId}
+        />
+      </>
     );
   }
 
   return (
-    <GenericIncidentConsole
-      scenario={entry.definition}
-      simulation={entry.definition.simulation}
-      candidateUI={entry.candidateUI}
-    />
+    <>
+      <PageViewTracker eventName="incident_view" scenarioSlug={slug} />
+      <GenericIncidentConsole
+        scenario={entry.definition}
+        simulation={entry.definition.simulation}
+        candidateUI={entry.candidateUI}
+      />
+    </>
   );
 }

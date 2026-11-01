@@ -1942,3 +1942,46 @@ export const benchmarkProjectionFailures = pgTable(
   },
   (table) => [index("benchmark_projection_failures_attempt_id_idx").on(table.attemptId)],
 );
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 10G — lightweight first-party funnel analytics (docs/
+// implementation_plan/phase10g.metrics.md). A single flat event table,
+// deliberately not a data warehouse: one row per tracked event
+// (page_view, incident_view, incident_acknowledged, incident_started,
+// first_action_applied, finish_clicked, incident_finished, signup_clicked,
+// signup_completed, assessment_viewed/started/finished). `userId` is
+// nullable and has NO foreign-key constraint on purpose — unlike every
+// other user-scoped table in this schema, an analytics event must still
+// be writable (and still exist for later anonymous-session analysis) even
+// if the user row is later deleted via the privacy-deletion flow
+// (account-deletion.ts), so this intentionally does NOT cascade or block
+// on user deletion the way legalAcceptances/privacyRequests above do.
+// `context` is a small JSONB bag for simple non-sensitive properties only
+// (e.g. referrer host, button label) — per the spec's explicit "do NOT
+// record" list, never candidate reasoning, action values, scores,
+// completion tiers, or any other hidden/sensitive scenario state.
+export const analyticsEvents = pgTable(
+  "analytics_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    eventName: text("event_name").notNull(),
+    // Deliberately no .references(() => users.id) — see comment above.
+    userId: uuid("user_id"),
+    anonymousSessionId: text("anonymous_session_id"),
+    path: text("path"),
+    scenarioSlug: text("scenario_slug"),
+    practiceOrAssessment: text("practice_or_assessment"),
+    referrer: text("referrer"),
+    context: jsonb("context"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("analytics_events_event_name_idx").on(table.eventName),
+    index("analytics_events_created_at_idx").on(table.createdAt),
+    index("analytics_events_scenario_slug_idx").on(table.scenarioSlug),
+    index("analytics_events_user_id_idx").on(table.userId),
+    index("analytics_events_anonymous_session_id_idx").on(table.anonymousSessionId),
+  ],
+);

@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, like } from "drizzle-orm";
-import { createDb, privacyRequests, users, type Db } from "@incidentrank/db";
+import { analyticsEvents, createDb, privacyRequests, users, type Db } from "@incidentrank/db";
 import type { GET as GetHandler, POST as PostHandler } from "./route";
 
 const TEST_AUTH_USER = "test-privacy-requests-route-user";
@@ -39,6 +39,11 @@ describe("POST/GET /api/privacy-requests", () => {
     const user = await testDb.query.users.findFirst({ where: eq(users.authProviderId, TEST_AUTH_USER) });
     if (user) {
       await testDb.delete(privacyRequests).where(eq(privacyRequests.userId, user.id));
+      // getOrCreateCurrentUser() fires a fire-and-forget signup_completed
+      // analytics event on first creating this test's user row; with no
+      // FK from analytics_events.userId to users.id, that row would
+      // otherwise outlive the user row deleted right below.
+      await testDb.delete(analyticsEvents).where(eq(analyticsEvents.userId, user.id));
       await testDb.delete(users).where(eq(users.id, user.id));
     }
     await testDb.delete(users).where(like(users.authProviderId, `${TEST_AUTH_USER}%`));

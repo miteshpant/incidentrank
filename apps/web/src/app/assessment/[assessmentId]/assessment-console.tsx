@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { StateValue } from "@incidentrank/simulator";
 import type { CandidateUIDescriptor, ScenarioDefinition } from "@incidentrank/scenarios";
 import { useAssessmentRuntime } from "@/lib/use-assessment-runtime";
+import { trackEvent } from "@/lib/analytics";
 import { formatUsd } from "@/lib/format";
 import { IncidentHeader } from "@/app/incidents/payment-retry-storm/incident-header";
 import { ArchitectureView } from "@/app/incidents/payment-retry-storm/architecture-view";
@@ -81,6 +82,14 @@ export function AssessmentConsole({
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
   const previousValues = usePreviousValues(runtime.view?.state.values);
+  const finishedTracked = useRef(false);
+
+  useEffect(() => {
+    if (runtime.phase !== "result" || finishedTracked.current) return;
+    finishedTracked.current = true;
+    // Phase 10G §10: generic occurrence only — never outcome/score/tier.
+    trackEvent("assessment_finished", { practiceOrAssessment: "assessment" });
+  }, [runtime.phase]);
 
   if (runtime.phase === "loading") {
     return (

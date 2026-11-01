@@ -3,6 +3,7 @@ import { eq } from "drizzle-orm";
 import { scenarios } from "@incidentrank/db";
 import { BUILT_IN_SCENARIO_CATALOG, listBuiltInScenarioEntries } from "@incidentrank/scenarios";
 import { SiteHeader } from "@/components/site-header";
+import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { getPracticeProgressBySlug } from "@/lib/server/practice-progress";
 import { isScenarioCurrentlyPublished } from "@/lib/server/scenario-registry";
@@ -55,6 +56,7 @@ export async function LibraryContent() {
 export default function IncidentsPage() {
   return (
     <main className="flex flex-1 flex-col">
+      <PageViewTracker />
       <SiteHeader />
 
       <section className="mx-auto w-full max-w-6xl flex-1 px-6 py-16">

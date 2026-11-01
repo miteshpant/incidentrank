@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { CandidateUIDescriptor } from "@incidentrank/scenarios";
 import { startAssessmentAttempt } from "@/lib/attempt-persistence";
+import { trackEvent } from "@/lib/analytics";
 import { StructuredDescription } from "@/components/scenario-console/structured-description";
 import { AssessmentConsole } from "./assessment-console";
 import { AlreadyCompleted } from "./already-completed";
@@ -92,6 +93,9 @@ export function AssessmentLanding({ assessmentId }: AssessmentLandingProps) {
           return;
         }
         setPreview(data);
+        // Phase 10G §10: generic occurrence only — never the org name,
+        // scenario details, or attempt status in the tracked event.
+        trackEvent("assessment_viewed", { practiceOrAssessment: "assessment" });
 
         if (data.attemptId && data.attemptStatus !== null) {
           // An attempt already exists (in progress or terminal) — mount
@@ -141,6 +145,7 @@ export function AssessmentLanding({ assessmentId }: AssessmentLandingProps) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "resume" }),
     }).finally(() => {
+      trackEvent("assessment_started", { practiceOrAssessment: "assessment" });
       setStartedAttemptId(result.attemptId);
     });
   };

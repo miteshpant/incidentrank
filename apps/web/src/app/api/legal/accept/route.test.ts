@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq, like } from "drizzle-orm";
-import { createDb, legalAcceptances, users, type Db } from "@incidentrank/db";
+import { analyticsEvents, createDb, legalAcceptances, users, type Db } from "@incidentrank/db";
 import type { POST as PostHandler } from "./route";
 
 /**
@@ -38,6 +38,11 @@ describe("POST /api/legal/accept", () => {
     const user = await testDb.query.users.findFirst({ where: eq(users.authProviderId, TEST_AUTH_USER) });
     if (user) {
       await testDb.delete(legalAcceptances).where(eq(legalAcceptances.userId, user.id));
+      // getOrCreateCurrentUser() fires a fire-and-forget signup_completed
+      // analytics event on first creating this test's user row; with no
+      // FK from analytics_events.userId to users.id, that row would
+      // otherwise outlive the user row deleted right below.
+      await testDb.delete(analyticsEvents).where(eq(analyticsEvents.userId, user.id));
       await testDb.delete(users).where(eq(users.id, user.id));
     }
     await testDb.delete(users).where(like(users.authProviderId, `${TEST_AUTH_USER}%`));

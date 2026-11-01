@@ -23,6 +23,7 @@ import {
   requestScorePreview,
   type ServerScoreResult,
 } from "./attempt-persistence";
+import { trackEvent } from "./analytics";
 
 /**
  * Phase 6.1: the candidate-declared completion outcome, once known. Null
@@ -637,6 +638,11 @@ export function useIncidentAttempt(
       return;
     }
     completionSent.current = true;
+    // Phase 10G: the automatic-failure counterpart to finishIncident's own
+    // incident_finished fire — this is the other way an attempt reaches a
+    // terminal state (e.g. the attempt-ceiling auto-fail), never via an
+    // explicit candidate Finish click.
+    trackEvent("incident_finished", { scenarioSlug, practiceOrAssessment: "practice" });
 
     const scoringInputs = extractScoringInputs(scenario, state.engineState);
     void completeAttemptRecord(
@@ -655,7 +661,7 @@ export function useIncidentAttempt(
         setScoringError(true);
       }
     });
-  }, [state.attemptId, state.engineState, scenario, scoringRetryToken]);
+  }, [state.attemptId, state.engineState, scenario, scenarioSlug, scoringRetryToken]);
 
   // Anonymous counterpart: no attemptId exists (anonymous attempts are
   // never persisted), so request a stateless score preview instead —
@@ -671,6 +677,7 @@ export function useIncidentAttempt(
       return;
     }
     completionSent.current = true;
+    trackEvent("incident_finished", { scenarioSlug, practiceOrAssessment: "practice" });
 
     const scoringInputs = extractScoringInputs(scenario, state.engineState);
     void requestScorePreview(scenarioSlug, scoringInputs).then((score) => {
@@ -688,7 +695,19 @@ export function useIncidentAttempt(
     setScoringRetryToken((token) => token + 1);
   }, []);
 
-  const acknowledge = useCallback(() => dispatch({ type: "acknowledge" }), []);
+  const acknowledge = useCallback(() => {
+    // Phase 10G: acknowledging always moves phase straight to "active" —
+    // this engine has no separate "started solving" reducer transition
+    // (the pre-incident countdown a candidate sees is a simulated-time
+    // display inside the already-active engine, not a distinct phase —
+    // see createReducer's "acknowledge" case) — so incident_acknowledged
+    // and incident_started are deliberately fired together here rather
+    // than inventing a new phase transition, per the spec's "do not
+    // over-engineer" instruction.
+    trackEvent("incident_acknowledged", { scenarioSlug, practiceOrAssessment: "practice" });
+    trackEvent("incident_started", { scenarioSlug, practiceOrAssessment: "practice" });
+    dispatch({ type: "acknowledge" });
+  }, [scenarioSlug]);
 
   const setPendingValue = useCallback(
     (controlKey: string, value: ControlValue) =>
@@ -697,8 +716,17 @@ export function useIncidentAttempt(
   );
 
   const applyChanges = useCallback(
-    (reasoning: string) => dispatch({ type: "apply-changes", reasoning }),
-    [],
+    (reasoning: string) => {
+      // Phase 10G: "first" is judged against the action groups persisted
+      // so far — this candidate's own very first Apply Changes of the
+      // attempt, not merely the first one since mount (a resumed attempt
+      // already has a non-empty actionGroups on the first render).
+      if (state.actionGroups.length === 0) {
+        trackEvent("first_action_applied", { scenarioSlug, practiceOrAssessment: "practice" });
+      }
+      dispatch({ type: "apply-changes", reasoning });
+    },
+    [scenarioSlug, state.actionGroups.length],
   );
 
   const resetAttempt = useCallback(() => {
@@ -765,6 +793,10 @@ export function useIncidentAttempt(
       });
       if (response.score) setServerScore(response.score);
       setServerRecoveryTimeMs(response.recoveryTimeMs ?? null);
+      // Phase 10G: event occurrence only — deliberately no outcome,
+      // completionTier, or score in the tracked event, per the spec's
+      // "do NOT record... score details" privacy rule.
+      trackEvent("incident_finished", { scenarioSlug, practiceOrAssessment: "practice" });
     },
     [state.phase, state.finishing, state.attemptId, state.actionGroups, scenarioSlug],
   );
