@@ -3,6 +3,7 @@ import { isTransactionalEmailsEnabled } from "../feature-flags";
 import { ResendEmailService } from "./resend-email-service";
 import { TestEmailService } from "./test-email-service";
 import type {
+  SendCompanyInquiryInput,
   SendOrganizationOwnerInviteInput,
   SendOrganizationReactivatedNotificationInput,
   SendOrganizationSuspendedNotificationInput,
@@ -13,6 +14,7 @@ import type {
 } from "./transactional-email-service";
 
 export type {
+  SendCompanyInquiryInput,
   SendOrganizationOwnerInviteInput,
   SendOrganizationReactivatedNotificationInput,
   SendOrganizationSuspendedNotificationInput,
@@ -65,4 +67,10 @@ export async function sendOrganizationReactivatedNotificationEmail(
   input: SendOrganizationReactivatedNotificationInput,
 ): Promise<SendResult> {
   return getEmailService().sendOrganizationReactivatedNotification(input);
+}
+
+export async function sendCompanyInquiryEmail(
+  input: SendCompanyInquiryInput,
+): Promise<SendResult> {
+  return getEmailService().sendCompanyInquiry(input);
 }

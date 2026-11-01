@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
 import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 import { PricingContent } from "./pricing-content";
@@ -21,6 +22,13 @@ export default function PricingPage() {
         <Suspense fallback={<p className="mt-10 text-sm text-muted">Loading…</p>}>
           <PricingContent />
         </Suspense>
+
+        <p className="mt-12 border-t border-border pt-6 text-sm text-muted">
+          Questions about using IncidentRank for hiring?{" "}
+          <Link href="/contact" className="underline hover:text-foreground">
+            Contact us
+          </Link>
+        </p>
       </section>
     </main>
   );

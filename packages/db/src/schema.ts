@@ -1985,3 +1985,34 @@ export const analyticsEvents = pgTable(
     index("analytics_events_anonymous_session_id_idx").on(table.anonymousSessionId),
   ],
 );
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase "visitor improve" — company inquiry/contact form submissions
+// (docs/implementation_plan/phase_visitor_impove.md Part 2). One row per
+// submission, kept only for delivery-audit/rate-limiting purposes — the
+// email itself (sent via the existing Resend integration) is the primary
+// record a human acts on. ipHash is a SHA-256 hash of the submitter's IP
+// (never the raw IP) used solely for the simplest-possible rate limit;
+// never joined against users, since a company inquiry is not tied to any
+// authenticated account.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const companyInquiries = pgTable(
+  "company_inquiries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    companyName: text("company_name").notNull(),
+    name: text("name").notNull(),
+    workEmail: text("work_email").notNull(),
+    message: text("message").notNull(),
+    ipHash: text("ip_hash"),
+    emailSent: boolean("email_sent").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("company_inquiries_created_at_idx").on(table.createdAt),
+    index("company_inquiries_ip_hash_created_at_idx").on(table.ipHash, table.createdAt),
+  ],
+);

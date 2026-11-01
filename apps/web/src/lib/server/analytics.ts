@@ -12,6 +12,8 @@ import { db } from "./db";
  */
 export const ANALYTICS_EVENT_NAMES = [
   "page_view",
+  "homepage_view",
+  "try_free_incident_clicked",
   "incident_view",
   "incident_acknowledged",
   "incident_started",
@@ -23,6 +25,8 @@ export const ANALYTICS_EVENT_NAMES = [
   "assessment_viewed",
   "assessment_started",
   "assessment_finished",
+  "company_inquiry_submitted",
+  "company_contact_opened",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];

@@ -88,6 +88,9 @@ export function SiteHeader() {
           <Link href="/leaderboard" className="text-muted hover:text-foreground">
             Leaderboard
           </Link>
+          <Link href="/contact" className="text-muted hover:text-foreground">
+            Contact
+          </Link>
           <SignedIn>
             <Link href="/attempts" className="text-muted hover:text-foreground">
               Attempts

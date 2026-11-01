@@ -1,5 +1,6 @@
 import "server-only";
 import type {
+  SendCompanyInquiryInput,
   SendOrganizationOwnerInviteInput,
   SendOrganizationReactivatedNotificationInput,
   SendOrganizationSuspendedNotificationInput,
@@ -57,6 +58,12 @@ export class TestEmailService implements TransactionalEmailService {
     console.log(
       `[TestEmailService] organization reactivated notification sent for org "${input.organizationName}"`,
     );
+    return { ok: true };
+  }
+
+  async sendCompanyInquiry(input: SendCompanyInquiryInput): Promise<SendResult> {
+    void input;
+    console.log("[TestEmailService] company inquiry sent");
     return { ok: true };
   }
 }

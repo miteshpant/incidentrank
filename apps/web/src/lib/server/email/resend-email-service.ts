@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import type {
+  SendCompanyInquiryInput,
   SendOrganizationOwnerInviteInput,
   SendOrganizationReactivatedNotificationInput,
   SendOrganizationSuspendedNotificationInput,
@@ -147,6 +148,32 @@ export class ResendEmailService implements TransactionalEmailService {
           `IncidentRank has reactivated ${input.organizationName}.`,
           "",
           "Normal organization functionality is available again.",
+        ].join("\n"),
+      });
+      if (result.error) {
+        return { ok: false, error: result.error.message };
+      }
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : "Unknown send error" };
+    }
+  }
+
+  async sendCompanyInquiry(input: SendCompanyInquiryInput): Promise<SendResult> {
+    try {
+      const result = await this.client.emails.send({
+        from: SENDER,
+        to: input.to,
+        replyTo: input.replyTo,
+        subject: `Company inquiry — ${input.companyName}`,
+        text: [
+          `Company: ${input.companyName}`,
+          `Name: ${input.name}`,
+          `Work email: ${input.workEmail}`,
+          `Timestamp: ${input.submittedAt.toISOString()}`,
+          "",
+          "Message:",
+          input.message,
         ].join("\n"),
       });
       if (result.error) {

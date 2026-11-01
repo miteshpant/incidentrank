@@ -21,6 +21,10 @@ export function SignInButton({ children }: { children: ReactNode }) {
   return children;
 }
 
+export function SignUpButton({ children }: { children: ReactNode }) {
+  return children;
+}
+
 export function SignOutButton({ children }: { children: ReactNode }) {
   return children;
 }

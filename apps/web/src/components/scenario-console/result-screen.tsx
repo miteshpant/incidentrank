@@ -445,15 +445,21 @@ export function GenericResultScreen({
         )}
 
         {showSignInNudge && (
-          <p className="mt-6 text-xs text-muted">
-            This was a guest attempt — your score wasn&apos;t saved.{" "}
+          <div className="mt-6 rounded-md border border-border bg-surface p-4">
+            <p className="text-sm font-medium">Save your progress</p>
+            <p className="mt-1 text-sm text-muted">
+              Create a free IncidentRank account to keep your completed
+              incidents, track your scores and continue practicing.
+            </p>
             <SignInButton mode="modal">
-              <button type="button" className="underline hover:text-foreground">
-                Sign in
+              <button
+                type="button"
+                className="mt-3 inline-flex items-center rounded-md border border-foreground bg-foreground px-4 py-2 font-mono text-sm font-medium text-background transition-opacity hover:opacity-90"
+              >
+                Create Free Account
               </button>
-            </SignInButton>{" "}
-            to save future attempts and appear on the leaderboard.
-          </p>
+            </SignInButton>
+          </div>
         )}
 
         <div className="mt-8 flex flex-wrap gap-3">

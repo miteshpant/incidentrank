@@ -39,6 +39,22 @@ export interface SendOrganizationReactivatedNotificationInput {
 }
 
 /**
+ * docs/implementation_plan/phase_visitor_impove.md Part 2 — company
+ * inquiry/contact form. `to` is always support@incidentrank.com (never
+ * caller-supplied); `replyTo` is set to the submitter's own work email so
+ * a human can reply directly from their inbox.
+ */
+export interface SendCompanyInquiryInput {
+  to: string;
+  replyTo: string;
+  companyName: string;
+  name: string;
+  workEmail: string;
+  message: string;
+  submittedAt: Date;
+}
+
+/**
  * Provider-agnostic boundary (docs/implementation_plan/
  * phase8_admin_promotional_access_referrals.md §26 / phase8loc.md Step
  * 12). Never throws — every implementation returns a SendResult so
@@ -58,4 +74,5 @@ export interface TransactionalEmailService {
   sendOrganizationReactivatedNotification(
     input: SendOrganizationReactivatedNotificationInput,
   ): Promise<SendResult>;
+  sendCompanyInquiry(input: SendCompanyInquiryInput): Promise<SendResult>;
 }
