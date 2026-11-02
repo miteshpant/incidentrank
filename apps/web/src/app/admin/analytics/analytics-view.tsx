@@ -8,6 +8,7 @@ import {
   getAnalyticsFunnel,
   getAnalyticsByScenario,
   getAnalyticsReferrers,
+  getWeeklyChallengeStats,
   type AnalyticsRange,
 } from "@/lib/server/analytics";
 
@@ -40,11 +41,12 @@ export async function AnalyticsView({ range }: { range: AnalyticsRange }) {
   const membership = await loadAdminMembership(user);
   if (!membership.ok) notFound();
 
-  const [overview, funnel, byScenario, referrers] = await Promise.all([
+  const [overview, funnel, byScenario, referrers, weeklyChallenge] = await Promise.all([
     getAnalyticsOverview(range),
     getAnalyticsFunnel(range),
     getAnalyticsByScenario(range),
     getAnalyticsReferrers(range),
+    getWeeklyChallengeStats(range),
   ]);
 
   return (
@@ -180,6 +182,18 @@ export async function AnalyticsView({ range }: { range: AnalyticsRange }) {
             )}
           </tbody>
         </table>
+      </div>
+
+      <h2 className="mt-10 font-mono text-[10px] uppercase tracking-wide text-muted">
+        Weekly Challenge
+      </h2>
+      <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <StatCard label="Views" value={weeklyChallenge.views} />
+        <StatCard label="Starts" value={weeklyChallenge.starts} />
+        <StatCard label="Finishes" value={weeklyChallenge.finishes} />
+        <StatCard label="Challenges Created" value={weeklyChallenge.challengesCreated} />
+        <StatCard label="Links Opened" value={weeklyChallenge.linksOpened} />
+        <StatCard label="Accepted" value={weeklyChallenge.accepted} />
       </div>
 
       <p className="mt-8 text-xs text-muted">

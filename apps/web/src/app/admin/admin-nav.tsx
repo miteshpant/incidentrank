@@ -9,6 +9,7 @@ const ADMIN_NAV_ITEMS = [
   { href: "/admin/customers", label: "Customers" },
   { href: "/admin/organizations", label: "Organizations" },
   { href: "/admin/scenarios", label: "Scenarios" },
+  { href: "/admin/weekly-challenge", label: "Weekly Challenge" },
   { href: "/admin/analytics", label: "Analytics" },
   { href: "/admin/promotional-invites", label: "Promotional Invites" },
   { href: "/admin/incident-passes", label: "Incident Passes" },

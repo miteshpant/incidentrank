@@ -169,6 +169,13 @@
       "when": 1793555695667,
       "tag": "0023_tricky_morph",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1793574000741,
+      "tag": "0024_superb_maginty",
+      "breakpoints": true
     }
   ]
 }

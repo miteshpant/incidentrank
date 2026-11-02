@@ -30,6 +30,8 @@ import {
   stripeCustomers,
   stripeSubscriptions,
   users,
+  weeklyChallenges,
+  challenges,
 } from "./schema";
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -97,8 +99,50 @@ export const attemptsRelations = relations(attempts, ({ one, many }) => ({
     fields: [attempts.incidentPassId],
     references: [incidentPasses.id],
   }),
+  weeklyChallenge: one(weeklyChallenges, {
+    fields: [attempts.weeklyChallengeId],
+    references: [weeklyChallenges.id],
+  }),
   actionGroups: many(attemptActionGroups),
   events: many(attemptEvents),
+}));
+
+export const weeklyChallengesRelations = relations(
+  weeklyChallenges,
+  ({ one, many }) => ({
+    scenario: one(scenarios, {
+      fields: [weeklyChallenges.scenarioId],
+      references: [scenarios.id],
+    }),
+    createdBy: one(users, {
+      fields: [weeklyChallenges.createdByUserId],
+      references: [users.id],
+    }),
+    attempts: many(attempts),
+  }),
+);
+
+export const challengesRelations = relations(challenges, ({ one }) => ({
+  scenario: one(scenarios, {
+    fields: [challenges.scenarioId],
+    references: [scenarios.id],
+  }),
+  challenger: one(users, {
+    fields: [challenges.challengerUserId],
+    references: [users.id],
+  }),
+  challenged: one(users, {
+    fields: [challenges.challengedUserId],
+    references: [users.id],
+  }),
+  challengerAttempt: one(attempts, {
+    fields: [challenges.challengerAttemptId],
+    references: [attempts.id],
+  }),
+  challengedAttempt: one(attempts, {
+    fields: [challenges.challengedAttemptId],
+    references: [attempts.id],
+  }),
 }));
 
 export const organizationsRelations = relations(organizations, ({ many }) => ({

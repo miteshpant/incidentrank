@@ -60,6 +60,14 @@ interface GenericResultScreenProps {
    * alongside each action group. Null for anonymous practice, which has
    * no persisted attempt to review. */
   attemptId?: string | null;
+  /** docs/implementation_plan/phase-challege-version.md §5 — present only
+   * for a practice path that supports challenge creation (signed-in,
+   * terminal result, persisted attempt). Undefined/omitted renders no
+   * button at all — this prop is the single on/off switch, so a caller
+   * that never wants this affordance (e.g. none of this component's
+   * current callers are assessment paths, but any future one would) can
+   * simply not pass it. */
+  onChallengeAnother?: () => void;
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
@@ -168,6 +176,7 @@ export function GenericResultScreen({
   onTryAgain,
   showSignInNudge,
   attemptId,
+  onChallengeAnother,
 }: GenericResultScreenProps) {
   // Fall back to state.status for an automatic scenario or any legacy
   // caller that doesn't yet pass outcome explicitly — but the outcome
@@ -483,6 +492,15 @@ export function GenericResultScreen({
             >
               View Attempt History
             </Link>
+          )}
+          {!showSignInNudge && onChallengeAnother && (
+            <button
+              type="button"
+              onClick={onChallengeAnother}
+              className="rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40"
+            >
+              Challenge Another Engineer
+            </button>
           )}
         </div>
       </div>

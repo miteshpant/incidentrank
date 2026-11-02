@@ -27,6 +27,13 @@ export const ANALYTICS_EVENT_NAMES = [
   "assessment_finished",
   "company_inquiry_submitted",
   "company_contact_opened",
+  "weekly_challenge_viewed",
+  "weekly_challenge_started",
+  "weekly_challenge_finished",
+  "challenge_created",
+  "challenge_link_opened",
+  "challenge_accepted",
+  "challenge_finished",
 ] as const;
 
 export type AnalyticsEventName = (typeof ANALYTICS_EVENT_NAMES)[number];
@@ -257,4 +264,32 @@ export async function getAnalyticsReferrers(range: AnalyticsRange): Promise<Refe
     .limit(20);
 
   return rows.map((r) => ({ referrer: r.referrer, count: Number(r.value) }));
+}
+
+export interface WeeklyChallengeStats {
+  views: number;
+  starts: number;
+  finishes: number;
+  challengesCreated: number;
+  linksOpened: number;
+  accepted: number;
+}
+
+/**
+ * phase-challege-version.md §12/§13 — the 6 simple Weekly Challenge
+ * counts, same Promise.all-of-countEvent shape as every other
+ * aggregation function here. No separate dashboard, no new storage —
+ * these are plain counts of the 7 events above.
+ */
+export async function getWeeklyChallengeStats(range: AnalyticsRange): Promise<WeeklyChallengeStats> {
+  const [views, starts, finishes, challengesCreated, linksOpened, accepted] = await Promise.all([
+    countEvent("weekly_challenge_viewed", range),
+    countEvent("weekly_challenge_started", range),
+    countEvent("weekly_challenge_finished", range),
+    countEvent("challenge_created", range),
+    countEvent("challenge_link_opened", range),
+    countEvent("challenge_accepted", range),
+  ]);
+
+  return { views, starts, finishes, challengesCreated, linksOpened, accepted };
 }

@@ -13,6 +13,7 @@ import {
   getActiveScenarioBySlug,
   isBuiltInScenarioCurrentlyPublished,
 } from "@/lib/server/scenario-registry";
+import { isCurrentWeeklyChallenge } from "@/lib/server/weekly-challenge";
 import { getScenarioPassAccess } from "@/lib/server/pass-access";
 import { evaluatePaidPracticeEntitlement } from "@/lib/server/stripe/entitlements";
 import { db } from "@/lib/server/db";
@@ -58,14 +59,26 @@ export default async function ScenarioPracticePage({
   // Resolved once, before any gating below, so the short-circuit at the
   // next `if` and the final evaluatePracticeAccess call can never
   // disagree about whether this scenario is free.
-  const isFree = (await getActiveScenarioBySlug(slug))?.isFree ?? entry.definition.isFree;
+  const scenarioForAccess = await getActiveScenarioBySlug(slug);
+  const persistedOrCodeIsFree = scenarioForAccess?.isFree ?? entry.definition.isFree;
+  // Weekly Challenge (phase-challege-version.md §3): the currently active
+  // challenge is playable for free for the duration it's active,
+  // regardless of its normal paid/free status — folded directly into the
+  // isFree-equivalent boolean here (an explicit OR, not a fallback) so
+  // every downstream branch (locked screen never renders, no
+  // entitlement/pass lookup needed) behaves exactly as an ordinarily-free
+  // scenario already does. Applies to practice only — never touches
+  // assessment authorization.
+  const isFree =
+    persistedOrCodeIsFree ||
+    (scenarioForAccess ? await isCurrentWeeklyChallenge(scenarioForAccess.id) : false);
 
   let paidEntitlementState: PaidEntitlementState = null;
   let incidentPassState: IncidentPassAccessState | null = null;
   let availablePassId: string | undefined;
   if (!devUnlockPaid && !isFree) {
     const user = await getOrCreateCurrentUser();
-    const scenarioRow = user ? await getActiveScenarioBySlug(slug) : null;
+    const scenarioRow = user ? scenarioForAccess : null;
     if (user && scenarioRow) {
       // A candidate resuming (refresh/revisit) an already-in-progress,
       // pass-funded attempt must never be locked out: by the time an

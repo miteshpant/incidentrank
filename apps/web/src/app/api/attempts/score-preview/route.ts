@@ -8,6 +8,7 @@ import {
   isBuiltInScenarioCurrentlyPublished,
   resolveBuiltInScenarioIsFree,
 } from "@/lib/server/scenario-registry";
+import { isCurrentWeeklyChallengeSlug } from "@/lib/server/weekly-challenge";
 
 interface ScorePreviewBody {
   scenarioSlug?: unknown;
@@ -59,8 +60,13 @@ export async function POST(request: Request) {
   const devUnlockPaid = isDevUnlockPaidScenariosRequest(request.headers.get("host"));
   // Phase 10F: persisted scenarios.is_free is authoritative, not the
   // compiled definition literal — see resolveBuiltInScenarioIsFree's
-  // doc comment.
-  const isFree = (await resolveBuiltInScenarioIsFree(body.scenarioSlug)) ?? entry.definition.isFree;
+  // doc comment. Weekly Challenge (phase-challege-version.md §3): an
+  // anonymous score-preview call for the currently active challenge must
+  // enforce the same free-for-its-duration rule the UI shows.
+  const persistedOrCodeIsFree =
+    (await resolveBuiltInScenarioIsFree(body.scenarioSlug)) ?? entry.definition.isFree;
+  const isFree =
+    persistedOrCodeIsFree || (await isCurrentWeeklyChallengeSlug(body.scenarioSlug));
   const access = evaluatePracticeAccess({ isFree }, { devUnlockPaid });
   if (!access.allowed) {
     return NextResponse.json(

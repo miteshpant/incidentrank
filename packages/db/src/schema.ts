@@ -647,6 +647,19 @@ export const attempts = pgTable("attempts", {
     { onDelete: "set null" },
   ),
 
+  // The Weekly Challenge this attempt was started as, if any — null for
+  // every other attempt. Mirrors incidentPassId's exact shape/rationale:
+  // a weekly_challenges row may outlive the attempts started under it
+  // (the challenge rotates away) without blocking cleanup, so this is
+  // set-null-on-delete, never restrict. Purely an origin/attribution
+  // marker — never itself part of the access-control decision (that's
+  // isCurrentWeeklyChallenge, resolved at attempt-creation time, not
+  // re-derived from this column afterward).
+  weeklyChallengeId: uuid("weekly_challenge_id").references(
+    (): AnyPgColumn => weeklyChallenges.id,
+    { onDelete: "set null" },
+  ),
+
   status: attemptStatusEnum("status").notNull().default("in_progress"),
   // Null while status is "in_progress" or "abandoned"; always set once
   // status becomes "completed". See attemptOutcomeEnum above.
@@ -741,6 +754,7 @@ export const attempts = pgTable("attempts", {
   index("attempts_scenario_id_idx").on(table.scenarioId),
   index("attempts_assessment_id_idx").on(table.assessmentId),
   index("attempts_incident_pass_id_idx").on(table.incidentPassId),
+  index("attempts_weekly_challenge_id_idx").on(table.weeklyChallengeId),
   index("attempts_user_scenario_status_idx").on(
     table.userId,
     table.scenarioId,
@@ -2014,5 +2028,94 @@ export const companyInquiries = pgTable(
   (table) => [
     index("company_inquiries_created_at_idx").on(table.createdAt),
     index("company_inquiries_ip_hash_created_at_idx").on(table.ipHash, table.createdAt),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Weekly Challenge (docs/implementation_plan/phase-challege-version.md
+// §2) — the single admin-selected built-in scenario currently playable
+// free regardless of its normal paid/free status. At most one row may
+// ever be active at a time, enforced at the DB level by a partial unique
+// index on `active` (mirrors admin_users_single_owner_idx's exact
+// "partial unique index on a boolean/enum column" pattern) — activating a
+// new challenge must deactivate any currently-active row first, in the
+// same transaction, never relying on application code alone to maintain
+// this invariant.
+// ─────────────────────────────────────────────────────────────────────────
+
+export const weeklyChallenges = pgTable(
+  "weekly_challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    scenarioId: uuid("scenario_id")
+      .notNull()
+      .references(() => scenarios.id, { onDelete: "restrict" }),
+    startsAt: timestamp("starts_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    endsAt: timestamp("ends_at", { withTimezone: true }),
+    active: boolean("active").notNull().default(true),
+    createdByUserId: uuid("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("weekly_challenges_active_idx").on(table.active),
+    index("weekly_challenges_scenario_id_idx").on(table.scenarioId),
+    uniqueIndex("weekly_challenges_one_active_idx")
+      .on(table.active)
+      .where(sql`${table.active} = true`),
+  ],
+);
+
+// ─────────────────────────────────────────────────────────────────────────
+// Challenges (phase-challege-version.md §5/§6) — a shareable "challenge
+// another engineer" invite created from one already-completed practice
+// attempt. Only the SHA-256 hash of the share token is ever persisted
+// (see challenge-token.ts, mirroring invite-token.ts's exact precedent);
+// the plaintext is returned to the challenger exactly once, at creation.
+// challengerAttemptId must reference a terminal, practice-type,
+// non-assessment attempt — enforced in application code at creation time
+// (challenge.ts), not a DB constraint, matching how this codebase keeps
+// cross-field invariants in the server module rather than CHECK
+// constraints elsewhere. challengedUserId/challengedAttemptId stay null
+// until the invited engineer accepts and finishes their own independent
+// attempt; the comparison is never computable until both are set and
+// both attempts are terminal (see getChallengeComparison's spoiler
+// guard).
+// ─────────────────────────────────────────────────────────────────────────
+
+export const challenges = pgTable(
+  "challenges",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    tokenHash: text("token_hash").notNull(),
+    scenarioId: uuid("scenario_id")
+      .notNull()
+      .references(() => scenarios.id, { onDelete: "restrict" }),
+    challengerUserId: uuid("challenger_user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    challengerAttemptId: uuid("challenger_attempt_id")
+      .notNull()
+      .references(() => attempts.id, { onDelete: "cascade" }),
+    challengedUserId: uuid("challenged_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    challengedAttemptId: uuid("challenged_attempt_id").references(() => attempts.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("challenges_token_hash_idx").on(table.tokenHash),
+    index("challenges_challenger_user_id_idx").on(table.challengerUserId),
+    index("challenges_challenger_attempt_id_idx").on(table.challengerAttemptId),
   ],
 );

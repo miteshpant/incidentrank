@@ -1,7 +1,13 @@
 import Link from "next/link";
+import { eq } from "drizzle-orm";
+import { scenarios } from "@incidentrank/db";
+import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
 import { SiteHeader } from "@/components/site-header";
 import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 import { HomeCtaRow } from "@/components/home/home-cta-row";
+import { WeeklyChallengeCard } from "@/components/home/weekly-challenge-card";
+import { getActiveWeeklyChallenge } from "@/lib/server/weekly-challenge";
+import { db } from "@/lib/server/db";
 
 const HOW_IT_WORKS = [
   {
@@ -21,7 +27,21 @@ const HOW_IT_WORKS = [
   },
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  // Weekly Challenge (phase-challege-version.md §1/§14/§15) — a compact
+  // element near the hero CTA, never a large section, and never rendered
+  // at all when nothing is active (no broken/empty-state card).
+  const active = await getActiveWeeklyChallenge();
+  const activeScenarioRow = active
+    ? await db.query.scenarios.findFirst({
+        where: eq(scenarios.id, active.scenarioId),
+        columns: { slug: true, name: true },
+      })
+    : null;
+  const activeScenarioEntry = activeScenarioRow
+    ? getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, activeScenarioRow.slug)
+    : null;
+
   return (
     <main className="flex flex-1 flex-col">
       <PageViewTracker eventName="homepage_view" />
@@ -53,6 +73,14 @@ export default function HomePage() {
         <p className="mt-4 font-mono text-xs text-muted">
           New free incidents available regularly. No credit card required.
         </p>
+
+        {activeScenarioRow && activeScenarioEntry && (
+          <WeeklyChallengeCard
+            scenarioSlug={activeScenarioRow.slug}
+            scenarioName={activeScenarioRow.name}
+            difficulty={activeScenarioEntry.definition.difficulty}
+          />
+        )}
       </section>
 
       <section className="border-t border-border">

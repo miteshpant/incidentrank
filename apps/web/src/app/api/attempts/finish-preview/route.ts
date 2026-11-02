@@ -13,6 +13,7 @@ import {
   isBuiltInScenarioCurrentlyPublished,
   resolveBuiltInScenarioIsFree,
 } from "@/lib/server/scenario-registry";
+import { isCurrentWeeklyChallengeSlug } from "@/lib/server/weekly-challenge";
 
 interface FinishPreviewActionGroup {
   elapsedMs?: unknown;
@@ -104,8 +105,14 @@ export async function POST(request: Request) {
   // compiled definition literal — see resolveBuiltInScenarioIsFree's
   // doc comment. `?? entry.definition.isFree` only triggers if the slug
   // somehow vanished from the DB between the catalog lookup above and
-  // this query, not a real fallback path in practice.
-  const isFree = (await resolveBuiltInScenarioIsFree(body.scenarioSlug)) ?? entry.definition.isFree;
+  // this query, not a real fallback path in practice. Weekly Challenge
+  // (phase-challege-version.md §3): an anonymous finish-preview call for
+  // the currently active challenge must enforce the same free-for-its-
+  // duration rule the UI shows.
+  const persistedOrCodeIsFree =
+    (await resolveBuiltInScenarioIsFree(body.scenarioSlug)) ?? entry.definition.isFree;
+  const isFree =
+    persistedOrCodeIsFree || (await isCurrentWeeklyChallengeSlug(body.scenarioSlug));
   const access = evaluatePracticeAccess({ isFree }, { devUnlockPaid });
   if (!access.allowed) {
     return NextResponse.json(

@@ -98,6 +98,38 @@ function IncidentConsoleActive({ resumeSeed }: { resumeSeed: ResumeSeed | null }
   );
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const previousValues = usePreviousValues(attempt.state.values);
+  const [challengeLink, setChallengeLink] = useState<string | null>(null);
+  const [challengeError, setChallengeError] = useState<string | null>(null);
+  const [creatingChallenge, setCreatingChallenge] = useState(false);
+
+  // docs/implementation_plan/phase-challege-version.md §5/§6 — mirrors
+  // generic-incident-console.tsx's identical handler. Payment Retry
+  // Storm is a practice-only path, same eligibility as every other
+  // built-in scenario.
+  function handleChallengeAnother() {
+    if (!attempt.attemptId) return;
+    setChallengeError(null);
+    setCreatingChallenge(true);
+    fetch("/api/challenges", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ attemptId: attempt.attemptId }),
+    })
+      .then(async (response) => {
+        const data = (await response.json().catch(() => ({}))) as { token?: string; error?: string };
+        if (!response.ok || !data.token) {
+          setChallengeError(data.error ?? "Failed to create a challenge link.");
+          setCreatingChallenge(false);
+          return;
+        }
+        setChallengeLink(`${window.location.origin}/challenge/${data.token}`);
+        setCreatingChallenge(false);
+      })
+      .catch(() => {
+        setChallengeError("Failed to create a challenge link.");
+        setCreatingChallenge(false);
+      });
+  }
 
   if (attempt.phase === "paused") {
     return (
@@ -120,20 +152,41 @@ function IncidentConsoleActive({ resumeSeed }: { resumeSeed: ResumeSeed | null }
 
   if (attempt.phase === "result") {
     return (
-      <GenericResultScreen
-        state={attempt.state}
-        actionGroups={attempt.actionGroups}
-        descriptor={paymentRetryStormCandidateUI}
-        serverScore={attempt.serverScore}
-        serverRecoveryTimeMs={attempt.serverRecoveryTimeMs}
-        scoringError={attempt.scoringError}
-        retryScoring={attempt.retryScoring}
-        outcome={attempt.outcome}
-        completionTier={attempt.completionTier}
-        onTryAgain={attempt.resetAttempt}
-        showSignInNudge={isLoaded && !isSignedIn}
-        attemptId={attempt.attemptId}
-      />
+      <>
+        <GenericResultScreen
+          state={attempt.state}
+          actionGroups={attempt.actionGroups}
+          descriptor={paymentRetryStormCandidateUI}
+          serverScore={attempt.serverScore}
+          serverRecoveryTimeMs={attempt.serverRecoveryTimeMs}
+          scoringError={attempt.scoringError}
+          retryScoring={attempt.retryScoring}
+          outcome={attempt.outcome}
+          completionTier={attempt.completionTier}
+          onTryAgain={attempt.resetAttempt}
+          showSignInNudge={isLoaded && !isSignedIn}
+          attemptId={attempt.attemptId}
+          onChallengeAnother={
+            isSignedIn && attempt.attemptId ? handleChallengeAnother : undefined
+          }
+        />
+        {(challengeLink || challengeError || creatingChallenge) && (
+          <div className="mx-auto mb-10 w-full max-w-2xl px-6">
+            <div className="rounded-md border border-border bg-surface p-4">
+              {creatingChallenge && <p className="text-sm text-muted">Creating challenge link…</p>}
+              {challengeError && <p className="text-sm text-[#dc2626]">{challengeError}</p>}
+              {challengeLink && (
+                <>
+                  <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                    Share this link
+                  </p>
+                  <p className="mt-1 break-all font-mono text-sm">{challengeLink}</p>
+                </>
+              )}
+            </div>
+          </div>
+        )}
+      </>
     );
   }
 

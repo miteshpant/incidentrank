@@ -24,6 +24,17 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // before signing in, per Phase 4's invitation flow. Accepting the
 // invitation and starting the assessment still require auth, enforced by
 // the API routes themselves.
+//
+// /challenge/[token] and GET /api/challenges/[token] are intentionally
+// NOT protected — a signed-out visitor who opens a challenge link must be
+// able to see the no-spoiler landing (challenger name, scenario) before
+// deciding to sign in, same reasoning as the assessment invite above.
+// Creating a challenge, accepting one, and viewing its comparison all
+// still require auth, enforced by those routes' own gates — only the
+// exact-GET "/api/challenges/:token" shape is excluded, so POST
+// /api/challenges/:token/accept and GET .../comparison (distinct path
+// shapes) still fall through to the general "/api/challenges(.*)" match
+// below.
 const UUID_SEGMENT = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}";
 const isProtectedRoute = createRouteMatcher([
   "/attempts(.*)",
@@ -36,6 +47,9 @@ const isProtectedRoute = createRouteMatcher([
   "/api/organizations(.*)",
   "/api/assessment/:assessmentId",
   "/api/assessment/:assessmentId/start",
+  "/api/challenges",
+  "/api/challenges/:token/accept",
+  "/api/challenges/:token/comparison",
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

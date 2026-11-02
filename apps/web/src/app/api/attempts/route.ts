@@ -5,6 +5,7 @@ import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { getActiveScenarioBySlug } from "@/lib/server/scenario-registry";
 import { evaluatePracticeAccess } from "@/lib/server/practice-access";
+import { getActiveWeeklyChallenge } from "@/lib/server/weekly-challenge";
 import { isDevUnlockPaidScenariosRequest } from "@/lib/server/dev-unlock";
 import { getScenarioPassAccess } from "@/lib/server/pass-access";
 import { consumeIncidentPass, findPassForScenario } from "@/lib/server/incident-passes";
@@ -68,7 +69,17 @@ export async function POST(request: Request) {
   // organization's row for a colliding slug. Falls back to false (not
   // the code literal) if is_free is somehow null, matching every other
   // resolution's existing "unknown → locked" default.
-  const isFree = scenario.isFree ?? false;
+  //
+  // Weekly Challenge (phase-challege-version.md §3): the currently active
+  // challenge is playable free for its duration regardless of its normal
+  // paid/free status — a direct API call must enforce this exact same
+  // rule the UI shows, same discipline as the pass-state check below.
+  // Also used below to tag the created attempt with weeklyChallengeId for
+  // origin tracking (§4's "track that the attempt originated from
+  // weekly_challenge").
+  const activeWeeklyChallenge = await getActiveWeeklyChallenge();
+  const isActiveWeeklyChallenge = activeWeeklyChallenge?.scenarioId === scenario.id;
+  const isFree = (scenario.isFree ?? false) || isActiveWeeklyChallenge;
 
   // Phase 9: Pro/Founding takes precedence over the Incident Pass — when
   // a paid entitlement already grants access, the pass must never be
@@ -139,6 +150,7 @@ export async function POST(request: Request) {
           attemptType: "practice",
           status: "in_progress",
           incidentPassId,
+          weeklyChallengeId: isActiveWeeklyChallenge ? (activeWeeklyChallenge?.id ?? null) : null,
         })
         .returning();
       if (!created) throw new Error("Failed to create attempt");

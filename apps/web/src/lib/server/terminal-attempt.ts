@@ -6,6 +6,8 @@ import { db } from "./db";
 import { scoreAttempt, type AttemptScoreResult } from "./scoring-helper";
 import { qualifyReferralForAttempt } from "./referral-qualification";
 import { persistRankSnapshotIfChanged } from "./engineer-rank";
+import { linkChallengedAttemptIfPending } from "./challenge";
+import { recordAnalyticsEvent } from "./analytics";
 
 type TxOrDb = Parameters<Parameters<typeof db.transaction>[0]>[0] | typeof db;
 
@@ -104,7 +106,12 @@ export async function persistTerminalAttempt(
       runtimeAnchoredAt: null,
     })
     .where(and(eq(attempts.id, attempt.id), eq(attempts.status, "in_progress")))
-    .returning({ id: attempts.id, userId: attempts.userId, incidentPassId: attempts.incidentPassId });
+    .returning({
+      id: attempts.id,
+      userId: attempts.userId,
+      incidentPassId: attempts.incidentPassId,
+      weeklyChallengeId: attempts.weeklyChallengeId,
+    });
 
   if (attempt.attemptType === "assessment" && attempt.assessmentId) {
     await tx
@@ -148,6 +155,43 @@ export async function persistTerminalAttempt(
     // never redundantly recomputes.
     if (attempt.attemptType === "practice") {
       await persistRankSnapshotIfChanged(tx, updated.userId, updated.id);
+
+      // phase-challege-version.md §9 — links this attempt to a pending
+      // challenge invite (if any) so the comparison becomes available.
+      // Practice-only, same gate as Engineer Rank above (§11: an
+      // assessment attempt can never participate in a challenge).
+      const wasChallengedAttempt = await linkChallengedAttemptIfPending(
+        tx,
+        updated.userId,
+        attempt.scenarioId,
+        updated.id,
+      );
+
+      // phase-challege-version.md §12 — fire-and-forget, same as every
+      // other analytics call site; never blocks or fails terminal
+      // persistence. weekly_challenge_finished fires whenever this
+      // attempt was started under the (then-)active Weekly Challenge,
+      // regardless of outcome — mirrors incident_finished's existing
+      // "fires on any terminal result, not just success" behavior.
+      // challenge_finished fires only when this attempt was the
+      // challenged side of a 1:1 challenge (the linking call above
+      // actually found and linked a pending invite).
+      if (updated.weeklyChallengeId) {
+        void recordAnalyticsEvent({
+          eventName: "weekly_challenge_finished",
+          userId: updated.userId,
+          scenarioSlug: attempt.scenario.slug,
+          practiceOrAssessment: "practice",
+        });
+      }
+      if (wasChallengedAttempt) {
+        void recordAnalyticsEvent({
+          eventName: "challenge_finished",
+          userId: updated.userId,
+          scenarioSlug: attempt.scenario.slug,
+          practiceOrAssessment: "practice",
+        });
+      }
     }
   }
 

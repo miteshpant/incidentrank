@@ -8,6 +8,7 @@ import {
   getAnalyticsFunnel,
   getAnalyticsByScenario,
   getAnalyticsReferrers,
+  getWeeklyChallengeStats,
 } from "./analytics";
 
 /**
@@ -198,5 +199,25 @@ describe("getAnalyticsReferrers", () => {
     expect(row).not.toHaveProperty("score");
     expect(row).not.toHaveProperty("completionTier");
     expect(row).not.toHaveProperty("reasoning");
+  });
+});
+
+describe("getWeeklyChallengeStats", () => {
+  it("counts all 6 Weekly Challenge / challenge events", async () => {
+    const slug = uniqueSlug();
+    await recordAnalyticsEvent({ eventName: "weekly_challenge_viewed", scenarioSlug: slug });
+    await recordAnalyticsEvent({ eventName: "weekly_challenge_started", scenarioSlug: slug });
+    await recordAnalyticsEvent({ eventName: "weekly_challenge_finished", scenarioSlug: slug });
+    await recordAnalyticsEvent({ eventName: "challenge_created", scenarioSlug: slug });
+    await recordAnalyticsEvent({ eventName: "challenge_link_opened", scenarioSlug: slug });
+    await recordAnalyticsEvent({ eventName: "challenge_accepted", scenarioSlug: slug });
+
+    const stats = await getWeeklyChallengeStats("all");
+    expect(stats.views).toBeGreaterThanOrEqual(1);
+    expect(stats.starts).toBeGreaterThanOrEqual(1);
+    expect(stats.finishes).toBeGreaterThanOrEqual(1);
+    expect(stats.challengesCreated).toBeGreaterThanOrEqual(1);
+    expect(stats.linksOpened).toBeGreaterThanOrEqual(1);
+    expect(stats.accepted).toBeGreaterThanOrEqual(1);
   });
 });

@@ -22,6 +22,8 @@ import type {
   benchmarkProjectionFailures,
   analyticsEvents,
   companyInquiries,
+  weeklyChallenges,
+  challenges,
   organizationMembers,
   organizations,
   organizationStripeCustomers,
@@ -154,3 +156,9 @@ export type NewAnalyticsEvent = typeof analyticsEvents.$inferInsert;
 
 export type CompanyInquiry = typeof companyInquiries.$inferSelect;
 export type NewCompanyInquiry = typeof companyInquiries.$inferInsert;
+
+export type WeeklyChallenge = typeof weeklyChallenges.$inferSelect;
+export type NewWeeklyChallenge = typeof weeklyChallenges.$inferInsert;
+
+export type Challenge = typeof challenges.$inferSelect;
+export type NewChallenge = typeof challenges.$inferInsert;
