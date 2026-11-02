@@ -21,6 +21,7 @@ import {
 import { dependencyTimeoutCascadeCandidateUI } from "./dependency-timeout-cascade/candidate-ui";
 import { DEPENDENCY_TIMEOUT_CASCADE_SCORING } from "./dependency-timeout-cascade/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const SERVICE_C_DEGRADED_MS = 30_000;
+const SERVICE_C_DEGRADED_MS = INCIDENT_START_MS;
 const RETRY_AMPLIFICATION_SATURATION_MS = SERVICE_C_DEGRADED_MS + 3 * 60_000;
 
 describe("Dependency Timeout Cascade", () => {

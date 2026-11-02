@@ -76,7 +76,7 @@ describe("Thundering Herd", () => {
 
   it("is overwhelmed when the synchronized spike fires with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.rejectedRequestCount).toBe(900);
     expect(state.values.gatewayStatus).toBe("critical");
@@ -132,7 +132,7 @@ describe("Thundering Herd", () => {
   });
 
   it("stays active (never auto-fails) even after rejected requests remain critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -216,7 +216,7 @@ describe("Thundering Herd", () => {
       // Baseline: no action at all -> herd-critical-default ("overwhelmed")
       // until the failure condition (rejectedRequestCount >= 700 sustained
       // 60s) trips automatic failure.
-      const baseline = score(runScenario(30_000 + 61_000));
+      const baseline = score(runScenario(10_000 + 61_000));
       expect(baseline.total).toBeLessThan(1000);
 
       // queueing-only-partial (rules.ts) requires queueing=true AND
@@ -225,7 +225,7 @@ describe("Thundering Herd", () => {
       // queueing has no cost impact in revenue-and-cost.ts's
       // infrastructureCost table, so costEfficiency is also untouched.
       const queueingOnly = score(
-        runScenario(30_000 + 61_000, [
+        runScenario(10_000 + 61_000, [
           { atMs: 31_000, controlKey: REQUEST_QUEUEING_ENABLED_KEY, value: true },
         ]),
       );
@@ -246,11 +246,11 @@ describe("Thundering Herd", () => {
       // plausible-looking but wrong fix — action-classifications.ts
       // explicitly marks apiGatewayInstances >= 16 as "harmful".
       const harmful = score(
-        runScenario(30_000 + 61_000, [
+        runScenario(10_000 + 61_000, [
           { atMs: 31_000, controlKey: API_GATEWAY_INSTANCES_KEY, value: 32 },
         ]),
       );
-      const baseline = score(runScenario(30_000 + 61_000));
+      const baseline = score(runScenario(10_000 + 61_000));
 
       // The harmful classification costs 15 points off operationalEfficiency
       // (harmfulChangeCount >= 1, scoring.ts), and scaling to 32 instances
@@ -269,13 +269,13 @@ describe("Thundering Herd", () => {
       // signature: incidentState "degraded" rather than "overwhelmed" or
       // "masked-recurring".
       const partial = score(
-        runScenario(30_000 + 61_000, [
+        runScenario(10_000 + 61_000, [
           { atMs: 31_000, controlKey: API_GATEWAY_INSTANCES_KEY, value: 8 },
         ]),
       );
-      const baseline = score(runScenario(30_000 + 61_000));
+      const baseline = score(runScenario(10_000 + 61_000));
       const harmful = score(
-        runScenario(30_000 + 61_000, [
+        runScenario(10_000 + 61_000, [
           { atMs: 31_000, controlKey: API_GATEWAY_INSTANCES_KEY, value: 32 },
         ]),
       );

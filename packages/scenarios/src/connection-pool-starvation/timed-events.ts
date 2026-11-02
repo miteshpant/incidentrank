@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A deploy ships with the connection pool's max-size default accidentally
 // dropped from 100 to 10. Traffic itself never changes — this is a config
@@ -7,7 +8,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // under-provisioned pool). The undersized ceiling alone is enough for
 // normal, steady-state traffic to exhaust the pool shortly after the
 // deploy finishes rolling out.
-const DEPLOY_SHIPS_MS = 20_000;
+const DEPLOY_SHIPS_MS = INCIDENT_START_MS;
 const POOL_STARVES_MS = 45_000;
 
 export const timedEvents: TimedEvent[] = [

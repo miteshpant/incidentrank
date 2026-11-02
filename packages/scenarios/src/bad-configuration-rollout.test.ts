@@ -76,7 +76,7 @@ describe("Bad Configuration Rollout", () => {
 
   it("goes critical when the bad config is pushed with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.requestRejectionRate).toBe(58);
     expect(state.values.configStatus).toBe("critical");

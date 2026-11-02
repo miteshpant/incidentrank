@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The compaction level-size multiplier was actually lowered from 8 to 2
 // roughly three weeks before this incident (an attempt to shrink
@@ -13,7 +14,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // initialValues/rules as the pre-existing state, not as a separate
 // timed event — there is nothing to "trigger" about a setting that was
 // already wrong; only the traffic bump is a dated event.
-const TRAFFIC_BUMP_BEGINS_MS = 30_000;
+const TRAFFIC_BUMP_BEGINS_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

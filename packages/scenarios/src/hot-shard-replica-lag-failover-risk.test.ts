@@ -22,6 +22,7 @@ import {
 import { hotShardReplicaLagFailoverRiskCandidateUI } from "./hot-shard-replica-lag-failover-risk/candidate-ui";
 import { HOT_SHARD_REPLICA_LAG_FAILOVER_RISK_SCORING } from "./hot-shard-replica-lag-failover-risk/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -65,7 +66,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const HOT_SHARD_ONSET_MS = 30_000;
+const HOT_SHARD_ONSET_MS = INCIDENT_START_MS;
 const REPLICA_LAG_ONSET_MS = HOT_SHARD_ONSET_MS + 15_000;
 const UNSAFE_FAILOVER_SUSTAINED_MS = REPLICA_LAG_ONSET_MS + 90_000;
 const LAG_DRAIN_WINDOW_ELAPSED_MS = REPLICA_LAG_ONSET_MS + 3 * 60_000;

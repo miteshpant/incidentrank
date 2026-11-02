@@ -18,6 +18,7 @@ import {
   deadlockStormSimulation,
 } from "./deadlock-storm/definition";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -61,7 +62,7 @@ function scoreOf(state: ReturnType<typeof runScenario>) {
   return scoreAuthoredAttempt(DEADLOCK_STORM_SCORING, inputs);
 }
 
-const CONFLICT_MS = 30_000;
+const CONFLICT_MS = INCIDENT_START_MS;
 
 describe("Deadlock Storm", () => {
   // ── Definition ────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const LEAK_ONSET_MS = 30_000;
+const LEAK_ONSET_MS = INCIDENT_START_MS;
 const RECURRENCE_ESCALATION_MS = 5 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

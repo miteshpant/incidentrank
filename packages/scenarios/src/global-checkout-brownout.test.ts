@@ -23,6 +23,7 @@ import {
 import { globalCheckoutBrownoutCandidateUI } from "./global-checkout-brownout/candidate-ui";
 import { GLOBAL_CHECKOUT_BROWNOUT_SCORING } from "./global-checkout-brownout/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -66,7 +67,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const DEPENDENCIES_DEGRADED_MS = 30_000;
+const DEPENDENCIES_DEGRADED_MS = INCIDENT_START_MS;
 const DEPENDENCIES_RECOVERED_MS = DEPENDENCIES_DEGRADED_MS + 6 * 60_000;
 
 // Shared full-trim action set used by multiple tests below.

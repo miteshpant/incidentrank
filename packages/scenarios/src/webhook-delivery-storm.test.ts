@@ -8,6 +8,7 @@ import {
 } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { INCIDENT_START_MS } from "./timing";
 import { webhookDeliveryStorm } from "./webhook-delivery-storm";
 import {
   DESTINATION_ISOLATION_ENABLED_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const PROVIDER_OUTAGE_MS = 30_000;
+const PROVIDER_OUTAGE_MS = INCIDENT_START_MS;
 const DLQ_ESCALATION_MS = PROVIDER_OUTAGE_MS + 3 * 60_000;
 
 describe("Webhook Delivery Storm", () => {

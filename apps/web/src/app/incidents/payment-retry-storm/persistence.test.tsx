@@ -161,7 +161,7 @@ describe("Attempt persistence (signed in)", () => {
       await Promise.resolve();
     });
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Retries", "1");
     applyChanges();
 
@@ -185,7 +185,7 @@ describe("Attempt persistence (signed in)", () => {
       await Promise.resolve();
     });
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Retries", "1");
     applyChanges();
     await act(async () => {
@@ -260,7 +260,7 @@ describe("Guest play (signed out)", () => {
       await Promise.resolve();
     });
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Retries", "1");
     applyChanges();
     await act(async () => {

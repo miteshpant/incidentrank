@@ -21,6 +21,7 @@ import {
 import { deadLetterQueueExplosionCandidateUI } from "./dead-letter-queue-explosion/candidate-ui";
 import { DEAD_LETTER_QUEUE_EXPLOSION_SCORING } from "./dead-letter-queue-explosion/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const SCHEMA_ISSUE_MS = 30_000;
+const SCHEMA_ISSUE_MS = INCIDENT_START_MS;
 const REPLAY_BACKLOG_CATCHUP_MS = SCHEMA_ISSUE_MS + 3 * 60_000;
 
 describe("Dead-Letter Queue Explosion", () => {

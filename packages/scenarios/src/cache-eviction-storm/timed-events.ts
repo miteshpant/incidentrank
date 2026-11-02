@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A recent deployment changed the cached object shape (larger payloads)
 // and cardinality (far more distinct keys). Eviction churn starts rising
 // almost immediately as the cache's existing memory footprint can no
 // longer hold the new working set.
-const EVICTION_CHURN_RISING_MS = 30_000;
+const EVICTION_CHURN_RISING_MS = INCIDENT_START_MS;
 
 // A second wave: sustained high eviction churn drives DB read load high
 // enough, for long enough, that read latency on the database itself

@@ -22,6 +22,7 @@ import {
 import { hotKeyCacheOverloadCandidateUI } from "./hot-key-cache-overload/candidate-ui";
 import { HOT_KEY_CACHE_OVERLOAD_SCORING } from "./hot-key-cache-overload/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -65,7 +66,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const HOT_KEY_SPIKE_MS = 30_000;
+const HOT_KEY_SPIKE_MS = INCIDENT_START_MS;
 const SHARD_EVICTION_CASCADE_MS = HOT_KEY_SPIKE_MS + 3 * 60_000;
 
 describe("Hot-Key Cache Overload", () => {

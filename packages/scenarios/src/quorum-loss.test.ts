@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { quorumLoss } from "./quorum-loss";
+import { INCIDENT_START_MS } from "./timing";
 import {
   MEMBERSHIP_SIZE_KEY,
   NODE_D_MEMBERSHIP_KEY,
@@ -54,7 +55,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const QUORUM_THREATENED_MS = 30_000;
+const QUORUM_THREATENED_MS = INCIDENT_START_MS;
 const NODE_C_WARNING_MS = QUORUM_THREATENED_MS + 60_000;
 const QUORUM_LOST_MS = QUORUM_THREATENED_MS + 3 * 60_000;
 

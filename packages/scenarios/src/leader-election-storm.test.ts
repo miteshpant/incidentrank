@@ -20,6 +20,7 @@ import {
 import { leaderElectionStormCandidateUI } from "./leader-election-storm/candidate-ui";
 import { LEADER_ELECTION_STORM_SCORING } from "./leader-election-storm/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -63,7 +64,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const JITTER_STARTS_MS = 30_000;
+const JITTER_STARTS_MS = INCIDENT_START_MS;
 const NODE3_DEGRADING_MS = JITTER_STARTS_MS + 3 * 60_000;
 const GENUINE_CRASH_MS = NODE3_DEGRADING_MS + 60_000;
 const CRASH_SETTLED_MS = GENUINE_CRASH_MS + 30_000;

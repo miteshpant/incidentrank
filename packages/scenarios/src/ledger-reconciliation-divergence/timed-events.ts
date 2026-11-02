@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the Event Stream -> Settlement Ledger publisher path
 // begins dropping some events and duplicating others. Nothing about the
 // Transaction API or Operational Ledger changes — this is deliberately
 // NOT an availability outage.
-export const DIVERGENCE_ONSET_MS = 20_000;
+export const DIVERGENCE_ONSET_MS = INCIDENT_START_MS;
 
 // A second window: if the publisher bug is left unaddressed this long,
 // enough divergence has accrued that it crosses into a materially worse

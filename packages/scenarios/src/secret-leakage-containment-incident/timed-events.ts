@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the credential is believed exposed — found in
 // plaintext in a Logging record and in a CI/CD build artifact. This is
 // an EXTERNAL discovery, not a candidate action: nothing the candidate
 // has done yet caused or changed this.
-export const EXPOSURE_IDENTIFIED_MS = 30_000;
+export const EXPOSURE_IDENTIFIED_MS = INCIDENT_START_MS;
 
 // If the credential is still being treated as fully-trusted this long
 // after exposure was identified, continued exposure risk has compounded

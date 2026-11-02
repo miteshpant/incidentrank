@@ -21,6 +21,7 @@ import {
 import { partialRegionalDependencyFailureCandidateUI } from "./partial-regional-dependency-failure/candidate-ui";
 import { PARTIAL_REGIONAL_DEPENDENCY_FAILURE_SCORING } from "./partial-regional-dependency-failure/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -66,7 +67,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const REGIONAL_DIVERGENCE_MS = 30_000;
+const REGIONAL_DIVERGENCE_MS = INCIDENT_START_MS;
 const APAC_WORSENING_MS = REGIONAL_DIVERGENCE_MS + 2 * 60_000;
 
 // Shorthand for applying the full region-scoped mitigation.

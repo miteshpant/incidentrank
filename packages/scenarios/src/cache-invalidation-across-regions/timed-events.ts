@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the Invalidation Stream / Publisher begins delivering
 // asymmetrically across regions — delayed in US, duplicated/replayed in
 // EU, healthy in APAC. Global API itself never degrades.
-export const INCIDENT_ONSET_MS = 20_000;
+export const INCIDENT_ONSET_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, the US staleness window and EU's
 // replay storm have both been running long enough that materially more

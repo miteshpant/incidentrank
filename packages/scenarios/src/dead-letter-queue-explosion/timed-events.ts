@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const SCHEMA_ISSUE_MS = 30_000;
+const SCHEMA_ISSUE_MS = INCIDENT_START_MS;
 // Second wave: the reprocessor's own backlog of already-queued replay
 // batches catches up to the still-growing DLQ, pushing replay
 // concurrency higher against main processing. This is never a surprise

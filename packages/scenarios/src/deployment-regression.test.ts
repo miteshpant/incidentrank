@@ -76,7 +76,7 @@ describe("Deployment Regression", () => {
 
   it("regresses critically when the deploy's regression is detected with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.errorRate).toBe(8.5);
     expect(state.values.deployStatus).toBe("critical");
@@ -137,7 +137,7 @@ describe("Deployment Regression", () => {
   });
 
   it("stays active (never auto-fails) even after error rate remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(

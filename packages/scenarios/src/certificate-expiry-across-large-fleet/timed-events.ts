@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // ── DETERMINISTIC CALENDAR PHASES (binding long-horizon/deadline
 // design requirement) ────────────────────────────────────────────────
@@ -10,7 +11,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // definition.ts). Each atMs below is simply "how many simulated
 // milliseconds into this attempt," relabeled T-72h / T-24h / T-6h /
 // T-1h / expiry for narrative purposes only.
-export const T_MINUS_72H_MS = 20_000;
+export const T_MINUS_72H_MS = INCIDENT_START_MS;
 export const T_MINUS_24H_MS = T_MINUS_72H_MS + 2 * 60_000;
 export const T_MINUS_6H_MS = T_MINUS_24H_MS + 2 * 60_000;
 export const T_MINUS_1H_MS = T_MINUS_6H_MS + 2 * 60_000;

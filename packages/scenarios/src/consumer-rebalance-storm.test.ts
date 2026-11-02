@@ -77,7 +77,7 @@ describe("Consumer Rebalance Storm", () => {
 
   it("enters a rebalance storm when the rolling deploy begins with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.effectiveThroughput).toBe(900);
     expect(state.values.groupStatus).toBe("critical");
@@ -164,7 +164,7 @@ describe("Consumer Rebalance Storm", () => {
   });
 
   it("stays active (never auto-fails) even after effective throughput remains critically low past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -230,7 +230,7 @@ describe("Consumer Rebalance Storm", () => {
       // consecutiveFailureSeconds sustains past the failureCondition
       // threshold, but (per the removal of auto-fail-on-breach) the
       // attempt is never auto-terminated.
-      const baseline = runScenario(30_000 + 61_000);
+      const baseline = runScenario(10_000 + 61_000);
 
       // Harmful: shortening the session timeout during the one-at-a-time
       // deploy ("short-timeout-harmful") — the coordinator declares
@@ -238,7 +238,7 @@ describe("Consumer Rebalance Storm", () => {
       // rebalances (42 vs. 24) and driving effectiveThroughput down to
       // 400, well below baseline's 900, so it sustains the breach
       // faster/harder too (still never auto-failed).
-      const harmful = runScenario(30_000 + 61_000, [
+      const harmful = runScenario(10_000 + 61_000, [
         { atMs: 31_000, controlKey: SESSION_TIMEOUT_MS_KEY, value: 6_000 },
       ]);
 

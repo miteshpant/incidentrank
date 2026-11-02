@@ -1,8 +1,9 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Peak event begins: traffic is legitimate and expected (a scheduled
 // sale), not an anomaly. Edge/API pressure rises immediately.
-export const PEAK_EVENT_ONSET_MS = 20_000;
+export const PEAK_EVENT_ONSET_MS = INCIDENT_START_MS;
 
 // Left unaddressed, cache effectiveness has fallen far enough that
 // cache-miss volume reaching the database has materially grown — the

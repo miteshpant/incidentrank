@@ -76,7 +76,7 @@ describe("Memory Leak", () => {
 
   it("climbs to critical when the leak starts with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.memoryUsageMb).toBe(2_600);
     expect(state.values.serviceStatus).toBe("critical");
@@ -210,7 +210,7 @@ describe("Memory Leak", () => {
   });
 
   it("stays active (never auto-fails) even after memory remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);

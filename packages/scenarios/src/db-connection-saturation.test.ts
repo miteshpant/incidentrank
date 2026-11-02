@@ -81,7 +81,7 @@ describe("Database Connection Saturation — genericity proof", () => {
 
   it("saturates when the pool is too small to absorb the spike", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.connectionUsage).toBe(98);
     expect(state.values.dbStatus).toBe("critical");
@@ -121,7 +121,7 @@ describe("Database Connection Saturation — genericity proof", () => {
   });
 
   it("stays active (never auto-fails) even after error rate remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -189,7 +189,7 @@ describe("Database Connection Saturation — genericity proof", () => {
       // longer auto-fails on a sustained breach (only the uniform
       // 35-minute ATTEMPT_CEILING_MS does), so this stays unresolved
       // (status "critical"), not "failed".
-      const baseline = runScenario(30_000 + 61_000);
+      const baseline = runScenario(10_000 + 61_000);
 
       // Harmful: "high-timeout-small-pool-harmful" rule — raising the
       // query timeout to >= 15_000ms while the pool stays <= 50 reaches
@@ -198,7 +198,7 @@ describe("Database Connection Saturation — genericity proof", () => {
       // explicitly tags both the small pool and the high timeout as
       // "harmful" for this trigger. Like baseline, this sustained breach
       // no longer auto-fails the attempt either.
-      const harmful = runScenario(30_000 + 61_000, [
+      const harmful = runScenario(10_000 + 61_000, [
         { atMs: 31_000, controlKey: QUERY_TIMEOUT_MS_KEY, value: 15_000 },
       ]);
 
@@ -270,7 +270,7 @@ describe("Database Connection Saturation — genericity proof", () => {
     });
 
     it("penalizes the high-timeout harmful path's operationalEfficiency for its classified-harmful action", () => {
-      const harmful = runScenario(30_000 + 61_000, [
+      const harmful = runScenario(10_000 + 61_000, [
         { atMs: 31_000, controlKey: QUERY_TIMEOUT_MS_KEY, value: 15_000 },
       ]);
 

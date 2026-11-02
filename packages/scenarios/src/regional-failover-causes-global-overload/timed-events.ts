@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Region A degrades severely enough that it can no longer serve its own
 // traffic. The global router's automatic failover begins immediately
@@ -6,7 +7,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // CACHE_PROTECTION_KEY/DB_CONCURRENCY_KEY values are currently set --
 // including the dangerous uncapped defaults if the candidate has not
 // acted yet.
-const REGION_A_FAILS_MS = 30_000;
+const REGION_A_FAILS_MS = INCIDENT_START_MS;
 
 // Region A's own infrastructure has recovered enough capacity to safely
 // take back SOME of its original traffic, independent of whatever the

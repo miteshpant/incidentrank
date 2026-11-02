@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 /** The newly deployed rate-limit policy has been live long enough for
  * its effects to show up in traffic: legitimate steady tenants start
  * hitting the too-tight per-tenant quota while one high-volume tenant's
  * burst allowance lets it keep climbing past its fair share. */
-const POLICY_EFFECTS_VISIBLE_MS = 30_000;
+const POLICY_EFFECTS_VISIBLE_MS = INCIDENT_START_MS;
 
 /** Second wave: with nothing changed, the same bursty tenant's traffic
  * keeps growing and consumes an even larger share of the shared global

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const HOT_TENANT_TRAFFIC_RISING_MS = 30_000;
+const HOT_TENANT_TRAFFIC_RISING_MS = INCIDENT_START_MS;
 // A second wave: the hot tenant's batch workload keeps running at full
 // volume, and sustained unmitigated pressure on the shared data layer
 // finally pushes it toward saturation — but only as the continuation of

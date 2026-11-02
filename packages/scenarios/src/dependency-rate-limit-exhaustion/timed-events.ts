@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The rolling quota window is 10 minutes. Draw-down begins at T=30s: the
 // Aggregation Service's call volume against the third-party dependency
 // starts consuming the window's quota faster than it can be expected to
 // last. This is immediately observable (quotaRemainingPct falling,
 // dependencyCallVolumePerMin elevated) well before any 429s occur.
-const QUOTA_DRAWDOWN_MS = 30_000;
+const QUOTA_DRAWDOWN_MS = INCIDENT_START_MS;
 
 // Second wave: with no mitigation, sustained over-quota call volume
 // finally drives the provider to start returning 429s. This is never a

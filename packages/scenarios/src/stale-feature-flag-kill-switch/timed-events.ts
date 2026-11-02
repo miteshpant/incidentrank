@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const UNRELATED_FLAG_FLIP_MS = 30_000;
+const UNRELATED_FLAG_FLIP_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

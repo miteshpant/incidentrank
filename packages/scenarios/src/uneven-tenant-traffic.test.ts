@@ -8,6 +8,7 @@ import {
 } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { INCIDENT_START_MS } from "./timing";
 import { unevenTenantTraffic } from "./uneven-tenant-traffic";
 import {
   CACHING_ENABLED_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const HOT_TENANT_TRAFFIC_RISING_MS = 30_000;
+const HOT_TENANT_TRAFFIC_RISING_MS = INCIDENT_START_MS;
 const DATA_LAYER_SATURATING_MS = HOT_TENANT_TRAFFIC_RISING_MS + 3 * 60_000;
 
 describe("Uneven Tenant Traffic", () => {

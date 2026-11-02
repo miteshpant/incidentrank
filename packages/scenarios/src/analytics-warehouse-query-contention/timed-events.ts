@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: a month-end-close-style surge in ad-hoc BI/Data Science
 // query load begins contending with the critical Scheduled Reports job
 // for the same Query Gateway admission slots.
-export const CONTENTION_ONSET_MS = 20_000;
+export const CONTENTION_ONSET_MS = INCIDENT_START_MS;
 
 // If contention is left unaddressed this long, the critical report job's
 // queue wait has compounded enough that its SLA deadline is now

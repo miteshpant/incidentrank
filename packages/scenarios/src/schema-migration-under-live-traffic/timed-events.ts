@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The incident starts already mid-migration: New App Fleet has been
 // live at appRolloutPercent=50 for a while, writing legacy-shape rows
 // it cannot correctly populate without the new field, before the
 // candidate is paged. This marks "the candidate has been notified / is
 // now watching," not the literal start of the rollout.
-const COMPATIBILITY_BROKEN_ACTIVE_MS = 20_000;
+const COMPATIBILITY_BROKEN_ACTIVE_MS = INCIDENT_START_MS;
 
 // Natural/organic escalation: if the write-shape mismatch is left
 // unaddressed, both fleets keep writing at their ordinary rate, so the

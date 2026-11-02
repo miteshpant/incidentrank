@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const RATE_LIMIT_TRIGGER_MS = 30_000;
+const RATE_LIMIT_TRIGGER_MS = INCIDENT_START_MS;
 const PROVIDER_TIGHTENS_MS = 5 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

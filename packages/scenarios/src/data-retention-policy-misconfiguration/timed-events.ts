@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the Deletion Service's retention policy rollout has
 // gone out misconfigured — Financial Records in scope begin being
 // wrongly purged from the Archive. Application and Event Store are
 // unaffected on uptime/write-success.
-export const MISCONFIGURATION_DISCOVERED_MS = 20_000;
+export const MISCONFIGURATION_DISCOVERED_MS = INCIDENT_START_MS;
 
 // If the misconfigured policy is left unaddressed this long, the
 // cumulative wrongly-deleted count has compounded into a materially

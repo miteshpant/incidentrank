@@ -20,6 +20,7 @@ import {
 import { multiTenantControlPlaneOverloadCandidateUI } from "./multi-tenant-control-plane-overload/candidate-ui";
 import { MULTI_TENANT_CONTROL_PLANE_OVERLOAD_SCORING } from "./multi-tenant-control-plane-overload/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -63,7 +64,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const HOT_TENANT_CHURN_BEGINS_MS = 30_000;
+const HOT_TENANT_CHURN_BEGINS_MS = INCIDENT_START_MS;
 const CONTROL_PLANE_SATURATION_MS = HOT_TENANT_CHURN_BEGINS_MS + 2 * 60_000;
 const DRAIN_WINDOW_MS = HOT_TENANT_CHURN_BEGINS_MS + 5 * 60_000;
 

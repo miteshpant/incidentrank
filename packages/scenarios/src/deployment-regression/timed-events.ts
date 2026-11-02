@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const REGRESSION_DETECTED_MS = 30_000;
+const REGRESSION_DETECTED_MS = INCIDENT_START_MS;
 const MEMORY_GROWTH_ESCALATION_MS = 5 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

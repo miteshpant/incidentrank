@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { multiRegionPaymentPlatformDegradation } from "./multi-region-payment-platform-degradation";
+import { INCIDENT_START_MS } from "./timing";
 import {
   EU_TRAFFIC_PERCENTAGE_KEY,
   FRAUD_FALLBACK_MODE_KEY,
@@ -64,8 +65,8 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const EU_DEPENDENCY_DEGRADED_MS = 30_000;
-const REPLICATION_LAG_ONSET_MS = 45_000;
+const EU_DEPENDENCY_DEGRADED_MS = INCIDENT_START_MS;
+const REPLICATION_LAG_ONSET_MS = INCIDENT_START_MS + 15_000;
 const CATCHUP_WINDOW_ELAPSED_MS = REPLICATION_LAG_ONSET_MS + 3 * 60_000;
 
 // Control combination representing correct sequencing: protect

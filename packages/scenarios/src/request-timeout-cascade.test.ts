@@ -21,6 +21,7 @@ import {
 import { requestTimeoutCascadeCandidateUI } from "./request-timeout-cascade/candidate-ui";
 import { REQUEST_TIMEOUT_CASCADE_SCORING } from "./request-timeout-cascade/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const DEPENDENCY_BLIP_MS = 30_000;
+const DEPENDENCY_BLIP_MS = INCIDENT_START_MS;
 const ACCUMULATION_SATURATION_MS = DEPENDENCY_BLIP_MS + 3 * 60_000;
 
 const FULL_REBUDGET_ACTIONS: TimedAction[] = [

@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 /** A network issue isolates Node D and Node E, dropping reachable nodes
  * from 5 to 3 — exactly at the quorum edge for a 5-node group (quorum
  * requires 3). The group still genuinely holds quorum at this instant,
  * but has zero margin left: losing even one more node loses it. */
-const QUORUM_THREATENED_MS = 30_000;
+const QUORUM_THREATENED_MS = INCIDENT_START_MS;
 
 /** Node C's heartbeat begins degrading — the observable precursor to the
  * second wave below. A candidate watching nodeCHeartbeatHealth has real,

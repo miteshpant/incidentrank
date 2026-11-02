@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A backbone/transit issue between the two regions begins. Both regions
 // remain individually healthy — this is specifically a problem with the
 // link between them.
-const RTT_SPIKE_MS = 30_000;
+const RTT_SPIKE_MS = INCIDENT_START_MS;
 
 // Second wave: the backbone issue has not cleared on its own. Sustained
 // high RTT means any request path still making a live synchronous

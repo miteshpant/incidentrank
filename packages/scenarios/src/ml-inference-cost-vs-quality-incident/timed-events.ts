@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the upstream complexity classifier degrades, so the
 // Routing Layer's "classifier-only" default starts sending far more
 // traffic to the Large Model than genuinely necessary. Routing Layer
 // uptime and inference latency are unaffected.
-export const MISROUTE_ONSET_MS = 20_000;
+export const MISROUTE_ONSET_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, the misroute has compounded: traffic
 // share on the Large Model keeps climbing and cumulative exposure from

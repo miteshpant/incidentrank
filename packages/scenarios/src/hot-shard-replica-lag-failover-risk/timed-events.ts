@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A concentrated hot tenant begins driving load onto Shard 2
 // specifically (the other three shards are unaffected the entire
 // incident unless the candidate broadly scales API concurrency). This
 // is the first, directly observable symptom: Shard 2 Primary's request
 // rate/latency/queue climb while 1/3/4 stay flat.
-const HOT_SHARD_ONSET_MS = 30_000;
+const HOT_SHARD_ONSET_MS = INCIDENT_START_MS;
 
 // Shortly after, Shard 2's replica begins falling behind -- a
 // CORRELATED consequence of the same hot-tenant write pressure on

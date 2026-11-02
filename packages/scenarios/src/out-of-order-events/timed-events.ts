@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A routing change moved the default partition-key strategy to
 // round-robin ahead of this incident window to absorb a traffic increase
@@ -7,7 +8,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // landing on different partitions, processed out of causal order by
 // independently-scheduled consumers — starts showing up as the incident
 // opens.
-const ROUTING_CHANGE_LIVE_MS = 30_000;
+const ROUTING_CHANGE_LIVE_MS = INCIDENT_START_MS;
 
 // A second wave: sustained cross-partition reordering under continued
 // load means the reconciliation backlog, if not actually draining,

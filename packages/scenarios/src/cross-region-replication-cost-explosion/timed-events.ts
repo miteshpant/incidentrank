@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 /**
  * The replication-policy change that triggers this incident has ALREADY
@@ -9,7 +10,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
  * exactly that high for as long as the candidate leaves every control at
  * its inherited post-change default.
  */
-const POLICY_CHANGE_DISCOVERED_MS = 30_000;
+const POLICY_CHANGE_DISCOVERED_MS = INCIDENT_START_MS;
 
 /**
  * A previously-scheduled disaster-recovery verification drill runs

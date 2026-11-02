@@ -21,6 +21,7 @@ import {
 import { fanOutRequestExplosionCandidateUI } from "./fan-out-request-explosion/candidate-ui";
 import { FAN_OUT_REQUEST_EXPLOSION_SCORING } from "./fan-out-request-explosion/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const FAN_OUT_WIDENED_MS = 30_000;
+const FAN_OUT_WIDENED_MS = INCIDENT_START_MS;
 const SERVICE_E_DEGRADING_MS = FAN_OUT_WIDENED_MS + 45_000;
 
 describe("Fan-Out Request Explosion", () => {

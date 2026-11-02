@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const SERVICE_C_DEGRADED_MS = 30_000;
+const SERVICE_C_DEGRADED_MS = INCIDENT_START_MS;
 // A second wave: if Service B keeps retrying the still-slow Service C
 // (bToCRetryCount > 0) without the circuit breaker, those retries
 // accumulate on Service C's own inbound connection pool over several

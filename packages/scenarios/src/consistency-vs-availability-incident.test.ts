@@ -21,6 +21,7 @@ import {
 import { consistencyVsAvailabilityIncidentCandidateUI } from "./consistency-vs-availability-incident/candidate-ui";
 import { CONSISTENCY_VS_AVAILABILITY_INCIDENT_SCORING } from "./consistency-vs-availability-incident/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const CONNECTIVITY_DEGRADED_MS = 30_000;
+const CONNECTIVITY_DEGRADED_MS = INCIDENT_START_MS;
 const CONNECTIVITY_RESTORED_MS = CONNECTIVITY_DEGRADED_MS + 4 * 60_000;
 
 describe("Consistency vs Availability Incident", () => {

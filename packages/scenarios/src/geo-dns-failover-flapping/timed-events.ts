@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const LATENCY_BLIPS_BEGIN_MS = 30_000;
+const LATENCY_BLIPS_BEGIN_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

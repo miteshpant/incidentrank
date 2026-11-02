@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: a routine service-to-service credential rotation has
 // been scheduled and begins now. Nothing is wrong yet — the Issuer has
@@ -7,7 +8,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // trigger (the rotation itself, not an external degradation), exactly
 // like the spec's framing: "a rotation begins while a subset of
 // workloads are still using the old credential."
-export const ROTATION_STARTED_MS = 20_000;
+export const ROTATION_STARTED_MS = INCIDENT_START_MS;
 
 // If a premature revocation gap is left open this long without being
 // closed (neither bypassed nor rolled back), the authentication failure

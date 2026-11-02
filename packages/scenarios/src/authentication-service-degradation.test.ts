@@ -76,7 +76,7 @@ describe("Authentication Service Degradation", () => {
 
   it("degrades critically when the trigger fires with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.authFailureRate).toBe(18);
     expect(state.values.authServiceStatus).toBe("critical");

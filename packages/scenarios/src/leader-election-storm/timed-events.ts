@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 /** Intermittent network latency on node-3's link begins — heartbeats
  * from node-3 are now sporadically delayed, with spikes reaching ~900ms,
  * even though node-3 itself is fully alive and healthy. */
-const JITTER_STARTS_MS = 30_000;
+const JITTER_STARTS_MS = INCIDENT_START_MS;
 
 /**
  * node-3's link health visibly deteriorates beyond ordinary jitter

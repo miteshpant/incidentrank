@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: a privilege has just been revoked at the Policy
 // Store (the source of truth). The Cache Distribution fleet has not
 // yet had a chance to converge — a subset of cache instances still
 // believe the privilege is valid.
-export const REVOCATION_ONSET_MS = 20_000;
+export const REVOCATION_ONSET_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, no invalidation push has reached the
 // fleet and no purge has been requested — the unconverged window has

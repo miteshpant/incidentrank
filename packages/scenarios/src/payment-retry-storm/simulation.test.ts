@@ -25,17 +25,17 @@ describe("Payment Retry Storm — 1. healthy start", () => {
   });
 });
 
-describe("Payment Retry Storm — 2. incident begins at 60 seconds", () => {
-  it("degrades the provider and checkout at T=60s", () => {
-    const { finalState } = runScenario(61_000);
+describe("Payment Retry Storm — 2. incident begins at 10 seconds", () => {
+  it("degrades the provider and checkout at T=10s", () => {
+    const { finalState } = runScenario(11_000);
     expect(finalState.triggers.providerDegraded).toBe(true);
     expect(finalState.status).toBe("critical");
     expect(finalState.values.checkoutSuccessRate).toBe(72);
-    expect(finalState.incidentStartedAtMs).toBe(60_000);
+    expect(finalState.incidentStartedAtMs).toBe(10_000);
   });
 
-  it("remains healthy for the 59 seconds before the incident", () => {
-    const { finalState } = runScenario(59_000);
+  it("remains healthy for the 9 seconds before the incident", () => {
+    const { finalState } = runScenario(9_000);
     expect(finalState.status).toBe("healthy");
     expect(finalState.triggers.providerDegraded ?? false).toBe(false);
   });

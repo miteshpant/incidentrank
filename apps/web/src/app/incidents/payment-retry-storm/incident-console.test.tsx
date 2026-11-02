@@ -147,7 +147,7 @@ describe("Component controls", () => {
   it("shows Kafka controls instead of Payment controls when Kafka is selected", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     fireEvent.click(screen.getByRole("button", { name: /kafka/i }));
 
@@ -161,7 +161,7 @@ describe("Pre-incident countdown", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
-    expect(screen.getByText(/incident begins in 01:00/i)).toBeInTheDocument();
+    expect(screen.getByText(/incident begins in 00:10/i)).toBeInTheDocument();
     expect(screen.getByText("PRE-INCIDENT")).toBeInTheDocument();
   });
 
@@ -169,9 +169,9 @@ describe("Pre-incident countdown", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
-    advanceSeconds(42);
+    advanceSeconds(4);
 
-    expect(screen.getByText(/incident begins in 00:18/i)).toBeInTheDocument();
+    expect(screen.getByText(/incident begins in 00:06/i)).toBeInTheDocument();
   });
 
   it("locks Apply Changes until the incident begins", () => {
@@ -185,13 +185,13 @@ describe("Pre-incident countdown", () => {
     expect(screen.getByText(/controls unlock when the incident begins/i)).toBeInTheDocument();
   });
 
-  it("activates the incident and unlocks controls at T=60s", () => {
+  it("activates the incident and unlocks controls at T=10s", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
     expect(screen.getByText("PRE-INCIDENT")).toBeInTheDocument();
 
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     expect(screen.queryByText("PRE-INCIDENT")).not.toBeInTheDocument();
     expect(screen.queryByText(/incident begins in/i)).not.toBeInTheDocument();
@@ -207,7 +207,7 @@ describe("Applying a configuration change", () => {
   it("calls the engine, updates state, and produces a YOU timeline event", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     const applyButton = screen.getByRole("button", { name: /apply changes/i });
     expect(applyButton).toBeDisabled();
@@ -228,7 +228,7 @@ describe("Applying a configuration change", () => {
   it("can be applied without entering reasoning", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     selectControl("Retries", "1");
     applyChanges();
@@ -245,7 +245,7 @@ describe("Candidate reasoning", () => {
   it("renders the reasoning field with editable controls", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     const field = screen.getByLabelText(/why are you making this change/i);
     expect(field).toBeInTheDocument();
@@ -255,7 +255,7 @@ describe("Candidate reasoning", () => {
   it("associates reasoning with the candidate action and shows it in the timeline", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     selectControl("Retries", "1");
     setReasoning(
@@ -274,7 +274,7 @@ describe("Candidate reasoning", () => {
   it("clears the reasoning field after a successful apply", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     selectControl("Retries", "1");
     setReasoning("Reducing retry amplification.");
@@ -287,7 +287,7 @@ describe("Candidate reasoning", () => {
   it("groups multiple configuration changes under one reasoning block", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     selectControl("Retries", "1");
     selectControl("Backoff", "exponential");
@@ -309,13 +309,13 @@ describe("Candidate reasoning", () => {
 });
 
 describe("Timed incident start", () => {
-  it("degrades the system after 60 simulated seconds", () => {
+  it("degrades the system after 10 simulated seconds", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
     expect(screen.getByText("99.9%")).toBeInTheDocument();
 
-    advanceSeconds(61);
+    advanceSeconds(11);
 
     expect(screen.getByText("72%")).toBeInTheDocument();
     expect(screen.getAllByText("CRITICAL").length).toBeGreaterThan(0);
@@ -326,7 +326,7 @@ describe("No answer feedback", () => {
   it("never renders correct/wrong-answer style feedback", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(61);
+    advanceSeconds(11);
     selectControl("Retries", "5");
     applyChanges();
 
@@ -341,7 +341,7 @@ describe("Resolution", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Retries", "1");
     applyChanges();
 
@@ -377,7 +377,7 @@ describe("Resolution", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Retries", "1");
     selectControl("Backoff", "exponential");
     setReasoning(
@@ -413,7 +413,7 @@ describe("Failure", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Instances", "24");
     selectControl("Retries", "5");
     applyChanges();
@@ -432,7 +432,7 @@ describe("Failure", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Instances", "24");
     selectControl("Retries", "5");
     setReasoning(
@@ -455,7 +455,7 @@ describe("Try Again", () => {
   it("resets to a fresh briefing and initial state after an automatic failure (35-minute attempt ceiling)", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Instances", "24");
     selectControl("Retries", "5");
     applyChanges();
@@ -479,7 +479,7 @@ describe("Try Again", () => {
     acknowledgeIncident();
     expect(screen.getByText("99.9%")).toBeInTheDocument();
     expect(screen.getByLabelText("Retries")).toHaveValue("3");
-    expect(screen.getByText(/incident begins in 01:00/i)).toBeInTheDocument();
+    expect(screen.getByText(/incident begins in 00:10/i)).toBeInTheDocument();
   });
 });
 
@@ -488,7 +488,7 @@ describe("Timer cleanup", () => {
     render(<IncidentConsole />);
     acknowledgeIncident();
 
-    advanceSeconds(65);
+    advanceSeconds(15);
     selectControl("Retries", "1");
     applyChanges();
     advanceSeconds(25);

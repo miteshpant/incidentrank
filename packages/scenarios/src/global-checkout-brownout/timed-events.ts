@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Pricing, Promotions, and Tax all begin degrading moderately at the same
 // moment. None of the three, on its own, would read as an outage --
@@ -6,7 +7,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // exists entirely because all three sit on the SAME synchronous checkout
 // critical path at once, so their latencies add rather than hide behind
 // each other.
-const DEPENDENCIES_DEGRADED_MS = 30_000;
+const DEPENDENCIES_DEGRADED_MS = INCIDENT_START_MS;
 
 // Second wave: the underlying dependency degradation itself clears on its
 // own schedule, independent of anything the candidate did. This does not

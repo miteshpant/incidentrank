@@ -20,6 +20,7 @@ import {
 import { eventProcessingBackpressureCandidateUI } from "./event-processing-backpressure/candidate-ui";
 import { EVENT_PROCESSING_BACKPRESSURE_SCORING } from "./event-processing-backpressure/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -63,7 +64,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const PRODUCER_SURGE_MS = 30_000;
+const PRODUCER_SURGE_MS = INCIDENT_START_MS;
 
 describe("Event Processing Backpressure", () => {
   describe("Definition", () => {

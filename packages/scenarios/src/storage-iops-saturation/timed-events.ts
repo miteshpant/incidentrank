@@ -1,8 +1,9 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 /** The background compaction/rollup job's nightly run begins, and its
  * IOPS draw starts climbing against the shared storage volume. */
-const BATCH_WORKLOAD_RAMPING_MS = 30_000;
+const BATCH_WORKLOAD_RAMPING_MS = INCIDENT_START_MS;
 
 /** A second wave: the batch job reaches its steady-state IOPS draw,
  * fully saturating the volume — but only as the continuation of an

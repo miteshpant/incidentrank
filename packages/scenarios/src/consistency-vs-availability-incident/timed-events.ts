@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Cross-region connectivity between Region A and Region B degrades --
 // confirmations between the two regions start timing out. The
@@ -7,7 +8,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // balanceCorrectnessViolations/catalogStalenessSeconds next depends
 // entirely on the consistency-mode controls already in effect at that
 // moment.
-const CONNECTIVITY_DEGRADED_MS = 30_000;
+const CONNECTIVITY_DEGRADED_MS = INCIDENT_START_MS;
 
 // Second wave: cross-region connectivity is restored. This is a real,
 // independent external event with its own observable precursor --

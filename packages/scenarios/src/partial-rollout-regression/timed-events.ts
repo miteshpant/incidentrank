@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const REGRESSION_ACTIVE_MS = 30_000;
+const REGRESSION_ACTIVE_MS = INCIDENT_START_MS;
 // A second wave: sustained elevated retry/error volume from the new
 // version's regressed feature finally saturates the shared dependency's
 // connection/credit pool used by BOTH versions — but only as the

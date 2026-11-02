@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const FAILOVER_BEGINS_MS = 30_000;
+const FAILOVER_BEGINS_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

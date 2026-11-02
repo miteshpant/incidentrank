@@ -20,6 +20,7 @@ import {
 import { outOfOrderEventsCandidateUI } from "./out-of-order-events/candidate-ui";
 import { OUT_OF_ORDER_EVENTS_SCORING } from "./out-of-order-events/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -63,7 +64,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const ROUTING_CHANGE_LIVE_MS = 30_000;
+const ROUTING_CHANGE_LIVE_MS = INCIDENT_START_MS;
 const SUSTAINED_LOAD_MS = ROUTING_CHANGE_LIVE_MS + 3 * 60_000;
 
 describe("Out-of-Order Events", () => {

@@ -21,6 +21,7 @@ import {
 import { replicationBacklogCandidateUI } from "./replication-backlog/candidate-ui";
 import { REPLICATION_BACKLOG_SCORING } from "./replication-backlog/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const WRITE_SURGE_MS = 30_000;
+const WRITE_SURGE_MS = INCIDENT_START_MS;
 const STORAGE_PRESSURE_CRITICAL_MS = WRITE_SURGE_MS + 4 * 60_000;
 
 describe("Replication Backlog", () => {

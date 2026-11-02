@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const DEPLOY_ROLLOUT_MS = 30_000;
+const DEPLOY_ROLLOUT_MS = INCIDENT_START_MS;
 const HEALTH_CHECK_FLAPPING_MS = 5 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

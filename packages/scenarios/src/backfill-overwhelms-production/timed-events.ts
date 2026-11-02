@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: a large historical backfill, already running at
 // "low" concurrency, is scheduled to ramp toward a migration deadline
 // right as live customer traffic enters its daily peak. The backfill
 // itself did not change yet at this instant — onset models the
 // traffic-side pressure arriving, not a candidate action.
-export const CONTENTION_ONSET_MS = 20_000;
+export const CONTENTION_ONSET_MS = INCIDENT_START_MS;
 
 // If unmanaged contention is left running this long, lock wait and
 // backlog growth have compounded into a materially worse, more

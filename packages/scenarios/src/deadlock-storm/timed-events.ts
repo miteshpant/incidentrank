@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const DEPLOYMENT_LOCK_ORDER_REGRESSION_MS = 30_000;
+const DEPLOYMENT_LOCK_ORDER_REGRESSION_MS = INCIDENT_START_MS;
 // A second wave: checkout traffic rises further while the lock-order
 // conflict is still live. This is NOT a pure hidden timer — by this point
 // (if the candidate hasn't fixed lock ordering or serialized writes) the

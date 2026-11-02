@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: downstream deletion execution has fallen behind
 // acceptance — a real backlog begins forming. Acceptance itself never
 // degrades (requestAcceptanceSuccessRate stays at 100 throughout).
-export const BACKLOG_DISCOVERED_MS = 20_000;
+export const BACKLOG_DISCOVERED_MS = INCIDENT_START_MS;
 
 // If the backlog is left unaddressed this long, it has compounded into a
 // materially larger, more serious exposure window — modeling a problem

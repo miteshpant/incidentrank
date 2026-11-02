@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const BATCH_JOB_START_MS = 30_000;
+const BATCH_JOB_START_MS = INCIDENT_START_MS;
 const SECOND_WORKLOAD_MS = 5 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

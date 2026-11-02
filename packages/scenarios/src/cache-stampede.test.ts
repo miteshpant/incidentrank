@@ -15,6 +15,7 @@ import {
   REQUEST_COALESCING_ENABLED_KEY,
 } from "./cache-stampede/definition";
 import { CACHE_STAMPEDE_SCORING } from "./cache-stampede/scoring";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -58,6 +59,9 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
+const STAMPEDE_START_MS = INCIDENT_START_MS;
+const MITIGATION_APPLIED_MS = STAMPEDE_START_MS + 1_000;
+
 describe("Cache Stampede", () => {
   it("carries real library metadata and is a paid launch scenario", () => {
     expect(cacheStampede.isFree).toBe(false);
@@ -74,8 +78,8 @@ describe("Cache Stampede", () => {
   });
 
   it("stampedes critically when the trigger fires with no mitigation", () => {
-    const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    const state = runScenario(MITIGATION_APPLIED_MS);
+    expect(state.incidentStartedAtMs).toBe(STAMPEDE_START_MS);
     expect(state.status).toBe("critical");
     expect(state.values.queuedRequests).toBe(700);
     expect(state.values.cacheStatus).toBe("critical");
@@ -83,7 +87,7 @@ describe("Cache Stampede", () => {
 
   it("recovers cleanly when request coalescing is enabled", () => {
     const state = runScenario(50_000, [
-      { atMs: 31_000, controlKey: REQUEST_COALESCING_ENABLED_KEY, value: true },
+      { atMs: MITIGATION_APPLIED_MS, controlKey: REQUEST_COALESCING_ENABLED_KEY, value: true },
     ]);
 
     // The engine itself never auto-writes "resolved" (Phase 7.1 doctrine)
@@ -96,9 +100,10 @@ describe("Cache Stampede", () => {
   });
 
   it("lowering the TTL without coalescing is harmful, not helpful", () => {
-    const stateWithoutMitigation = runScenario(35_000);
-    const stateWithLowerTtl = runScenario(35_000, [
-      { atMs: 31_000, controlKey: CACHE_TTL_SECONDS_KEY, value: 10 },
+    const COMPARE_AT_MS = STAMPEDE_START_MS + 5_000;
+    const stateWithoutMitigation = runScenario(COMPARE_AT_MS);
+    const stateWithLowerTtl = runScenario(COMPARE_AT_MS, [
+      { atMs: MITIGATION_APPLIED_MS, controlKey: CACHE_TTL_SECONDS_KEY, value: 10 },
     ]);
 
     expect(stateWithLowerTtl.values.queuedRequests).toBeGreaterThan(
@@ -109,7 +114,7 @@ describe("Cache Stampede", () => {
 
   it("scaling the origin connection pool without coalescing masks the symptom but never stops the stampede from recurring", () => {
     const state = runScenario(50_000, [
-      { atMs: 31_000, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 200 },
+      { atMs: MITIGATION_APPLIED_MS, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 200 },
     ]);
 
     expect(state.status).not.toBe("resolved");
@@ -118,14 +123,14 @@ describe("Cache Stampede", () => {
   });
 
   it("stays active (never auto-fails) even after the request queue remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(STAMPEDE_START_MS + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
   });
 
   it("tracks peak queued requests generically via numericWatchFields", () => {
-    const state = runScenario(31_000);
+    const state = runScenario(MITIGATION_APPLIED_MS);
     expect(state.peaks.peakValues.queuedRequests).toBe(700);
   });
 
@@ -156,7 +161,7 @@ describe("Cache Stampede", () => {
     // instead. Run just before the 60s sustained failure window completes
     // (matching the bug's original reproduction), so all four attempts remain
     // "unresolved" rather than "failed".
-    const UNTIL_MS = 88_000;
+    const UNTIL_MS = STAMPEDE_START_MS + 58_000;
 
     function scoreFor(actions: TimedAction[]) {
       const state = runScenario(UNTIL_MS, actions);
@@ -168,13 +173,13 @@ describe("Cache Stampede", () => {
 
     const baselineScore = scoreFor([]);
     const harmfulScore = scoreFor([
-      { atMs: 31_000, controlKey: CACHE_TTL_SECONDS_KEY, value: 10 },
+      { atMs: MITIGATION_APPLIED_MS, controlKey: CACHE_TTL_SECONDS_KEY, value: 10 },
     ]);
     const partialScore = scoreFor([
-      { atMs: 31_000, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 50 },
+      { atMs: MITIGATION_APPLIED_MS, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 50 },
     ]);
     const maskedCostWasteScore = scoreFor([
-      { atMs: 31_000, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 200 },
+      { atMs: MITIGATION_APPLIED_MS, controlKey: ORIGIN_CONNECTION_POOL_SIZE_KEY, value: 200 },
     ]);
 
     // The harmful trap must never outscore a visible partial improvement,
@@ -189,8 +194,8 @@ describe("Cache Stampede", () => {
 
   it("produces identical state for the same action sequence (determinism)", () => {
     const actions: TimedAction[] = [
-      { atMs: 31_000, controlKey: REQUEST_COALESCING_ENABLED_KEY, value: true },
-      { atMs: 31_000, controlKey: CACHE_TTL_SECONDS_KEY, value: 300 },
+      { atMs: MITIGATION_APPLIED_MS, controlKey: REQUEST_COALESCING_ENABLED_KEY, value: true },
+      { atMs: MITIGATION_APPLIED_MS, controlKey: CACHE_TTL_SECONDS_KEY, value: 300 },
     ];
 
     const runA = runScenario(45_000, actions);

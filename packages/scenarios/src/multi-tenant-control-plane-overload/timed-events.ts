@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // One large tenant begins generating excessive configuration churn
 // (rapid repeated config-change requests -- e.g. a misbehaving
@@ -6,7 +7,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // observable precursor the candidate sees first is schedulerQueueDepth
 // and metadataDbWritePressure climbing while dataPlaneSuccessRate stays
 // at 100 -- the misleading symptom this scenario is built around.
-const HOT_TENANT_CHURN_BEGINS_MS = 30_000;
+const HOT_TENANT_CHURN_BEGINS_MS = INCIDENT_START_MS;
 
 // Second wave: if nothing has contained the hot tenant's share of
 // control-plane throughput by this point, the backlog has grown large

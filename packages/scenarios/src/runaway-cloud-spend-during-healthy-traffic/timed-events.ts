@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: a cost-anomaly alert fires. Nothing about customer
 // traffic changes at this moment or at any point in this scenario — no
 // outage, no traffic spike. This timed event represents EXTERNAL
 // PROGRESSION ONLY: the finance/observability system noticing and
 // surfacing a pre-existing condition, not a new technical failure.
-export const COST_ANOMALY_DETECTED_MS = 20_000;
+export const COST_ANOMALY_DETECTED_MS = INCIDENT_START_MS;
 
 // If spend is left unaddressed this long, the elevated run-rate has
 // now been sustained long enough to represent a real, material

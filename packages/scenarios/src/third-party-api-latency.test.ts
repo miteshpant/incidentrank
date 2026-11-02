@@ -76,7 +76,7 @@ describe("Third-Party API Latency", () => {
 
   it("degrades checkout critically when the vendor slows down with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.checkoutServiceThreadPoolUtilization).toBe(85);
     expect(state.values.checkoutStatus).toBe("critical");
@@ -135,7 +135,7 @@ describe("Third-Party API Latency", () => {
   });
 
   it("stays active (never auto-fails) even after checkout thread pool stays critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -224,7 +224,7 @@ describe("Third-Party API Latency", () => {
     // breach no longer auto-terminates an attempt (only the uniform
     // ATTEMPT_CEILING_MS backstop does) — the baseline instead idles,
     // critical and unresolved, for the run.
-    const FAIL_WINDOW_MS = 30_000 + 61_000;
+    const FAIL_WINDOW_MS = 10_000 + 61_000;
 
     const goodState = runScenario(50_000, goodActions);
     const partialState = runScenario(FAIL_WINDOW_MS, partialActions);

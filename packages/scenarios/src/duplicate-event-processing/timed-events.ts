@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const ACK_FAILURES_BEGIN_MS = 30_000;
+const ACK_FAILURES_BEGIN_MS = INCIDENT_START_MS;
 // A second wave: redelivery that was already visibly climbing (ack
 // failure rate, redelivery volume, duplicate event rate all rising since
 // ACK_FAILURES_BEGIN_MS) continues long enough that duplicate side

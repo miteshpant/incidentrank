@@ -1,8 +1,9 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the Stream Processor begins falling behind real-time.
 // Source Systems and Ingestion are unaffected.
-export const LAG_ONSET_MS = 20_000;
+export const LAG_ONSET_MS = INCIDENT_START_MS;
 
 // If the lag is left unaddressed this long, backlog has compounded into
 // a materially larger, more dangerous state — modeling a bottleneck

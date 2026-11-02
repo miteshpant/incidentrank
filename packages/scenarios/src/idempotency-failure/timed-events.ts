@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The idempotency store's primary node begins degrading — elevated
 // lookup latency and intermittent timeouts, visible on
 // idempotencyStoreHealth before any duplicate side effect has actually
 // occurred yet.
-const STORE_DEGRADING_MS = 30_000;
+const STORE_DEGRADING_MS = INCIDENT_START_MS;
 
 // A second wave: sustained degradation on the single-node store (no
 // replica to fail over to) escalates from "intermittent timeouts" to

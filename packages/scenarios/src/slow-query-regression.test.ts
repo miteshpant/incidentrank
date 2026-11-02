@@ -75,8 +75,8 @@ describe("Slow Query Regression", () => {
   });
 
   it("regresses critically when the trigger fires with no mitigation", () => {
-    const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    const state = runScenario(10_000 + 1_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.cpuUtilization).toBe(95);
     expect(state.values.queryStatus).toBe("critical");
@@ -119,7 +119,7 @@ describe("Slow Query Regression", () => {
   });
 
   it("stays active (never auto-fails) even after CPU utilization remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -166,10 +166,10 @@ describe("Slow Query Regression", () => {
     // declaration; every other (unresolved/failed) run still scores
     // correctly via a raw extractScoringInputs call.
     //
-    // Trigger fires at 30_000ms (see "regresses critically..." above).
+    // Trigger fires at 10_000ms (see "regresses critically..." above).
     // failureCondition needs 60s sustained cpuUtilization>=90, which first
     // becomes true once the critical/harmful rule values apply, so the
-    // earliest a sustained-failure completes is ~91_000ms. 85_000ms keeps
+    // earliest a sustained-failure completes is ~71_000ms. 85_000ms keeps
     // every non-resolving sequence in the "unresolved" bucket (not
     // "failed") for a fair, apples-to-apples comparison against each
     // other, while the good sequence is independently resolved by then.

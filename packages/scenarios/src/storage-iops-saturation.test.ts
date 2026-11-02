@@ -8,6 +8,7 @@ import {
 } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { INCIDENT_START_MS } from "./timing";
 import { storageIopsSaturation } from "./storage-iops-saturation";
 import {
   BACKGROUND_WORKLOAD_PAUSED_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const BATCH_RAMPING_MS = 30_000;
+const BATCH_RAMPING_MS = INCIDENT_START_MS;
 
 describe("Storage IOPS Saturation", () => {
   describe("Definition", () => {

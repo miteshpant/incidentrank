@@ -60,15 +60,15 @@ describe("Payment Retry Storm — post-incident feedback", () => {
 
   it("resolves no feedback (not just no outcome) for an action taken before the incident begins", () => {
     // retries<=1 is only beneficial once providerDegraded is true
-    // (incident begins at T=60s) — applying it earlier must not match
+    // (incident begins at T=10s) — applying it earlier must not match
     // the trigger-gated classification rule at all.
     const earlyActionGroups: ReplayActionGroup[] = [
-      { elapsedMs: 10_000, changes: [{ controlKey: "retries", value: 1 }] },
+      { elapsedMs: 5_000, changes: [{ controlKey: "retries", value: 1 }] },
     ];
     const { actionGroups: reviewed } = reviewAttempt(
       paymentRetryStormSimulation,
       earlyActionGroups,
-      15_000,
+      8_000,
     );
 
     const change = reviewed[0]!.changes[0]!;

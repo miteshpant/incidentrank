@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // ─────────────────────────────────────────────────────────────────────────
 // Deterministic simulated deadline phases (batch-defining requirement 4):
@@ -17,7 +18,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // never verified, Product B partially migrated, Product C blocked on a
 // real compatibility issue, Product D untouched. Every live traffic
 // metric reads healthy; nothing fails a request yet.
-export const PHASE_T30D_MS = 20_000;
+export const PHASE_T30D_MS = INCIDENT_START_MS;
 
 // T-14 days: still plenty of runway. Nothing forces action yet — this is
 // deliberately the window where the "wait, dashboards are green" trap is

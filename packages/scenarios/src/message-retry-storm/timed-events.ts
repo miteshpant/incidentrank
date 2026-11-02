@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
 
-export const DEPENDENCY_DEGRADES_MS = 45 * SECOND_MS;
+export const DEPENDENCY_DEGRADES_MS = INCIDENT_START_MS;
 // A deliberate second escalation: if the candidate has left retries
 // unbounded and the DLQ disabled, the dependency's own error rate worsens
 // further under the sustained retry pressure it is receiving — not a

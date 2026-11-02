@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { multiServiceMemoryPressureIncident } from "./multi-service-memory-pressure-incident";
+import { INCIDENT_START_MS } from "./timing";
 import {
   AGGREGATION_CONCURRENCY_KEY,
   API_CONCURRENCY_KEY,
@@ -66,7 +67,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const SHAPE_CHANGE_SHIPPED_MS = 30_000;
+const SHAPE_CHANGE_SHIPPED_MS = INCIDENT_START_MS;
 const DEPENDENCY_A_GC_THRASHING_MS = SHAPE_CHANGE_SHIPPED_MS + 40_000;
 const DECAY_WINDOW_1_MS = DEPENDENCY_A_GC_THRASHING_MS + 20_000;
 const DECAY_WINDOW_2_MS = DEPENDENCY_A_GC_THRASHING_MS + 50_000;

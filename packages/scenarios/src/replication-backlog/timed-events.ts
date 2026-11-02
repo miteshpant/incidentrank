@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 /** A sustained write-volume increase begins — not a one-time spike. Write
  * throughput climbs past what the replication stream can apply, and the
  * backlog begins growing continuously from this point on. */
-const WRITE_SURGE_MS = 30_000;
+const WRITE_SURGE_MS = INCIDENT_START_MS;
 
 /** Second wave: if the backlog has been left to grow unmitigated,
  * sustained replication-stream queueing finally exhausts the staging

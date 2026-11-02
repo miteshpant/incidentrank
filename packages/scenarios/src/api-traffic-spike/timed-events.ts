@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const TRAFFIC_SPIKE_MS = 30_000;
+const TRAFFIC_SPIKE_MS = INCIDENT_START_MS;
 // A second wave: the cache hit-rate collapse and database connection
 // growth that have been visible since TRAFFIC_SPIKE_MS finally drive the
 // connection pool to its ceiling, producing outright queuing/errors — but

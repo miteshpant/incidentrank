@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: a legitimate peak traffic event (e.g. a flash sale)
 // begins, and the External Risk Provider's own latency/failure
@@ -9,7 +10,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // transaction volume is highest. The Ledger is never touched by either
 // timed event — it stays healthy the entire incident, the scenario's
 // decoy-healthy signal.
-export const SURGE_ONSET_MS = 30_000;
+export const SURGE_ONSET_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, manual-review-queue backlog and
 // provider load have compounded (more transactions held, more retries

@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The authored "incident" moment for this proactive scenario: the
 // previously-declared high-risk period has ended. Nothing is broken —
 // this is an economic/judgment trigger, not an outage. Everything that
 // was correctly overprovisioned for the high-risk window is now pure
 // cost waste unless and until it is deliberately reduced.
-export const HIGH_RISK_WINDOW_ENDED_MS = 15_000;
+export const HIGH_RISK_WINDOW_ENDED_MS = INCIDENT_START_MS;
 
 // If left completely untouched this long, the expensive peak-event
 // posture has simply kept running at full cost with no decision made at

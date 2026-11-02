@@ -19,6 +19,7 @@ import {
 import { duplicateEventProcessingCandidateUI } from "./duplicate-event-processing/candidate-ui";
 import { DUPLICATE_EVENT_PROCESSING_SCORING } from "./duplicate-event-processing/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -62,7 +63,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const ACK_FAILURES_BEGIN_MS = 30_000;
+const ACK_FAILURES_BEGIN_MS = INCIDENT_START_MS;
 const SUSTAINED_REDELIVERY_MS = ACK_FAILURES_BEGIN_MS + 3 * 60_000;
 
 describe("Duplicate Event Processing", () => {

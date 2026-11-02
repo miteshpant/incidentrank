@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { apiGatewaySaturation } from "./api-gateway-saturation";
+import { INCIDENT_START_MS } from "./timing";
 import {
   AUTH_MIDDLEWARE_MODE_KEY,
   apiGatewaySaturationSimulation,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const TRAFFIC_GROWTH_MS = 30_000;
+const TRAFFIC_GROWTH_MS = INCIDENT_START_MS;
 
 describe("API Gateway Saturation", () => {
   describe("Definition", () => {
@@ -363,7 +364,7 @@ describe("API Gateway Saturation", () => {
     });
 
     it("immediate zero-action Finish before the incident even starts does NOT resolve (healthy but not yet attempted)", () => {
-      // t=0, before the trafficGrowing trigger at 30s — numeric metrics
+      // t=0, before the trafficGrowing trigger at 10s — numeric metrics
       // already look healthy, but gatewaySaturationHealth is
       // "unresolved" (never "fixed"), so the string-gated success
       // condition fails regardless of elapsed time.

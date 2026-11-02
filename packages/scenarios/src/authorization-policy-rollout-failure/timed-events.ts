@@ -1,8 +1,9 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the v2-bad policy rollout has already reached enough
 // of the fleet to produce visible selective false-denies.
-export const REGRESSION_ONSET_MS = 20_000;
+export const REGRESSION_ONSET_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, the rollout has continued expanding
 // exposure (rolloutFreeze was never engaged) and false-denies have

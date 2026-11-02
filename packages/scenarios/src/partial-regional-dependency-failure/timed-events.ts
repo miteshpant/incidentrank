@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 /** The shared dependency's regional divergence begins — not sequentially,
  * but all at once: US stays healthy, EU goes slow, APAC starts
  * intermittently failing. */
-const REGIONAL_DIVERGENCE_MS = 30_000;
+const REGIONAL_DIVERGENCE_MS = INCIDENT_START_MS;
 
 /** A second wave: APAC's intermittent failures, left unmitigated, grow
  * from intermittent into sustained — but only as the continuation of an

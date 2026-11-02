@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { regionalFailoverCausesGlobalOverload } from "./regional-failover-causes-global-overload";
+import { INCIDENT_START_MS } from "./timing";
 import {
   CACHE_PROTECTION_KEY,
   DB_CONCURRENCY_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const REGION_A_FAILS_MS = 30_000;
+const REGION_A_FAILS_MS = INCIDENT_START_MS;
 const REGION_A_CAPACITY_RETURNS_MS = REGION_A_FAILS_MS + 3 * 60_000;
 const REGION_BC_DRAIN_WINDOW_ELAPSED_MS = REGION_A_CAPACITY_RETURNS_MS + 2 * 60_000;
 

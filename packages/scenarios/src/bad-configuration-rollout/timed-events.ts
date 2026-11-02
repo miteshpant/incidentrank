@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const BAD_CONFIG_PUSH_MS = 30_000;
+const BAD_CONFIG_PUSH_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

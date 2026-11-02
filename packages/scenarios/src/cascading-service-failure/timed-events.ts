@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const ROOT_FAILURE_START_MS = 30_000;
+const ROOT_FAILURE_START_MS = INCIDENT_START_MS;
 const CASCADE_WIDENS_MS = 3 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

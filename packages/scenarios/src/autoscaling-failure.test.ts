@@ -75,7 +75,7 @@ describe("Autoscaling Failure", () => {
 
   it("becomes critically capped when traffic spikes with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.currentInstanceCount).toBe(4);
     expect(state.values.capacityStatus).toBe("critical");
@@ -160,7 +160,7 @@ describe("Autoscaling Failure", () => {
   });
 
   it("stays active (never auto-fails) even after CPU utilization remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -263,17 +263,18 @@ describe("Autoscaling Failure", () => {
       const score = scoreOf(state);
       // 825, not the pre-Phase-7.1 960: deriveScoringResolvedAtMs credits
       // the INSTANT the success condition first became continuously true
-      // (31_000ms, 1s after incident start — recoveryTimeSeconds=1, top
-      // band, 300/300), not the moment its 15s sustain window finished
-      // (46_000ms, what the old auto-resolving engine used). Because
-      // totalTimeInCriticalMs (2_000ms) is measured against that same
-      // honest 1-second window, criticalTimeRatio comes out to 2.0 — the
-      // worst reliability band (15/150) — even though recovery itself
-      // scores at its very best. This is the same resolvedAtMs semantics
-      // every other candidate_declared scenario already uses (see
-      // db-connection-saturation.test.ts's identical scoreOf pattern);
-      // autoscaling-failure simply never exercised a genuinely-resolved
-      // scoring path before Phase 7.1 removed its automatic auto-finish.
+      // (31_000ms, 21s after incident start — recoveryTimeSeconds=21, still
+      // the top band (atMost 60), 300/300), not the moment its 15s sustain
+      // window finished (46_000ms, what the old auto-resolving engine
+      // used). Because totalTimeInCriticalMs (22_000ms) is measured
+      // against that same honest 21-second window, criticalTimeRatio
+      // comes out to ~1.05 — still the worst reliability band (15/150) —
+      // even though recovery itself scores at its very best. This is the
+      // same resolvedAtMs semantics every other candidate_declared
+      // scenario already uses (see db-connection-saturation.test.ts's
+      // identical scoreOf pattern); autoscaling-failure simply never
+      // exercised a genuinely-resolved scoring path before Phase 7.1
+      // removed its automatic auto-finish.
       expect(score.total).toBe(825);
       expect(score.breakdown.recovery).toBe(300);
       expect(score.breakdown.reliability).toBeGreaterThan(0);

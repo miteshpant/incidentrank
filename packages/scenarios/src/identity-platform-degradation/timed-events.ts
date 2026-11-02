@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: both degradations begin concurrently. Token
 // Verification is never touched by either timed event — it stays
 // healthy the entire incident, a real candidate-relevant signal that
 // should not be mistaken for "everything is fine."
-export const DEGRADATION_ONSET_MS = 30_000;
+export const DEGRADATION_ONSET_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, session-store pressure has compounded
 // (more concurrent re-auth attempts, more MFA retries hammering an

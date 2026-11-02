@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The incident starts already mid-rollout: dual-write has been active
 // for a while before the candidate is paged, so some real divergence
 // already exists at T=0 of the active-incident window. This trigger
 // marks "the candidate has been notified / is now watching," not the
 // literal start of dual-write (which predates the incident).
-const DUAL_WRITE_DIVERGENCE_ACTIVE_MS = 20_000;
+const DUAL_WRITE_DIVERGENCE_ACTIVE_MS = INCIDENT_START_MS;
 
 // Natural/organic escalation: if dual-write is left running
 // unaddressed, New Service's capacity continues to intermittently

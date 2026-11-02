@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { schemaMigrationUnderLiveTraffic } from "./schema-migration-under-live-traffic";
+import { INCIDENT_START_MS } from "./timing";
 import {
   APP_ROLLOUT_PERCENT_KEY,
   BACKFILL_CONCURRENCY_KEY,
@@ -66,7 +67,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const COMPATIBILITY_BROKEN_ACTIVE_MS = 20_000;
+const COMPATIBILITY_BROKEN_ACTIVE_MS = INCIDENT_START_MS;
 const BACKFILL_PARTIALLY_DRAINED_MS = COMPATIBILITY_BROKEN_ACTIVE_MS + 90_000;
 const COMPATIBILITY_ESCALATES_MS = COMPATIBILITY_BROKEN_ACTIVE_MS + 3 * 60_000;
 const BACKFILL_WINDOW_ELAPSED_MS = COMPATIBILITY_BROKEN_ACTIVE_MS + 5 * 60_000;

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const SCHEMA_DRIFT_BEGINS_MS = 30_000;
+const SCHEMA_DRIFT_BEGINS_MS = INCIDENT_START_MS;
 const COMPACTION_JOB_BEGINS_MS = 45_000;
 
 export const timedEvents: TimedEvent[] = [

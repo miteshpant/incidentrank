@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const AZ_A_DEGRADES_MS = 30_000;
+const AZ_A_DEGRADES_MS = INCIDENT_START_MS;
 const CASCADE_BEGINS_MS = 75_000;
 
 export const timedEvents: TimedEvent[] = [

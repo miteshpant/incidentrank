@@ -75,8 +75,8 @@ describe("Poison Message Loop", () => {
   });
 
   it("loops critically when the poison message arrives with no mitigation", () => {
-    const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    const state = runScenario(11_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.healthyMessageBacklog).toBe(1_000);
     expect(state.values.queueStatus).toBe("critical");
@@ -84,8 +84,8 @@ describe("Poison Message Loop", () => {
 
   it("reaches a sustained healthy state with a bounded retry limit and the dead-letter queue enabled (Phase 6.1: candidate_declared, never auto-resolves)", () => {
     const state = runScenario(50_000, [
-      { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
-      { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+      { atMs: 11_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
+      { atMs: 11_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
     ]);
 
     expect(state.status).not.toBe("resolved");
@@ -101,7 +101,7 @@ describe("Poison Message Loop", () => {
   it("scaling consumer concurrency without touching retries or the DLQ is harmful, not helpful", () => {
     const stateWithoutMitigation = runScenario(35_000);
     const stateWithScaledConcurrency = runScenario(35_000, [
-      { atMs: 31_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 16 },
+      { atMs: 11_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 16 },
     ]);
 
     expect(stateWithScaledConcurrency.values.retryLoopCount).toBeGreaterThan(
@@ -112,7 +112,7 @@ describe("Poison Message Loop", () => {
 
   it("enabling the dead-letter queue without bounding retries never routes the poison message out", () => {
     const state = runScenario(50_000, [
-      { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+      { atMs: 11_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
     ]);
 
     expect(state.status).not.toBe("resolved");
@@ -121,8 +121,8 @@ describe("Poison Message Loop", () => {
 
   it("a high but bounded retry limit recovers more slowly than a tight one", () => {
     const slow = runScenario(50_000, [
-      { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
-      { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+      { atMs: 11_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
+      { atMs: 11_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
     ]);
 
     expect(slow.status).not.toBe("resolved");
@@ -138,8 +138,8 @@ describe("Poison Message Loop", () => {
     // highRetryLimitExhausted timed event (4 minutes after the retry
     // limit is set) and a recovery rule keyed on it.
     const slow = runScenario(5 * 60_000, [
-      { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
-      { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+      { atMs: 11_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
+      { atMs: 11_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
     ]);
 
     expect(slow.status).not.toBe("resolved");
@@ -167,16 +167,16 @@ describe("Poison Message Loop", () => {
 
     it("the slow-but-real partial scores between baseline and the full fast recovery", () => {
       const good = runScenario(60_000, [
-        { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
-        { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+        { atMs: 11_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
+        { atMs: 11_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
       ]);
       const slow = runScenario(5 * 60_000, [
-        { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
-        { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+        { atMs: 11_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 50 },
+        { atMs: 11_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
       ]);
-      const baseline = runScenario(30_000 + 61_000);
+      const baseline = runScenario(10_000 + 61_000);
       const harmful = runScenario(5 * 60_000, [
-        { atMs: 31_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 8 },
+        { atMs: 11_000, controlKey: CONSUMER_CONCURRENCY_KEY, value: 8 },
       ]);
 
       expect(good.status).not.toBe("resolved");
@@ -210,7 +210,7 @@ describe("Poison Message Loop", () => {
   });
 
   it("stays active (never auto-fails) even after the healthy message backlog remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -219,7 +219,7 @@ describe("Poison Message Loop", () => {
   });
 
   it("tracks peak healthy message backlog generically via numericWatchFields", () => {
-    const state = runScenario(31_000);
+    const state = runScenario(11_000);
     expect(state.peaks.peakValues.healthyMessageBacklog).toBe(1_000);
   });
 
@@ -241,8 +241,8 @@ describe("Poison Message Loop", () => {
 
   it("produces identical state for the same action sequence (determinism)", () => {
     const actions: TimedAction[] = [
-      { atMs: 31_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
-      { atMs: 31_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
+      { atMs: 11_000, controlKey: MAX_RETRY_ATTEMPTS_KEY, value: 3 },
+      { atMs: 11_000, controlKey: DEAD_LETTER_QUEUE_ENABLED_KEY, value: true },
     ];
 
     const runA = runScenario(45_000, actions);

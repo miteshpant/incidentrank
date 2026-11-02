@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // All three root causes begin within the same narrow window, close
 // enough to read as simultaneous to the candidate, but authored as
@@ -9,7 +10,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // Topic A's partitions sit on a separate, currently-healthy partition
 // class) becomes degraded. Overall broker health reads ambiguous
 // (partially degraded, not fully down) rather than a clean outage.
-const BROKER_PARTITION_DEGRADED_MS = 20_000;
+const BROKER_PARTITION_DEGRADED_MS = INCIDENT_START_MS;
 
 // Consumer Group B develops growing lag against Topic B — a genuinely
 // separate root cause (a slow downstream write pattern inside Group

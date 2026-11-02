@@ -21,6 +21,7 @@ import {
 import { rateLimitMisconfigurationCandidateUI } from "./rate-limit-misconfiguration/candidate-ui";
 import { RATE_LIMIT_MISCONFIGURATION_SCORING } from "./rate-limit-misconfiguration/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const POLICY_EFFECTS_VISIBLE_MS = 30_000;
+const POLICY_EFFECTS_VISIBLE_MS = INCIDENT_START_MS;
 const BURST_DOMINATION_DEEPENS_MS = POLICY_EFFECTS_VISIBLE_MS + 3 * 60_000;
 
 describe("Rate-Limit Misconfiguration", () => {

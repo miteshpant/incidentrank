@@ -8,6 +8,7 @@ import {
 } from "@incidentrank/simulator";
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
+import { INCIDENT_START_MS } from "./timing";
 import { primaryDatabaseFailover } from "./primary-database-failover";
 import {
   CONNECTION_DRAIN_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const PRIMARY_DEGRADING_MS = 30_000;
+const PRIMARY_DEGRADING_MS = INCIDENT_START_MS;
 const PRIMARY_UNAVAILABLE_MS = PRIMARY_DEGRADING_MS + 2 * 60_000;
 
 // Shared action sets for the full-fencing (optimal) and fenced-immediate

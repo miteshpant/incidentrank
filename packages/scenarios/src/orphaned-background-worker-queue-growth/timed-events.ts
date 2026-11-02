@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const DEPLOY_BREAKS_WORKERS_MS = 30_000;
+const DEPLOY_BREAKS_WORKERS_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

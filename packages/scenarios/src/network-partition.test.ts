@@ -21,6 +21,7 @@ import {
 import { networkPartitionCandidateUI } from "./network-partition/candidate-ui";
 import { NETWORK_PARTITION_SCORING } from "./network-partition/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const NETWORK_PARTITION_MS = 30_000;
+const NETWORK_PARTITION_MS = INCIDENT_START_MS;
 const NETWORK_HEALED_MS = NETWORK_PARTITION_MS + 4 * 60_000;
 
 describe("Network Partition", () => {

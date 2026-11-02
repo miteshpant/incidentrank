@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const CONCENTRATION_RISING_MS = 30_000;
+const CONCENTRATION_RISING_MS = INCIDENT_START_MS;
 // A second wave: sustained concentration finally pushes Partition A
 // into outright saturation — but only as the continuation of an
 // already-visible trend (partitionARequestRate, partitionALatencyMs,

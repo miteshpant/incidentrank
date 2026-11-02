@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A deploy ships a new response field that returns full nested related
 // records instead of lightweight references. Traffic against the
 // affected endpoints is immediate — the regression is visible from the
 // first tick after rollout, not a slow-building trend.
-const REGRESSION_DEPLOYED_MS = 30_000;
+const REGRESSION_DEPLOYED_MS = INCIDENT_START_MS;
 
 // A second wave: sustained oversized responses finally exhaust the API
 // tier's per-instance memory headroom (garbage from repeatedly building

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const EU_REGION_OUTAGE_BEGINS_MS = 30_000;
+const EU_REGION_OUTAGE_BEGINS_MS = INCIDENT_START_MS;
 const AUTOMATIC_FAILOVER_COMPLETES_MS = 45_000;
 const EU_REGION_INFRASTRUCTURE_RECOVERS_MS = 180_000;
 

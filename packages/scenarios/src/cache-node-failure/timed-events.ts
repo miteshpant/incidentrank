@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const CACHE_NODE_FAILS_MS = 30_000;
+const CACHE_NODE_FAILS_MS = INCIDENT_START_MS;
 // A second wave: if the lost node's capacity is never replaced and the
 // database is never protected, the surviving nodes' elevated load and
 // eviction churn (both already rising and candidate-visible from the

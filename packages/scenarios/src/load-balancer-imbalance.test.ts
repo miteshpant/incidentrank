@@ -21,6 +21,7 @@ import {
 import { loadBalancerImbalanceCandidateUI } from "./load-balancer-imbalance/candidate-ui";
 import { LOAD_BALANCER_IMBALANCE_SCORING } from "./load-balancer-imbalance/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const SESSION_SURGE_MS = 30_000;
+const SESSION_SURGE_MS = INCIDENT_START_MS;
 const STALE_HEALTH_CHECK_COMPOUNDING_MS = SESSION_SURGE_MS + 3 * 60_000;
 
 describe("Load Balancer Imbalance", () => {

@@ -91,7 +91,7 @@ describe("Cache Node Failure", () => {
 
   it("degrades when the cache node fails with no mitigation (baseline)", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.values.cacheHitRatePercent).toBe(68);
     expect(state.values.dbReadsPerSecond).toBe(650);
     expect(state.values.cacheStatus).toBe("warning");

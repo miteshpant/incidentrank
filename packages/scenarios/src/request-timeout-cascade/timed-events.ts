@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const DEPENDENCY_BLIP_MS = 30_000;
+const DEPENDENCY_BLIP_MS = INCIDENT_START_MS;
 // A second wave: if the Gateway's own retries keep adding new in-flight
 // chains on top of ones that were never cancelled, the accumulation
 // compounds for several minutes until in-flight requests and connection

@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { largePayloadRegression } from "./large-payload-regression";
+import { INCIDENT_START_MS } from "./timing";
 import {
   API_INSTANCE_COUNT_KEY,
   COMPRESSION_ENABLED_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const REGRESSION_DEPLOYED_MS = 30_000;
+const REGRESSION_DEPLOYED_MS = INCIDENT_START_MS;
 const MEMORY_EXHAUSTION_MS = REGRESSION_DEPLOYED_MS + 3 * 60_000;
 
 describe("Large Payload Regression", () => {

@@ -20,6 +20,7 @@ import {
 import { cacheEvictionStormCandidateUI } from "./cache-eviction-storm/candidate-ui";
 import { CACHE_EVICTION_STORM_SCORING } from "./cache-eviction-storm/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -54,7 +55,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const EVICTION_CHURN_RISING_MS = 30_000;
+const EVICTION_CHURN_RISING_MS = INCIDENT_START_MS;
 const DB_READ_PRESSURE_MS = EVICTION_CHURN_RISING_MS + 3 * 60_000;
 
 describe("Cache Eviction Storm", () => {

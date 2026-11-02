@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A request-path change ships, widening the product-detail response to
 // call all five downstream services per request instead of a narrower
 // previous set. Fan-out QPS rises immediately and visibly across the
 // board.
-const FAN_OUT_WIDENED_MS = 30_000;
+const FAN_OUT_WIDENED_MS = INCIDENT_START_MS;
 
 // Service E (recommendation enrichment) begins degrading under the new
 // load — but only as the continuation of an already-visible trend.

@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the bad detection-rule version's false-positive
 // blocking becomes visible. Real abusive traffic is present from this
 // same moment onward (it was already in the mix beforehand) — the
 // detection rule did not create the abuse, it only ALSO started
 // blocking legitimate users.
-export const FALSE_POSITIVE_ONSET_MS = 30_000;
+export const FALSE_POSITIVE_ONSET_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, the false-positive blocking has
 // compounded (more legitimate users accumulate into the blocked

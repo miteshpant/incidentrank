@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const POISON_MESSAGE_ARRIVES_MS = 30_000;
+const POISON_MESSAGE_ARRIVES_MS = INCIDENT_START_MS;
 // How long a 50-attempt bounded retry limit takes to actually exhaust and
 // route the poison message to the dead-letter queue — the slow-masking
 // partial-improvement path's eventual (if costly) recovery point. Chosen

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const OWNERSHIP_STATE_STALE_MS = 30_000;
+const OWNERSHIP_STATE_STALE_MS = INCIDENT_START_MS;
 // A second wave: the backing store behind the Coordination Service's
 // ownership table falls further behind, widening the staleness window
 // itself (not merely continuing the existing trigger) — but only as the

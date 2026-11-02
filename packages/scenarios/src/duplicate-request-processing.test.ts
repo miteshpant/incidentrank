@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { duplicateRequestProcessing } from "./duplicate-request-processing";
+import { INCIDENT_START_MS } from "./timing";
 import {
   CLIENT_RETRY_COUNT_KEY,
   CLIENT_TIMEOUT_MS_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const LATENCY_RISING_MS = 30_000;
+const LATENCY_RISING_MS = INCIDENT_START_MS;
 const SUSTAINED_RETRY_PRESSURE_MS = LATENCY_RISING_MS + 3 * 60_000;
 
 describe("Duplicate Request Processing", () => {

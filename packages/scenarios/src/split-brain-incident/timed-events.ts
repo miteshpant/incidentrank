@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The network link between Region A and Region B is severed. Each
 // region's local health checks still look fine in isolation -- the
@@ -6,7 +7,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // climbing to 2 and writeAuthorityState flipping to "dual" the moment
 // both sides decide, independently, that they hold leadership (under
 // the default any-single-region quorum setting).
-const NETWORK_PARTITION_MS = 30_000;
+const NETWORK_PARTITION_MS = INCIDENT_START_MS;
 
 // Second wave: connectivity between the two regions is restored. This
 // does not retroactively change whether an earlier handback decision

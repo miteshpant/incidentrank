@@ -1,4 +1,5 @@
 export type { ScenarioDefinition, ScenarioLibraryMetadata, ScenarioCategory, ScenarioStructure } from "./types";
+export { SECOND_MS, MINUTE_MS, INCIDENT_START_MS } from "./timing";
 export type { PublicScenarioMetadata } from "./public-metadata";
 export { toPublicScenarioMetadata } from "./public-metadata";
 export { buildIncidentNarrative, hasIncidentNarrative } from "./narrative";

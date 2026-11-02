@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: an upstream delivery degradation between the Event
 // Stream and the Immutable Store begins causing audit events to arrive
 // missing, duplicated, or out of order, and some events lose their
 // verifiable evidence entirely. Services and the Audit Logger are
 // unaffected on uptime/write-success.
-export const DEGRADATION_DISCOVERED_MS = 20_000;
+export const DEGRADATION_DISCOVERED_MS = INCIDENT_START_MS;
 
 // If the degradation is left unaddressed this long, the cumulative
 // unverifiable-event exposure has compounded into a materially larger,

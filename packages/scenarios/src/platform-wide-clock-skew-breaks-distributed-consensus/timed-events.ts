@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const CLOCK_SKEW_BEGINS_MS = 30_000;
+const CLOCK_SKEW_BEGINS_MS = INCIDENT_START_MS;
 const CASCADE_WIDENS_MS = 150_000;
 
 export const timedEvents: TimedEvent[] = [

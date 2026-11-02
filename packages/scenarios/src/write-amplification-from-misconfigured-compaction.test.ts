@@ -21,6 +21,7 @@ import { WRITE_AMPLIFICATION_FROM_MISCONFIGURED_COMPACTION_SCORING } from "./wri
 import { writeAmplificationFromMisconfiguredCompactionCandidateUI } from "./write-amplification-from-misconfigured-compaction/candidate-ui";
 import { scoreAuthoredAttempt } from "./authoring/score";
 import { buildIncidentNarrative, hasIncidentNarrative } from "./narrative";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -29,7 +30,7 @@ interface TimedAction {
 }
 
 const SIM = writeAmplificationFromMisconfiguredCompactionSimulation;
-const TRAFFIC_BUMP_BEGINS_MS = 30_000;
+const TRAFFIC_BUMP_BEGINS_MS = INCIDENT_START_MS;
 
 function runScenario(untilMs: number, actions: TimedAction[] = []) {
   let state = createInitialState(SIM);

@@ -20,6 +20,7 @@ import {
 import { distributedLockFailureCandidateUI } from "./distributed-lock-failure/candidate-ui";
 import { DISTRIBUTED_LOCK_FAILURE_SCORING } from "./distributed-lock-failure/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -63,7 +64,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const PROCESSING_SLOWDOWN_MS = 30_000;
+const PROCESSING_SLOWDOWN_MS = INCIDENT_START_MS;
 const WORKER_CRASH_MS = PROCESSING_SLOWDOWN_MS + 3 * 60_000;
 
 describe("Distributed Lock Failure", () => {

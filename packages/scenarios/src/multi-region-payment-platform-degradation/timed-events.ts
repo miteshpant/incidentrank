@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The Fraud Provider begins degrading on the path EU calls it over --
 // EU risk checks start failing/timing out at an elevated rate while US
@@ -7,15 +8,18 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // LOOKS like a Fraud Provider outage, but US's own calls to the same
 // provider stay healthy, so the real root cause is EU's regional path
 // to that dependency, not the provider globally.
-const EU_DEPENDENCY_DEGRADED_MS = 30_000;
+const EU_DEPENDENCY_DEGRADED_MS = INCIDENT_START_MS;
 
 // Independently, cross-region ledger replication begins lagging --
 // authored as a second, simultaneous root cause rather than a
 // consequence of the EU dependency issue, consistent with
 // phase6dsupport's "at least three things interact" requirement. This
 // alone is mild; it becomes dangerous once write volume increases
-// (e.g. from shifting EU traffic onto US capacity).
-const REPLICATION_LAG_ONSET_MS = 45_000;
+// (e.g. from shifting EU traffic onto US capacity). Anchored to
+// INCIDENT_START_MS (not an absolute simulation-clock literal) so the
+// authored 15s gap between the two root causes stays fixed regardless
+// of how long the pre-incident countdown is.
+const REPLICATION_LAG_ONSET_MS = INCIDENT_START_MS + 15_000;
 
 // Natural recovery window: if left alone, the EU dependency path
 // recovers on its own schedule. This does not retroactively undo any

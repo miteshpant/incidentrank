@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const REGISTRY_DEGRADES_MS = 30_000;
+const REGISTRY_DEGRADES_MS = INCIDENT_START_MS;
 // A second, larger batch of registry entries goes stale if the candidate
 // has not refreshed/bypassed the bad snapshot in time. This is not a
 // hidden surprise: the registry's underlying unhealthy-entry count is

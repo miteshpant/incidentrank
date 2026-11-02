@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Timed events must be authored in strictly ascending `atMs` order — the
 // engine advances nextTimedEventIndex sequentially (packages/simulator/
@@ -11,7 +12,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // begins rising on the Aggregator and on all three dependencies at the
 // same time — this is external incident progression, not a candidate
 // action.
-const SHAPE_CHANGE_SHIPPED_MS = 30_000;
+const SHAPE_CHANGE_SHIPPED_MS = INCIDENT_START_MS;
 
 // Dependency A has the smallest heap headroom in the fleet, so it is the
 // first component to visibly GC-thrash under the new load — a genuinely

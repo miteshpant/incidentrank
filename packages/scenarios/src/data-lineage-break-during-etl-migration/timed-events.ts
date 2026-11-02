@@ -1,8 +1,9 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the ETL v1 -> v2 migration begins. Sources/Warehouse/
 // Reports availability is unaffected throughout.
-export const MIGRATION_ONSET_MS = 20_000;
+export const MIGRATION_ONSET_MS = INCIDENT_START_MS;
 
 // If a real cutover strategy has not been chosen by this point, the
 // migration decision has been left open long enough to be a genuine,

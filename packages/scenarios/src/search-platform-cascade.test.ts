@@ -24,6 +24,7 @@ import { searchPlatformCascadeCandidateUI } from "./search-platform-cascade/cand
 import { SEARCH_PLATFORM_CASCADE_SCORING } from "./search-platform-cascade/scoring";
 import { actionClassifications } from "./search-platform-cascade/action-classifications";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -67,7 +68,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const RANKING_DEGRADES_MS = 30_000;
+const RANKING_DEGRADES_MS = INCIDENT_START_MS;
 const COORDINATOR_DRAIN_WINDOW_ELAPSED_MS = RANKING_DEGRADES_MS + 2 * 60_000;
 
 // Shorthand action chain: exclude ranking, reduce feature-store usage,

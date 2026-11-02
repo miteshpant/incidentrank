@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const HOT_KEY_SPIKE_MS = 30_000;
+const HOT_KEY_SPIKE_MS = INCIDENT_START_MS;
 // A second wave: sustained unmitigated hot-key traffic finally exhausts
 // the hot shard's own memory headroom, so it starts evicting OTHER
 // (cold) keys to make room for the churn on the hot key — pushing even

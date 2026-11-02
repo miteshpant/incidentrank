@@ -76,7 +76,7 @@ describe("Kafka Consumer Lag", () => {
 
   it("lags critically when the producer spikes with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.consumerLagMessages).toBe(8_000);
     expect(state.values.consumerStatus).toBe("critical");
@@ -129,7 +129,7 @@ describe("Kafka Consumer Lag", () => {
   });
 
   it("stays active (never auto-fails) even after lag remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -225,7 +225,7 @@ describe("Kafka Consumer Lag", () => {
       // window at lag>=7_500, but the engine no longer auto-fails on a
       // sustained breach (only the uniform attempt-ceiling can terminate
       // an attempt now), so it simply remains unresolved.
-      const baseline = runScenario(30_000 + 61_000);
+      const baseline = runScenario(10_000 + 61_000);
       expect(baseline.status).not.toBe("failed");
       expect(baseline.status).not.toBe("resolved");
 

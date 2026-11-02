@@ -21,6 +21,7 @@ import {
 import { partialRolloutRegressionCandidateUI } from "./partial-rollout-regression/candidate-ui";
 import { PARTIAL_ROLLOUT_REGRESSION_SCORING } from "./partial-rollout-regression/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const REGRESSION_ACTIVE_MS = 30_000;
+const REGRESSION_ACTIVE_MS = INCIDENT_START_MS;
 const DEPENDENCY_SATURATION_MS = REGRESSION_ACTIVE_MS + 3 * 60_000;
 
 describe("Deployment Regression (partial-rollout-regression)", () => {

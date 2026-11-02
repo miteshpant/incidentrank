@@ -21,6 +21,7 @@ import {
 import { crossRegionLatencySpikeCandidateUI } from "./cross-region-latency-spike/candidate-ui";
 import { CROSS_REGION_LATENCY_SPIKE_SCORING } from "./cross-region-latency-spike/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const RTT_SPIKE_MS = 30_000;
+const RTT_SPIKE_MS = INCIDENT_START_MS;
 const SUSTAINED_DEGRADATION_MS = RTT_SPIKE_MS + 3 * 60_000;
 
 // A single action sequence that reaches the OPTIMAL fast-tradeoff path:

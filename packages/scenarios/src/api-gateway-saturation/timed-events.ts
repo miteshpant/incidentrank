@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const TRAFFIC_GROWTH_MS = 30_000;
+const TRAFFIC_GROWTH_MS = INCIDENT_START_MS;
 // A second wave: sustained gateway CPU saturation finally exhausts the
 // gateway's own upstream connection pool (every request opening a new
 // connection per request, never reused), driving gatewayConnectionCount

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const SATURATION_START_MS = 30_000;
+const SATURATION_START_MS = INCIDENT_START_MS;
 // Phase 6.1: a candidate-visible precursor to the batch-job escalation —
 // background batch demand is already accumulating well before the batch
 // job fully "starts" and the engine marks batchJobRunning. See

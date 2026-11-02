@@ -21,6 +21,7 @@ import {
 import { botTrafficSurgeCandidateUI } from "./bot-traffic-surge/candidate-ui";
 import { BOT_TRAFFIC_SURGE_SCORING } from "./bot-traffic-surge/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -55,7 +56,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const BOT_SURGE_RISING_MS = 30_000;
+const BOT_SURGE_RISING_MS = INCIDENT_START_MS;
 const ESCALATING_MS = BOT_SURGE_RISING_MS + 3 * 60_000;
 
 describe("Bot Traffic Surge", () => {

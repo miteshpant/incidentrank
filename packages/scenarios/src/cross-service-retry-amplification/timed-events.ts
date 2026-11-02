@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS as SHARED_INCIDENT_START_MS } from "../timing";
 
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
 
-export const INCIDENT_START_MS = 60 * SECOND_MS;
+export const INCIDENT_START_MS = SHARED_INCIDENT_START_MS;
 // A second wave: left unmitigated, the amplification itself starts
 // starving the provider's connection pool hard enough that its own
 // latency gets materially worse (a real feedback loop — amplified

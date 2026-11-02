@@ -76,7 +76,7 @@ describe("Database Lock Contention", () => {
 
   it("contends critically when the batch job starts with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.blockedTransactions).toBe(180);
     expect(state.values.lockStatus).toBe("critical");
@@ -137,7 +137,7 @@ describe("Database Lock Contention", () => {
   });
 
   it("stays active (never auto-fails) even after blocked transactions remain critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
@@ -218,7 +218,7 @@ describe("Database Lock Contention", () => {
     // once sustained 60s (failureCondition.sustainedSeconds) is a genuine
     // breach — but the engine no longer auto-fails on that alone, so the
     // attempt simply stays unresolved past the old sustained window.
-    const FAIL_WINDOW_MS = 30_000 + 61_000;
+    const FAIL_WINDOW_MS = 10_000 + 61_000;
 
     const goodState = runScenario(50_000, goodActions);
     const partialState = runScenario(FAIL_WINDOW_MS, partialActions);

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const PROVIDER_OUTAGE_MS = 30_000;
+const PROVIDER_OUTAGE_MS = INCIDENT_START_MS;
 // A second wave: sustained unmitigated retry pressure against the still-
 // unreachable destination subset finally exhausts enough attempts that
 // webhooks begin escalating to the dead-letter queue in volume — but

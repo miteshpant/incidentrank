@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: a corrupted training dataset has already produced a
 // technically-valid artifact that has already been promoted and is
 // already serving live traffic. Trainer and Deployment Pipeline are
 // unaffected on throughput/uptime — this is detected downstream, after
 // the fact, not as an infrastructure failure.
-export const CORRUPTION_ONSET_MS = 20_000;
+export const CORRUPTION_ONSET_MS = INCIDENT_START_MS;
 
 // If the corrupted artifact is left serving unaddressed this long, the
 // cumulative business-decision exposure has compounded into a

@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const PRODUCER_SPIKE_MS = 30_000;
+const PRODUCER_SPIKE_MS = INCIDENT_START_MS;
 const SLOW_RECORDS_MS = 5 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

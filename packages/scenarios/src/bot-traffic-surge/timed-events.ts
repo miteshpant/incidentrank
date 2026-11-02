@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const BOT_SURGE_RISING_MS = 30_000;
+const BOT_SURGE_RISING_MS = INCIDENT_START_MS;
 // A second wave: the bot operator, having found a working request shape,
 // scales up further once the initial surge goes unmitigated — but only
 // as a continuation of an already-visible trend (requestVolumePerSec and

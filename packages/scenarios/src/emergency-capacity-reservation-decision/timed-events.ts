@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // ── Deterministic deadline/event phases (batch-defining requirement 4:
 // long-horizon / deadline design). Every phase below is an authored
@@ -11,7 +12,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // T-0 (attempt start): the forecast is already published and the
 // decision window is already open — this scenario starts with the
 // PROACTIVE decision already live, not with a failure.
-export const DECISION_WINDOW_OPENED_MS = 5_000;
+export const DECISION_WINDOW_OPENED_MS = INCIDENT_START_MS;
 
 // T-72h (represented): the reservation deadline is approaching but still
 // comfortably far away — informational checkpoint, no state change.

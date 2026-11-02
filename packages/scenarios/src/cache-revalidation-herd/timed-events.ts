@@ -1,11 +1,12 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A batch of popular catalog objects was warmed at the same time with a
 // flat, unjittered TTL. As that shared expiry approaches, the cache miss
 // rate and concurrent-refresh count begin climbing ahead of the actual
 // expiry instant — a candidate watching cacheMissRatePct/
 // concurrentRefreshes has observable warning before the herd lands.
-const EXPIRY_APPROACHING_MS = 20_000;
+const EXPIRY_APPROACHING_MS = INCIDENT_START_MS;
 // The shared TTL is crossed: every API instance that independently
 // checks the cache for these keys sees a miss at nearly the same moment
 // and independently issues its own origin refresh.

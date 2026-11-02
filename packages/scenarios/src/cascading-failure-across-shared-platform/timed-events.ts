@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // ── Root cause onset ────────────────────────────────────────────────────
 // Shared Identity's token-validation latency begins spiking. This is the
 // TRUE ROOT — nothing else has moved yet at this point.
-export const IDENTITY_DEGRADED_MS = 20_000;
+export const IDENTITY_DEGRADED_MS = INCIDENT_START_MS;
 
 // ── Amplification compounds (external consequence of the root, not a
 // candidate action) ─────────────────────────────────────────────────────

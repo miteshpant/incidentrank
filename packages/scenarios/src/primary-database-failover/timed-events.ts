@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const PRIMARY_DEGRADING_MS = 30_000;
+const PRIMARY_DEGRADING_MS = INCIDENT_START_MS;
 // Second wave: the primary, already visibly unhealthy and falling behind
 // on replication acknowledgement since PRIMARY_DEGRADING_MS, becomes
 // fully unavailable. This is a continuation of an already-visible trend

@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: the global feature rollout has reached enough of EU
 // traffic to produce the first observable region-dependent correctness
 // divergence. No customer-visible unreadable reads have occurred yet.
-export const REGRESSION_ONSET_MS = 20_000;
+export const REGRESSION_ONSET_MS = INCIDENT_START_MS;
 
 // If no region is halted/paused/rolled back by this point, the rollout
 // has continued expanding exposure across all three regions and the

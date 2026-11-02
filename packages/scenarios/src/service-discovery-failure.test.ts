@@ -19,6 +19,7 @@ import {
 import { SERVICE_DISCOVERY_FAILURE_SCORING } from "./service-discovery-failure/scoring";
 import { serviceDiscoveryFailureCandidateUI } from "./service-discovery-failure/candidate-ui";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -62,7 +63,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const REGISTRY_DEGRADES_MS = 30_000;
+const REGISTRY_DEGRADES_MS = INCIDENT_START_MS;
 
 describe("Service Discovery Failure", () => {
   describe("definition", () => {

@@ -22,6 +22,7 @@ import {
 import { apiTrafficSpikeCandidateUI } from "./api-traffic-spike/candidate-ui";
 import { API_TRAFFIC_SPIKE_SCORING } from "./api-traffic-spike/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -60,7 +61,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const TRAFFIC_SPIKE_MS = 30_000;
+const TRAFFIC_SPIKE_MS = INCIDENT_START_MS;
 const POOL_SATURATION_MS = TRAFFIC_SPIKE_MS + 3 * 60_000;
 
 describe("API Traffic Spike", () => {

@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A returning-user traffic mix shift begins: a marketing push drives a
 // wave of returning, already-authenticated users back to the product.
@@ -7,7 +8,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // which happens to concentrate heavily onto Instance A and, to a lesser
 // degree, Instance B, while Instance C and D (which mostly serve
 // first-time/unauthenticated traffic) stay near baseline.
-const SESSION_SURGE_MS = 30_000;
+const SESSION_SURGE_MS = INCIDENT_START_MS;
 
 // Second wave: with the balancer's health check still on its stale,
 // infrequent polling interval, it keeps reporting Instance A as healthy

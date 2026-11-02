@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // The inter-region replication link between Region A and Region B is
 // severed. Each region's local health checks still look fine in
@@ -6,7 +7,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // replicationHealth flipping to "broken" and, under the default routing,
 // ledgerWriteAuthority flipping to "dual" with ledgerConsistencyViolationCount
 // climbing the moment both sides independently accept ledger writes.
-const NETWORK_PARTITION_MS = 30_000;
+const NETWORK_PARTITION_MS = INCIDENT_START_MS;
 
 // Second wave: inter-region connectivity is restored. This does not
 // retroactively change whether an earlier routing decision was safe -- it

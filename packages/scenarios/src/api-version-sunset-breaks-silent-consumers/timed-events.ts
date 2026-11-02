@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const SUNSET_TAKES_EFFECT_MS = 30_000;
+const SUNSET_TAKES_EFFECT_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

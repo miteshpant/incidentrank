@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { missingDatabaseIndex } from "./missing-database-index";
+import { INCIDENT_START_MS } from "./timing";
 import {
   API_INSTANCE_COUNT_KEY,
   DB_CONNECTION_POOL_SIZE_KEY,
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const TRAFFIC_RISING_MS = 30_000;
+const TRAFFIC_RISING_MS = INCIDENT_START_MS;
 
 describe("Missing Database Index", () => {
   describe("Definition", () => {

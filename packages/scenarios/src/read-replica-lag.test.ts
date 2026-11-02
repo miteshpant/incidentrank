@@ -76,7 +76,7 @@ describe("Read Replica Lag", () => {
 
   it("lags critically when a write burst hits with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.replicationLagMs).toBe(8_000);
     expect(state.values.replicaStatus).toBe("critical");
@@ -132,7 +132,7 @@ describe("Read Replica Lag", () => {
   });
 
   it("stays active (never auto-fails) even after lag remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(60);
@@ -157,7 +157,7 @@ describe("Read Replica Lag", () => {
       return scoreAuthoredAttempt(READ_REPLICA_LAG_SCORING, inputs);
     }
 
-    const FAIL_WINDOW_MS = 30_000 + 61_000;
+    const FAIL_WINDOW_MS = 10_000 + 61_000;
 
     it("good recovery scores the maximum", () => {
       const good = runScenario(55_000, [

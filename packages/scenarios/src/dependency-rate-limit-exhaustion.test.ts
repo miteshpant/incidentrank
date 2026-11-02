@@ -21,6 +21,7 @@ import {
 import { dependencyRateLimitExhaustionCandidateUI } from "./dependency-rate-limit-exhaustion/candidate-ui";
 import { DEPENDENCY_RATE_LIMIT_EXHAUSTION_SCORING } from "./dependency-rate-limit-exhaustion/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const QUOTA_DRAWDOWN_MS = 30_000;
+const QUOTA_DRAWDOWN_MS = INCIDENT_START_MS;
 const PROVIDER_THROTTLING_MS = QUOTA_DRAWDOWN_MS + 4 * 60_000;
 
 describe("Dependency Rate-Limit Exhaustion", () => {
@@ -111,7 +112,7 @@ describe("Dependency Rate-Limit Exhaustion", () => {
       expect(state.values.quotaOutcome).toBe("unresolved");
     });
 
-    it("quota drawdown trigger fires at 30s with observable precursor metrics, before any 429s occur", () => {
+    it("quota drawdown trigger fires at incident start with observable precursor metrics, before any 429s occur", () => {
       const state = runScenario(QUOTA_DRAWDOWN_MS + 1_000);
       expect(state.incidentStartedAtMs).toBe(QUOTA_DRAWDOWN_MS);
       expect(state.values.quotaStatus).toBe("warning");

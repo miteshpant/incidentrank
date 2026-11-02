@@ -1,9 +1,10 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS as SHARED_INCIDENT_START_MS } from "../timing";
 
 const SECOND_MS = 1_000;
 const MINUTE_MS = 60 * SECOND_MS;
 
-export const INCIDENT_START_MS = 60 * SECOND_MS;
+export const INCIDENT_START_MS = SHARED_INCIDENT_START_MS;
 export const PROVIDER_RECOVERY_START_MS = 12 * MINUTE_MS;
 export const PROVIDER_RECOVERY_END_MS = 15 * MINUTE_MS;
 

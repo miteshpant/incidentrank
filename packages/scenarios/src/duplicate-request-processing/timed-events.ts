@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const LATENCY_RISING_MS = 30_000;
+const LATENCY_RISING_MS = INCIDENT_START_MS;
 // A second wave: sustained retry pressure without any mitigation
 // continues to compound — but only as the continuation of an
 // already-visible trend (serviceLatencyMs, retryVolumePerMin, and

@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // A downstream dependency the locked job touches (e.g. a slow write
 // path on the shared resource itself) has slowed down, so individual
@@ -6,7 +7,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // leases expiring mid-processing. Candidates watching processingDurationMs
 // have every reason to expect lease-expiry problems next if the lease
 // isn't renewed and stays short.
-const PROCESSING_SLOWDOWN_MS = 30_000;
+const PROCESSING_SLOWDOWN_MS = INCIDENT_START_MS;
 
 // Second wave: with sustained slow processing and no renewal/fencing in
 // place, leases keep expiring mid-job and a worker genuinely crashes

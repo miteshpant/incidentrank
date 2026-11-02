@@ -1,10 +1,11 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Source order volume has grown steadily; tonight is the first night the
 // reconciliation job's own runtime (now ~34 minutes) exceeds its 30-minute
 // schedule interval. The next scheduled fire launches a second instance
 // before the first one has finished — overlap begins.
-const OVERLAP_BEGINS_MS = 30_000;
+const OVERLAP_BEGINS_MS = INCIDENT_START_MS;
 
 export const timedEvents: TimedEvent[] = [
   {

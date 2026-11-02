@@ -76,7 +76,7 @@ describe("Cascading Service Failure", () => {
 
   it("cascades critically when the root service fails with no mitigation", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.cascadeDepth).toBe(3);
     expect(state.values.checkoutSuccessRate).toBe(55);
@@ -130,7 +130,7 @@ describe("Cascading Service Failure", () => {
   });
 
   it("stays active (never auto-fails) even after checkout success remains critically low past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(
@@ -203,7 +203,7 @@ describe("Cascading Service Failure", () => {
       ).toBe("resolved");
       // 850, not the pre-Phase-7.1 985: deriveScoringResolvedAtMs credits
       // the INSTANT the success condition first became continuously true
-      // (31_000ms, 1s after incident start), not the moment its 15s
+      // (31_000ms, 21s after incident start), not the moment its 15s
       // sustain window finished — recoveryTimeSeconds is excellent (top
       // band, 300/300), but totalTimeInCriticalMs (2_000ms, accumulated
       // before the breaker took effect) measured against that same
@@ -219,12 +219,12 @@ describe("Cascading Service Failure", () => {
       // its full 60s sustained window, but the engine no longer auto-fails
       // on a sustained breach alone (only the uniform 35-minute
       // ATTEMPT_CEILING_MS can end an attempt) -> status stays "critical",
-      // unresolved, at 91_000ms. recovery and reliability both carry
+      // unresolved, at 71_000ms. recovery and reliability both carry
       // terminalOverrides.unresolved: 0, and the modest
       // revenueLossUsd/criticalTimeRatio accrued so far stay inside every
       // band's full-marks ceiling, so customerImpact and costEfficiency
       // both still award full points -> total 535.
-      const baseline = scoreFor([], 30_000 + 61_000);
+      const baseline = scoreFor([], 10_000 + 61_000);
       expect(baseline.state.status).not.toBe("failed");
       expect(baseline.state.status).not.toBe("resolved");
       expect(

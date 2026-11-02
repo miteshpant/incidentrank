@@ -21,6 +21,7 @@ import {
 import { hotDatabasePartitionCandidateUI } from "./hot-database-partition/candidate-ui";
 import { HOT_DATABASE_PARTITION_SCORING } from "./hot-database-partition/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -64,7 +65,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const CONCENTRATION_RISING_MS = 30_000;
+const CONCENTRATION_RISING_MS = INCIDENT_START_MS;
 const SATURATION_MS = CONCENTRATION_RISING_MS + 3 * 60_000;
 
 describe("Hot Database Partition", () => {

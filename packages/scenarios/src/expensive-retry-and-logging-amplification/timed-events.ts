@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Incident start: finance/observability tooling has just flagged that a
 // recent deploy raised retry frequency, logging verbosity, telemetry
@@ -7,7 +8,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // fine at this exact moment and stay fine through nearly every reachable
 // state below. Nothing is "failing"; cost and observability posture are
 // the thing to fix.
-export const DEPLOY_REGRESSION_DETECTED_MS = 15_000;
+export const DEPLOY_REGRESSION_DETECTED_MS = INCIDENT_START_MS;
 
 // If left unaddressed this long, the cost regression has simply
 // persisted at the same (bounded, non-worsening) elevated level — no

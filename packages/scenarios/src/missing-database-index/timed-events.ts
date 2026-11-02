@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const TRAFFIC_RISING_MS = 30_000;
+const TRAFFIC_RISING_MS = INCIDENT_START_MS;
 // A second wave: sustained scan load against the primary finally
 // saturates the connection pool and begins producing outright
 // connection-pool errors — but only as the continuation of an already-

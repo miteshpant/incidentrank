@@ -24,6 +24,7 @@ import { apiMigrationDualWriteFailureCandidateUI } from "./api-migration-dual-wr
 import { API_MIGRATION_DUAL_WRITE_FAILURE_SCORING } from "./api-migration-dual-write-failure/scoring";
 import { actionClassifications } from "./api-migration-dual-write-failure/action-classifications";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -67,7 +68,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const DUAL_WRITE_DIVERGENCE_ACTIVE_MS = 20_000;
+const DUAL_WRITE_DIVERGENCE_ACTIVE_MS = INCIDENT_START_MS;
 const RECONCILIATION_PARTIALLY_DRAINED_MS = DUAL_WRITE_DIVERGENCE_ACTIVE_MS + 90_000;
 const DIVERGENCE_ESCALATES_MS = DUAL_WRITE_DIVERGENCE_ACTIVE_MS + 3 * 60_000;
 const RECONCILIATION_WINDOW_ELAPSED_MS = DUAL_WRITE_DIVERGENCE_ACTIVE_MS + 5 * 60_000;

@@ -77,7 +77,7 @@ describe("Kafka Partition Skew", () => {
 
   it("the hot partition becomes critical while aggregate utilization still looks moderate", () => {
     const state = runScenario(31_000);
-    expect(state.incidentStartedAtMs).toBe(30_000);
+    expect(state.incidentStartedAtMs).toBe(10_000);
     expect(state.status).toBe("critical");
     expect(state.values.hotPartitionLagMessages).toBe(7_000);
     expect(state.values.partitionStatus).toBe("critical");
@@ -203,7 +203,7 @@ describe("Kafka Partition Skew", () => {
   });
 
   it("stays active (never auto-fails) even after hot-partition lag remains critical past the old sustained window", () => {
-    const state = runScenario(30_000 + 61_000);
+    const state = runScenario(10_000 + 61_000);
     expect(state.status).not.toBe("failed");
     expect(state.failedAtMs).toBeNull();
     expect(state.transitions.consecutiveFailureSeconds).toBeGreaterThanOrEqual(

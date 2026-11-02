@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const PRODUCER_SURGE_MS = 30_000;
+const PRODUCER_SURGE_MS = INCIDENT_START_MS;
 // A second wave: if the candidate has pushed consumer/worker concurrency
 // up without also managing external-API concurrency, sustained high
 // outbound call volume finally trips the external API's own rate

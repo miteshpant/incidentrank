@@ -21,6 +21,7 @@ import {
 import { idempotencyFailureCandidateUI } from "./idempotency-failure/candidate-ui";
 import { IDEMPOTENCY_FAILURE_SCORING } from "./idempotency-failure/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -59,7 +60,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const STORE_DEGRADING_MS = 30_000;
+const STORE_DEGRADING_MS = INCIDENT_START_MS;
 const STORE_UNREACHABLE_MS = STORE_DEGRADING_MS + 3 * 60_000;
 
 describe("Idempotency Failure", () => {

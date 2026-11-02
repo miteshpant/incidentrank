@@ -1,6 +1,7 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
-const WRITE_BURST_MS = 30_000;
+const WRITE_BURST_MS = INCIDENT_START_MS;
 const REPORTING_JOB_MS = 5 * 60_000;
 
 export const timedEvents: TimedEvent[] = [

@@ -20,6 +20,7 @@ import {
 import { splitBrainIncidentCandidateUI } from "./split-brain-incident/candidate-ui";
 import { SPLIT_BRAIN_INCIDENT_SCORING } from "./split-brain-incident/scoring";
 import { scoreAuthoredAttempt } from "./authoring/score";
+import { INCIDENT_START_MS } from "./timing";
 
 interface TimedAction {
   atMs: number;
@@ -63,7 +64,7 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const NETWORK_PARTITION_MS = 30_000;
+const NETWORK_PARTITION_MS = INCIDENT_START_MS;
 const NETWORK_HEALED_MS = NETWORK_PARTITION_MS + 4 * 60_000;
 
 describe("Split-Brain Incident", () => {

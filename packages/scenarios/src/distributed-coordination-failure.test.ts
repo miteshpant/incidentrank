@@ -19,6 +19,10 @@ import {
 } from "./distributed-coordination-failure/definition";
 import { distributedCoordinationFailureCandidateUI } from "./distributed-coordination-failure/candidate-ui";
 import { DISTRIBUTED_COORDINATION_FAILURE_SCORING } from "./distributed-coordination-failure/scoring";
+import {
+  OWNERSHIP_STATE_STALE_MS,
+  STALENESS_WIDENS_MS,
+} from "./distributed-coordination-failure/timed-events";
 import { scoreAuthoredAttempt } from "./authoring/score";
 
 interface TimedAction {
@@ -62,9 +66,6 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
 
   return state;
 }
-
-const OWNERSHIP_STATE_STALE_MS = 30_000;
-const STALENESS_WIDENS_MS = OWNERSHIP_STATE_STALE_MS + 3 * 60_000;
 
 describe("Distributed Coordination Failure", () => {
   describe("Definition", () => {

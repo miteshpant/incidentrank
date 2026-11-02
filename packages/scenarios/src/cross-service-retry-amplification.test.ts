@@ -9,6 +9,7 @@ import {
 import type { CandidateAction, ControlValue } from "@incidentrank/simulator";
 import { describe, expect, it } from "vitest";
 import { crossServiceRetryAmplification } from "./cross-service-retry-amplification";
+import { INCIDENT_START_MS } from "./timing";
 import {
   CANCELLATION_PROPAGATION_KEY,
   CIRCUIT_BREAKER_KEY,
@@ -65,7 +66,6 @@ function runScenario(untilMs: number, actions: TimedAction[] = []) {
   return state;
 }
 
-const INCIDENT_START_MS = 60_000;
 const SECOND_WAVE_MS = INCIDENT_START_MS + 4 * 60_000;
 
 describe("Cross-Service Retry Amplification", () => {

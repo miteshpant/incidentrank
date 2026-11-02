@@ -1,4 +1,5 @@
 import type { TimedEvent } from "@incidentrank/simulator";
+import { INCIDENT_START_MS } from "../timing";
 
 // Ranking Service latency rises moderately enough that the Query
 // Coordinator begins holding connections open noticeably longer per
@@ -6,7 +7,7 @@ import type { TimedEvent } from "@incidentrank/simulator";
 // QUERY_CONCURRENCY_KEY/API_CAPACITY_KEY values are currently set --
 // including the dangerous "wait as long as it takes" defaults if the
 // candidate has not acted yet.
-const RANKING_DEGRADES_MS = 30_000;
+const RANKING_DEGRADES_MS = INCIDENT_START_MS;
 
 // The recovery-lag window: how long Index Cluster A/B connection
 // pressure and Feature Store QPS need, once ranking has genuinely been
