@@ -18,6 +18,7 @@ import { GenericResultScreen } from "./result-screen";
 import { GenericResumeScreen } from "./resume-screen";
 import { FinishIncidentDialog } from "./finish-incident-dialog";
 import { IncidentBrief } from "./incident-brief";
+import { HowToRespond } from "./how-to-respond";
 
 function usePreviousValues(
   values: Record<string, StateValue>,
@@ -187,6 +188,10 @@ function GenericIncidentConsoleActive({
   );
   const [finishDialogOpen, setFinishDialogOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
+  // Expanded by default on first reaching the solving screen (docs/
+  // implementation_plan/incidentrank-incident-solving-screen-ux-reorder.md
+  // §2). Never permanently hides — the trigger button still reopens it.
+  const [howToRespondOpen, setHowToRespondOpen] = useState(true);
   const previousValues = usePreviousValues(attempt.state.values);
   const [challengeLink, setChallengeLink] = useState<string | null>(null);
   const [challengeError, setChallengeError] = useState<string | null>(null);
@@ -307,7 +312,14 @@ function GenericIncidentConsoleActive({
         incidentStartMs={attempt.incidentStartMs}
       />
 
-      <div className="mx-auto flex w-full max-w-6xl justify-end px-6 pt-4">
+      <div className="mx-auto flex w-full max-w-6xl justify-end gap-2 px-6 pt-4">
+        <button
+          type="button"
+          onClick={() => setHowToRespondOpen(true)}
+          className="rounded-md border border-border px-3 py-1.5 font-mono text-xs transition-colors hover:border-foreground/40"
+        >
+          How to Respond
+        </button>
         <button
           type="button"
           onClick={() => setBriefOpen(true)}
@@ -317,6 +329,8 @@ function GenericIncidentConsoleActive({
         </button>
       </div>
 
+      <HowToRespond open={howToRespondOpen} onClose={() => setHowToRespondOpen(false)} />
+
       <IncidentBrief
         scenario={scenario}
         architecture={simulation.architecture}
@@ -324,85 +338,99 @@ function GenericIncidentConsoleActive({
         onClose={() => setBriefOpen(false)}
       />
 
-      <div className="mx-auto grid w-full max-w-6xl flex-1 grid-cols-1 gap-px bg-border lg:grid-cols-[1.1fr_0.9fr]">
-        <section className="bg-background p-6">
-          <ArchitectureView
-            architecture={simulation.architecture}
-            componentHealth={attempt.state.componentHealth}
-            selectedComponentId={selectedComponentId}
-            onSelectComponent={setSelectedComponentId}
-          />
-        </section>
+      {/* Architecture directly above the action controls (left column),
+          so actions begin right under System Architecture — the one
+          layout change this task makes. Metrics above Timeline (right
+          column), unchanged. */}
+      <div className="mx-auto grid w-full max-w-6xl grid-cols-1 lg:grid-cols-[1.1fr_0.9fr] lg:items-start lg:divide-x lg:divide-border">
+        <div className="flex flex-col divide-y divide-border bg-background">
+          <section className="p-6">
+            <ArchitectureView
+              architecture={simulation.architecture}
+              componentHealth={attempt.state.componentHealth}
+              selectedComponentId={selectedComponentId}
+              onSelectComponent={setSelectedComponentId}
+            />
+          </section>
 
-        <section className="bg-background p-6">
-          <GenericMetricsPanel
-            descriptor={candidateUI}
-            values={attempt.state.values}
-            previousValues={previousValues}
-            revenueLossUsd={attempt.state.customerImpact.revenueLossUsd}
-          />
+          <section className="p-6">
+            <GenericComponentPanel
+              componentId={selectedComponentId}
+              descriptor={candidateUI}
+              controls={simulation.controls}
+              state={attempt.state}
+              pendingControlValues={attempt.pendingControlValues}
+              hasPendingChanges={attempt.hasPendingChanges}
+              disabled={isTerminal}
+              incidentStarted={attempt.incidentStarted}
+              onChangePendingValue={attempt.setPendingValue}
+              onApplyChanges={attempt.applyChanges}
+            />
 
-          <div className="mt-6 rounded-md border border-border bg-surface p-4">
-            <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
-              Current Infrastructure Cost
-            </p>
-            <p className="mt-1 text-xl font-semibold tracking-tight">
-              {formatUsd(attempt.state.cost.currentMonthlyCostUsd)}/mo
-            </p>
-          </div>
-        </section>
-
-        <section className="bg-background p-6">
-          <GenericComponentPanel
-            componentId={selectedComponentId}
-            descriptor={candidateUI}
-            controls={simulation.controls}
-            state={attempt.state}
-            pendingControlValues={attempt.pendingControlValues}
-            hasPendingChanges={attempt.hasPendingChanges}
-            disabled={isTerminal}
-            incidentStarted={attempt.incidentStarted}
-            onChangePendingValue={attempt.setPendingValue}
-            onApplyChanges={attempt.applyChanges}
-          />
-
-          <div className="mt-6 border-t border-border pt-6">
-            <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
-              Candidate Judgment
-            </p>
-            <p className="mt-1 text-sm text-muted">
-              When you believe the system is sufficiently stabilized, declare
-              the incident finished.
-            </p>
-            <button
-              type="button"
-              onClick={() => {
-                trackEvent("finish_clicked", {
-                  scenarioSlug: scenario.slug,
-                  practiceOrAssessment: "practice",
-                });
-                setFinishDialogOpen(true);
-              }}
-              disabled={!canFinish}
-              className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Finish Incident
-            </button>
-            {attempt.finishError && !finishDialogOpen && (
-              <p className="mt-2 text-sm text-[#dc2626]" role="alert">
-                {attempt.finishError}
+            <div className="mt-6 border-t border-border pt-6">
+              <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                Candidate Judgment
               </p>
-            )}
-          </div>
-        </section>
+              <p className="mt-1 text-sm text-muted">
+                When you believe the system is sufficiently stabilized, declare
+                the incident finished.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  trackEvent("finish_clicked", {
+                    scenarioSlug: scenario.slug,
+                    practiceOrAssessment: "practice",
+                  });
+                  // How to Respond defaults open on first reaching this
+                  // screen — close it (and Incident Brief, if open) so it
+                  // never competes with the Finish confirmation dialog
+                  // for focus/role="dialog" uniqueness.
+                  setHowToRespondOpen(false);
+                  setBriefOpen(false);
+                  setFinishDialogOpen(true);
+                }}
+                disabled={!canFinish}
+                className="mt-3 rounded-md border border-border px-4 py-2 font-mono text-sm transition-colors hover:border-foreground/40 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Finish Incident
+              </button>
+              {attempt.finishError && !finishDialogOpen && (
+                <p className="mt-2 text-sm text-[#dc2626]" role="alert">
+                  {attempt.finishError}
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
 
-        <section className="bg-background p-6">
-          <GenericTimelinePanel
-            entries={attempt.timeline}
-            actionGroups={attempt.actionGroups}
-            descriptor={candidateUI}
-          />
-        </section>
+        <div className="flex flex-col divide-y divide-border bg-background">
+          <section className="p-6">
+            <GenericMetricsPanel
+              descriptor={candidateUI}
+              values={attempt.state.values}
+              previousValues={previousValues}
+              revenueLossUsd={attempt.state.customerImpact.revenueLossUsd}
+            />
+
+            <div className="mt-6 rounded-md border border-border bg-surface p-4">
+              <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
+                Current Infrastructure Cost
+              </p>
+              <p className="mt-1 text-xl font-semibold tracking-tight">
+                {formatUsd(attempt.state.cost.currentMonthlyCostUsd)}/mo
+              </p>
+            </div>
+          </section>
+
+          <section className="p-6">
+            <GenericTimelinePanel
+              entries={attempt.timeline}
+              actionGroups={attempt.actionGroups}
+              descriptor={candidateUI}
+            />
+          </section>
+        </div>
       </div>
 
       <FinishIncidentDialog

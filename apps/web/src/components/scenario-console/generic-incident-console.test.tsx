@@ -128,6 +128,39 @@ describe("GenericIncidentConsole", () => {
     expect(screen.getByText("Primary Database")).toBeInTheDocument();
   });
 
+  /**
+   * docs/implementation_plan/incidentrank-incident-solving-screen-ux-reorder.md
+   * §2: How to Respond is expanded by default once the candidate reaches
+   * the solving screen, and can be closed/reopened via its trigger
+   * button — mirrors Incident Brief's own interaction shell.
+   */
+  describe("How to Respond", () => {
+    it("is expanded by default once the incident starts", async () => {
+      await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
+      acknowledgeIncident();
+
+      expect(
+        screen.getByRole("heading", { name: "How to Respond" }),
+      ).toBeInTheDocument();
+    });
+
+    it("closes on Close button click and can be reopened via its trigger button", async () => {
+      await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
+      acknowledgeIncident();
+
+      const dialog = screen.getByRole("dialog", { name: "How to Respond" });
+      fireEvent.click(within(dialog).getByRole("button", { name: /close how to respond/i }));
+      expect(
+        screen.queryByRole("heading", { name: "How to Respond" }),
+      ).not.toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: /^how to respond$/i }));
+      expect(
+        screen.getByRole("heading", { name: "How to Respond" }),
+      ).toBeInTheDocument();
+    });
+  });
+
   it("Phase 6.1: reaches a resolved result view only after Finish Incident is confirmed, never automatically (candidate_declared scenario)", async () => {
     await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
     acknowledgeIncident();
