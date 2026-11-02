@@ -1,6 +1,14 @@
+import type { Metadata } from "next";
 import { SiteHeader } from "@/components/site-header";
 import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 import { ContactForm } from "./contact-form";
+
+export const metadata: Metadata = {
+  title: "Contact | IncidentRank",
+  description:
+    "Questions about using IncidentRank for hiring or engineering assessment — get in touch and we'll respond directly.",
+  alternates: { canonical: "/contact" },
+};
 
 export default function ContactPage() {
   return (

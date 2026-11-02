@@ -2,7 +2,11 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { attempts, scenarios } from "@incidentrank/db";
-import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
+import {
+  BUILT_IN_SCENARIO_CATALOG,
+  getBuiltInScenarioEntry,
+  toPublicScenarioMetadata,
+} from "@incidentrank/scenarios";
 import { db } from "@/lib/server/db";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
 import { redactAttemptForCandidate } from "@/lib/server/redact-attempt-for-candidate";
@@ -53,7 +57,7 @@ export async function ScenarioAttempts({ slug }: { slug: string }) {
       </Link>
 
       <div className="mt-4">
-        <ScenarioMetadata scenario={entry.definition} />
+        <ScenarioMetadata scenario={toPublicScenarioMetadata(entry.definition)} />
       </div>
 
       <h2 className="mt-10 font-mono text-xs uppercase tracking-wide text-muted">

@@ -1,6 +1,6 @@
-import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import type { PublicScenarioMetadata } from "@incidentrank/scenarios";
 
-const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
+const DIFFICULTY_LABEL: Record<PublicScenarioMetadata["difficulty"], string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
   senior: "Senior",
@@ -14,10 +14,13 @@ const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
  * time/category, skills, architecture nodes) — factored out of
  * LockedScenarioScreen so the "see this scenario's description" surface
  * on /attempts/incidents/[slug] renders identically rather than
- * duplicating this markup.
+ * duplicating this markup. Takes the public-safe projection, not the
+ * full ScenarioDefinition — this component (and every client it's
+ * rendered inside) never needs rules/scoring/timed events, and must
+ * never receive them (docs/implementation_plan/seopphase.md §1/§15).
  */
-export function ScenarioMetadata({ scenario }: { scenario: ScenarioDefinition }) {
-  const architecture = scenario.simulation.architecture;
+export function ScenarioMetadata({ scenario }: { scenario: PublicScenarioMetadata }) {
+  const architecture = scenario.architecture;
 
   return (
     <>
@@ -39,18 +42,18 @@ export function ScenarioMetadata({ scenario }: { scenario: ScenarioDefinition })
         <div>
           <dt className="uppercase tracking-wide text-muted">Category</dt>
           <dd className="mt-1 text-foreground">
-            {scenario.library?.category ?? "Incident Response"}
+            {scenario.category ?? "Incident Response"}
           </dd>
         </div>
       </dl>
 
-      {scenario.library && scenario.library.skills.length > 0 && (
+      {scenario.publicSkills && scenario.publicSkills.length > 0 && (
         <div className="mt-6">
           <p className="font-mono text-[10px] uppercase tracking-wide text-muted">
             Skills
           </p>
           <ul className="mt-2 flex flex-wrap gap-1.5">
-            {scenario.library.skills.map((skill) => (
+            {scenario.publicSkills.map((skill) => (
               <li
                 key={skill}
                 className="rounded border border-border px-2 py-0.5 text-xs text-muted"

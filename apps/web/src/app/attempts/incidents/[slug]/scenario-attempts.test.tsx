@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDb, scenarios, users, attempts, type Db } from "@incidentrank/db";
-import { paymentRetryStorm } from "@incidentrank/scenarios";
+import { paymentRetryStorm, toPublicScenarioMetadata } from "@incidentrank/scenarios";
 
 const TEST_AUTH_ID = "test-scenario-attempts-page";
 const OTHER_AUTH_ID = "test-scenario-attempts-other-user";
@@ -86,7 +86,9 @@ describe("ScenarioAttempts", () => {
     expect(
       screen.getByRole("heading", { name: "Payment Retry Storm" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(paymentRetryStorm.description)).toBeInTheDocument();
+    expect(
+      screen.getByText(toPublicScenarioMetadata(paymentRetryStorm).description),
+    ).toBeInTheDocument();
     expect(screen.getByText("742 / 1000")).toBeInTheDocument();
   });
 

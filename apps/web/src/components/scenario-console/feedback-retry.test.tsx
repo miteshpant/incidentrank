@@ -1,6 +1,10 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
+import {
+  BUILT_IN_SCENARIO_CATALOG,
+  getBuiltInScenarioEntry,
+  toPublicScenarioMetadata,
+} from "@incidentrank/scenarios";
 import { GenericIncidentConsole } from "./generic-incident-console";
 
 vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
@@ -56,6 +60,12 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === "string" ? input : input.toString();
+
+        if (url.includes("/simulation")) {
+          return new Response(JSON.stringify({ simulation: entry.definition.simulation }), {
+            status: 200,
+          });
+        }
 
         if (url.startsWith("/api/attempts?scenarioSlug=")) {
           return new Response(JSON.stringify({ attempt: null }), { status: 200 });
@@ -116,8 +126,7 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
 
     render(
       <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
+        scenario={toPublicScenarioMetadata(entry.definition)}
         candidateUI={entry.candidateUI}
       />,
     );
@@ -168,6 +177,12 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
       vi.fn(async (input: RequestInfo | URL) => {
         const url = typeof input === "string" ? input : input.toString();
 
+        if (url.includes("/simulation")) {
+          return new Response(JSON.stringify({ simulation: entry.definition.simulation }), {
+            status: 200,
+          });
+        }
+
         if (url.startsWith("/api/attempts?scenarioSlug=")) {
           return new Response(JSON.stringify({ attempt: null }), { status: 200 });
         }
@@ -205,8 +220,7 @@ describe("Post-incident feedback retry after a 409 (terminal-persistence race)",
 
     render(
       <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
+        scenario={toPublicScenarioMetadata(entry.definition)}
         candidateUI={entry.candidateUI}
       />,
     );

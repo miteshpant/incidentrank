@@ -1,7 +1,12 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import { eq } from "drizzle-orm";
 import { scenarios } from "@incidentrank/db";
-import { BUILT_IN_SCENARIO_CATALOG, listBuiltInScenarioEntries } from "@incidentrank/scenarios";
+import {
+  BUILT_IN_SCENARIO_CATALOG,
+  listBuiltInScenarioEntries,
+  toPublicScenarioMetadata,
+} from "@incidentrank/scenarios";
 import { SiteHeader } from "@/components/site-header";
 import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 import { getOrCreateCurrentUser } from "@/lib/server/current-user";
@@ -13,6 +18,13 @@ import { LibraryBrowser, type LibraryEntry } from "./library-browser";
 // Filters/search/sort live in the URL query string and practice progress
 // is per-user — never a meaningful static version.
 export const instant = false;
+
+export const metadata: Metadata = {
+  title: "Practice Incidents | IncidentRank",
+  description:
+    "Live, operational system design and production-incident practice scenarios — diagnose, act, and stabilize real running systems. No multiple choice, no free text.",
+  alternates: { canonical: "/incidents" },
+};
 
 /**
  * The public scenario library (docs/implementation_plan/phase6.md's
@@ -46,7 +58,7 @@ export async function LibraryContent() {
     .filter((entry) => entry.definition.library)
     .filter((entry) => publishedBySlug.get(entry.definition.slug) ?? true)
     .map((entry) => ({
-      definition: entry.definition,
+      definition: toPublicScenarioMetadata(entry.definition),
       progress: progressBySlug[entry.definition.slug] ?? null,
     }));
 

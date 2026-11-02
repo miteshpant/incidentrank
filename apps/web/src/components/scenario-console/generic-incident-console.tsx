@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import type { ScenarioSimulationDefinition, StateValue } from "@incidentrank/simulator";
-import type { CandidateUIDescriptor, ScenarioDefinition } from "@incidentrank/scenarios";
+import type { CandidateUIDescriptor, PublicScenarioMetadata } from "@incidentrank/scenarios";
 import { useIncidentAttempt, type ResumeSeed } from "@/lib/use-incident-attempt";
 import { findActiveAttempt, fetchResumeSeed } from "@/lib/attempt-persistence";
 import { trackEvent } from "@/lib/analytics";
@@ -36,8 +36,15 @@ function usePreviousValues(
 }
 
 interface GenericIncidentConsoleProps {
-  scenario: ScenarioDefinition;
-  simulation: ScenarioSimulationDefinition;
+  /** Public-safe projection only — the full ScenarioDefinition (and its
+   * private `.simulation`) is never passed into this or any client
+   * component as a prop; a prop would be serialized into the page's RSC
+   * payload for every visitor, before any Acknowledge click
+   * (docs/implementation_plan/seopphase.md §1/§15). The real
+   * ScenarioSimulationDefinition is instead fetched client-side from
+   * GET /api/incidents/[slug]/simulation, gated by the same server-side
+   * access check the page itself already enforces. */
+  scenario: PublicScenarioMetadata;
   candidateUI: CandidateUIDescriptor;
 }
 
@@ -48,11 +55,12 @@ interface GenericIncidentConsoleProps {
  * (practice mode) rather than the server-authoritative runtime
  * (assessment mode). This is what makes "adding scenario #21 requires no
  * new route/component" true: every built-in scenario's practice page
- * renders through this one component, parameterized only by its
- * ScenarioDefinition/simulation/candidateUI. Payment Retry Storm's own
- * hand-written IncidentConsole (apps/web/src/app/incidents/
- * payment-retry-storm/incident-console.tsx) is preserved unchanged
- * alongside this — not replaced — per the Phase 6 promotion contract.
+ * renders through this one component, parameterized only by its public
+ * scenario metadata/candidateUI plus a lazily-fetched simulation config.
+ * Payment Retry Storm's own hand-written IncidentConsole
+ * (apps/web/src/app/incidents/payment-retry-storm/incident-console.tsx)
+ * is preserved unchanged alongside this — not replaced — per the Phase 6
+ * promotion contract.
  *
  * Phase 7.3: before mounting useIncidentAttempt, checks whether the
  * signed-in candidate already has an in-progress practice attempt for
@@ -63,14 +71,56 @@ interface GenericIncidentConsoleProps {
  * nothing) before the hook mounts, not in an effect afterward. Anonymous
  * candidates skip the lookup entirely (no persisted attempt exists for
  * them to resume).
+ *
+ * The real ScenarioSimulationDefinition is fetched alongside that same
+ * lookup — useIncidentAttempt needs the full simulation object the
+ * instant it mounts, for both the fresh-briefing path and (especially)
+ * the resume path, which never passes through an Acknowledge click at
+ * all. Fetching unconditionally here (rather than only after
+ * Acknowledge) covers both paths uniformly without special-casing
+ * resume, and still closes the leak: a crawler or anonymous visitor who
+ * never executes client JS never issues this fetch at all, so the
+ * private payload never appears in server-rendered HTML or the RSC
+ * payload — only in a same-origin API response to an actual browser.
  */
 export function GenericIncidentConsole(props: GenericIncidentConsoleProps) {
   const { isSignedIn, isLoaded } = useAuth();
   const [fetchedSeed, setFetchedSeed] = useState<{ seed: ResumeSeed | null } | null>(null);
+  const [fetchedSimulation, setFetchedSimulation] = useState<{
+    simulation: ScenarioSimulationDefinition | null;
+    error: boolean;
+  } | null>(null);
 
   useEffect(() => {
-    if (!isLoaded || !isSignedIn) return;
+    if (!isLoaded) return;
     let cancelled = false;
+
+    fetch(`/api/incidents/${props.scenario.slug}/simulation`)
+      .then(async (response) => {
+        if (!response.ok) {
+          if (!cancelled) setFetchedSimulation({ simulation: null, error: true });
+          return;
+        }
+        const data = (await response.json()) as { simulation: ScenarioSimulationDefinition };
+        if (!cancelled) setFetchedSimulation({ simulation: data.simulation, error: false });
+      })
+      .catch(() => {
+        if (!cancelled) setFetchedSimulation({ simulation: null, error: true });
+      });
+
+    if (!isSignedIn) {
+      // No persisted attempt can exist for a signed-out candidate — skip
+      // the lookup, but still resolve asynchronously (never a synchronous
+      // setState call inside the effect body) to match the signed-in
+      // branch's own async resolution shape.
+      Promise.resolve().then(() => {
+        if (!cancelled) setFetchedSeed({ seed: null });
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
     findActiveAttempt(props.scenario.slug).then((attemptId) => {
       if (!attemptId) {
         if (!cancelled) setFetchedSeed({ seed: null });
@@ -88,7 +138,7 @@ export function GenericIncidentConsole(props: GenericIncidentConsoleProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded, isSignedIn]);
 
-  if (!isLoaded) {
+  if (!isLoaded || fetchedSeed === null || fetchedSimulation === null) {
     return (
       <main className="flex flex-1 items-center justify-center px-6 py-16">
         <p className="text-sm text-muted">Loading…</p>
@@ -96,19 +146,23 @@ export function GenericIncidentConsole(props: GenericIncidentConsoleProps) {
     );
   }
 
-  // Signed-out candidates have no persisted attempt to resume — skip the
-  // lookup entirely. Signed-in candidates wait for the lookup to settle
-  // (fetchedSeed starts null) before mounting the hook, since
-  // useIncidentAttempt only ever adopts a resumeSeed on its first render.
-  if (isSignedIn && fetchedSeed === null) {
+  if (fetchedSimulation.error || !fetchedSimulation.simulation) {
     return (
       <main className="flex flex-1 items-center justify-center px-6 py-16">
-        <p className="text-sm text-muted">Loading…</p>
+        <p className="text-sm text-muted">
+          This incident couldn&apos;t be loaded. Refresh to try again.
+        </p>
       </main>
     );
   }
 
-  return <GenericIncidentConsoleActive {...props} resumeSeed={fetchedSeed?.seed ?? null} />;
+  return (
+    <GenericIncidentConsoleActive
+      {...props}
+      simulation={fetchedSimulation.simulation}
+      resumeSeed={fetchedSeed.seed}
+    />
+  );
 }
 
 function GenericIncidentConsoleActive({
@@ -116,7 +170,10 @@ function GenericIncidentConsoleActive({
   simulation,
   candidateUI,
   resumeSeed,
-}: GenericIncidentConsoleProps & { resumeSeed: ResumeSeed | null }) {
+}: GenericIncidentConsoleProps & {
+  simulation: ScenarioSimulationDefinition;
+  resumeSeed: ResumeSeed | null;
+}) {
   const { isSignedIn, isLoaded } = useAuth();
   const attempt = useIncidentAttempt(
     simulation,

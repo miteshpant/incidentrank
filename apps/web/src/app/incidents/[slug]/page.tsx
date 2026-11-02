@@ -1,30 +1,64 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { and, eq } from "drizzle-orm";
-import { attempts } from "@incidentrank/db";
-import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
 import {
-  evaluatePracticeAccess,
-  type IncidentPassAccessState,
-  type PaidEntitlementState,
-} from "@/lib/practice-access";
-import { isDevUnlockPaidScenarios } from "@/lib/server/dev-unlock";
-import { getOrCreateCurrentUser } from "@/lib/server/current-user";
+  BUILT_IN_SCENARIO_CATALOG,
+  getBuiltInScenarioEntry,
+  toPublicScenarioMetadata,
+} from "@incidentrank/scenarios";
 import {
   getActiveScenarioBySlug,
   isBuiltInScenarioCurrentlyPublished,
 } from "@/lib/server/scenario-registry";
-import { isCurrentWeeklyChallenge } from "@/lib/server/weekly-challenge";
-import { getScenarioPassAccess } from "@/lib/server/pass-access";
-import { evaluatePaidPracticeEntitlement } from "@/lib/server/stripe/entitlements";
-import { db } from "@/lib/server/db";
+import { resolveBuiltInScenarioPracticeAccess } from "@/lib/server/resolve-practice-access";
+import { appBaseUrl } from "@/lib/server/app-url";
 import { GenericIncidentConsole } from "@/components/scenario-console/generic-incident-console";
 import { LockedScenarioScreen } from "@/components/scenario-console/locked-scenario-screen";
+import { PublicScenarioLanding } from "@/components/scenario-console/public-scenario-landing";
+import { ScenarioStructuredData } from "@/components/scenario-console/scenario-structured-data";
 import { PageViewTracker } from "@/components/analytics/page-view-tracker";
 
 // Per-scenario, per-request routing decision (unknown slug -> notFound(),
 // locked vs. playable) — never a meaningful static/prerendered version,
 // same reasoning as organizations/[slug]/page.tsx's own `instant = false`.
 export const instant = false;
+
+/**
+ * Public SEO metadata only — derived from PublicScenarioMetadata, never
+ * the full ScenarioDefinition (docs/implementation_plan/seopphase.md §5).
+ * Returns {} for an unknown/unpublished slug so the page's own notFound()
+ * remains the single source of truth for 404 behavior.
+ */
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
+  const { slug } = await params;
+  const entry = getBuiltInScenarioEntry(BUILT_IN_SCENARIO_CATALOG, slug);
+  if (!entry || !(await isBuiltInScenarioCurrentlyPublished(slug))) return {};
+
+  const meta = toPublicScenarioMetadata(entry.definition);
+  const url = `${appBaseUrl()}/incidents/${slug}`;
+  const title = `${meta.name} — System Design Incident Practice | IncidentRank`;
+
+  return {
+    title,
+    description: meta.description,
+    alternates: { canonical: url },
+    openGraph: {
+      title,
+      description: meta.description,
+      url,
+      siteName: "IncidentRank",
+      type: "website",
+    },
+    twitter: {
+      card: "summary",
+      title,
+      description: meta.description,
+    },
+  };
+}
 
 /**
  * The generic practice route for every built-in scenario except Payment
@@ -49,87 +83,53 @@ export default async function ScenarioPracticePage({
   // directly from the catalog rather than through getActiveScenarioBySlug.
   if (!(await isBuiltInScenarioCurrentlyPublished(slug))) notFound();
 
-  const devUnlockPaid = await isDevUnlockPaidScenarios();
+  // The only scenario-shaped prop ever passed into a client component
+  // below — never the full entry.definition, and never
+  // entry.definition.simulation either (see docs/implementation_plan/
+  // seopphase.md §1/§15: the full ScenarioSimulationDefinition —
+  // rules/successCondition/failureCondition/timedEvents/
+  // actionClassifications — must never cross the server/client boundary
+  // via a serialized prop, which it would if passed here even for a
+  // visitor who never starts the incident. GenericIncidentConsole instead
+  // fetches it lazily from GET /api/incidents/[slug]/simulation, gated by
+  // the exact same resolveBuiltInScenarioPracticeAccess check below.
+  const publicScenario = toPublicScenarioMetadata(entry.definition);
 
   // Phase 10F: persisted scenarios.is_free is authoritative, not the
   // compiled definition literal — lets a free incident rotate without a
   // code deploy. getActiveScenarioBySlug is already scoped to
   // ownershipType="incidentrank" (see its own doc comment), so this can
   // never read a different organization's row for a colliding slug.
-  // Resolved once, before any gating below, so the short-circuit at the
-  // next `if` and the final evaluatePracticeAccess call can never
-  // disagree about whether this scenario is free.
   const scenarioForAccess = await getActiveScenarioBySlug(slug);
-  const persistedOrCodeIsFree = scenarioForAccess?.isFree ?? entry.definition.isFree;
-  // Weekly Challenge (phase-challege-version.md §3): the currently active
-  // challenge is playable for free for the duration it's active,
-  // regardless of its normal paid/free status — folded directly into the
-  // isFree-equivalent boolean here (an explicit OR, not a fallback) so
-  // every downstream branch (locked screen never renders, no
-  // entitlement/pass lookup needed) behaves exactly as an ordinarily-free
-  // scenario already does. Applies to practice only — never touches
-  // assessment authorization.
-  const isFree =
-    persistedOrCodeIsFree ||
-    (scenarioForAccess ? await isCurrentWeeklyChallenge(scenarioForAccess.id) : false);
+  const { access, hasExistingInProgressAttempt, availablePassId } =
+    await resolveBuiltInScenarioPracticeAccess(scenarioForAccess, entry.definition.isFree);
 
-  let paidEntitlementState: PaidEntitlementState = null;
-  let incidentPassState: IncidentPassAccessState | null = null;
-  let availablePassId: string | undefined;
-  if (!devUnlockPaid && !isFree) {
-    const user = await getOrCreateCurrentUser();
-    const scenarioRow = user ? scenarioForAccess : null;
-    if (user && scenarioRow) {
-      // A candidate resuming (refresh/revisit) an already-in-progress,
-      // pass-funded attempt must never be locked out: by the time an
-      // attempt exists, its funding pass is already "consumed" (not
-      // available/bound), so the pass-state check below would otherwise
-      // show the locked screen on every refresh. Mirrors the same
-      // existing-attempt-first ordering fix already applied to
-      // POST /api/attempts/route.ts for this exact regression class.
-      const existingAttempt = await db.query.attempts.findFirst({
-        where: and(
-          eq(attempts.userId, user.id),
-          eq(attempts.scenarioId, scenarioRow.id),
-          eq(attempts.attemptType, "practice"),
-          eq(attempts.status, "in_progress"),
-        ),
-      });
-      if (existingAttempt) {
-        return (
-          <>
-            <PageViewTracker eventName="incident_view" scenarioSlug={slug} />
-            <GenericIncidentConsole
-              scenario={entry.definition}
-              simulation={entry.definition.simulation}
-              candidateUI={entry.candidateUI}
-            />
-          </>
-        );
-      }
-
-      // Phase 9: Pro/Founding takes precedence over the Incident Pass —
-      // when a paid entitlement already grants access, the pass must
-      // never be looked up/bound/consumed at all (phase9.md §31/§50).
-      paidEntitlementState = await evaluatePaidPracticeEntitlement(user.id);
-      if (!paidEntitlementState) {
-        const passAccess = await getScenarioPassAccess(user.id, scenarioRow.id);
-        incidentPassState = passAccess.state;
-        availablePassId = passAccess.passId;
-      }
-    }
+  // A candidate resuming (refresh/revisit) an already-in-progress,
+  // pass-funded attempt must never be locked out: by the time an attempt
+  // exists, its funding pass is already "consumed" (not available/bound),
+  // so the pass-state check would otherwise show the locked screen on
+  // every refresh. Mirrors the same existing-attempt-first ordering fix
+  // already applied to POST /api/attempts/route.ts for this exact
+  // regression class.
+  if (hasExistingInProgressAttempt) {
+    return (
+      <>
+        <PageViewTracker eventName="incident_view" scenarioSlug={slug} />
+        <PublicScenarioLanding metadata={publicScenario} />
+        <ScenarioStructuredData metadata={publicScenario} />
+        <GenericIncidentConsole scenario={publicScenario} candidateUI={entry.candidateUI} />
+      </>
+    );
   }
 
-  const access = evaluatePracticeAccess(
-    { isFree },
-    { devUnlockPaid, paidEntitlementState, incidentPassState },
-  );
   if (!access.allowed) {
     return (
       <>
         <PageViewTracker eventName="incident_view" scenarioSlug={slug} />
+        <PublicScenarioLanding metadata={publicScenario} />
+        <ScenarioStructuredData metadata={publicScenario} />
         <LockedScenarioScreen
-          scenario={entry.definition}
+          scenario={publicScenario}
           access={access}
           availablePassId={availablePassId}
         />
@@ -140,11 +140,9 @@ export default async function ScenarioPracticePage({
   return (
     <>
       <PageViewTracker eventName="incident_view" scenarioSlug={slug} />
-      <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
-        candidateUI={entry.candidateUI}
-      />
+      <PublicScenarioLanding metadata={publicScenario} />
+      <ScenarioStructuredData metadata={publicScenario} />
+      <GenericIncidentConsole scenario={publicScenario} candidateUI={entry.candidateUI} />
     </>
   );
 }

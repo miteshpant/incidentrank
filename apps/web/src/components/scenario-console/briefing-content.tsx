@@ -1,8 +1,8 @@
 import type { ArchitectureDefinition } from "@incidentrank/simulator";
-import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import type { PublicScenarioMetadata } from "@incidentrank/scenarios";
 import { StructuredDescription } from "./structured-description";
 
-const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
+const DIFFICULTY_LABEL: Record<PublicScenarioMetadata["difficulty"], string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
   senior: "Senior",
@@ -11,13 +11,10 @@ const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
   principal: "Principal",
 };
 
-export interface BriefingContentScenario {
-  name: string;
-  description: string;
-  difficulty: ScenarioDefinition["difficulty"];
-  estimatedMinutes: number;
-  library?: ScenarioDefinition["library"];
-}
+export type BriefingContentScenario = Pick<
+  PublicScenarioMetadata,
+  "name" | "description" | "difficulty" | "estimatedMinutes" | "category" | "publicSkills"
+>;
 
 interface BriefingContentProps {
   scenario: BriefingContentScenario;
@@ -54,16 +51,16 @@ export function BriefingContent({ scenario, architecture }: BriefingContentProps
         <div>
           <dt className="uppercase tracking-wide text-muted">Category</dt>
           <dd className="mt-1 text-foreground">
-            {scenario.library?.category ?? "Incident Response"}
+            {scenario.category ?? "Incident Response"}
           </dd>
         </div>
       </dl>
 
-      {scenario.library && scenario.library.skills.length > 0 && (
+      {scenario.publicSkills && scenario.publicSkills.length > 0 && (
         <div className="mt-6">
           <p className="font-mono text-[10px] uppercase tracking-wide text-muted">Skills</p>
           <ul className="mt-2 flex flex-wrap gap-1.5">
-            {scenario.library.skills.map((skill) => (
+            {scenario.publicSkills.map((skill) => (
               <li
                 key={skill}
                 className="rounded border border-border px-2 py-0.5 text-xs text-muted"

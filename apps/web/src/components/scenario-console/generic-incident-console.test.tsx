@@ -4,7 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
 
 import { mockAuthState } from "@/test/clerk-mock";
-import { BUILT_IN_SCENARIO_CATALOG, getBuiltInScenarioEntry } from "@incidentrank/scenarios";
+import {
+  BUILT_IN_SCENARIO_CATALOG,
+  getBuiltInScenarioEntry,
+  toPublicScenarioMetadata,
+  type PublicScenarioMetadata,
+} from "@incidentrank/scenarios";
+import type { CandidateUIDescriptor } from "@incidentrank/scenarios";
 import { GenericIncidentConsole } from "./generic-incident-console";
 
 const entry = getBuiltInScenarioEntry(
@@ -23,6 +29,22 @@ function acknowledgeIncident() {
   fireEvent.click(screen.getByRole("button", { name: /acknowledge incident/i }));
 }
 
+/**
+ * GenericIncidentConsole now fetches its simulation config lazily (never
+ * as a server-passed prop — see docs/implementation_plan/seopphase.md
+ * §1/§15), so every render in this file must flush that pending fetch
+ * before the briefing screen appears.
+ */
+async function renderConsole(
+  scenario: PublicScenarioMetadata,
+  candidateUI: CandidateUIDescriptor,
+) {
+  render(<GenericIncidentConsole scenario={scenario} candidateUI={candidateUI} />);
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   mockAuthState.isSignedIn = false;
@@ -36,6 +58,11 @@ beforeEach(() => {
     "fetch",
     vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/simulation")) {
+        return new Response(JSON.stringify({ simulation: entry.definition.simulation }), {
+          status: 200,
+        });
+      }
       if (url.includes("/finish-preview")) {
         return new Response(
           JSON.stringify({
@@ -67,14 +94,8 @@ afterEach(() => {
  * built-in scenario with zero scenario-specific code.
  */
 describe("GenericIncidentConsole", () => {
-  it("shows the scenario's own name and metadata on the briefing screen", () => {
-    render(
-      <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
-        candidateUI={entry.candidateUI}
-      />,
-    );
+  it("shows the scenario's own name and metadata on the briefing screen", async () => {
+    await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
 
     expect(
       screen.getByRole("heading", { name: "Database Connection Saturation" }),
@@ -82,14 +103,8 @@ describe("GenericIncidentConsole", () => {
     expect(screen.getByText(/senior/i)).toBeInTheDocument();
   });
 
-  it("shows candidate-safe detail/briefing preview fields: skills, architecture, free/paid status", () => {
-    render(
-      <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
-        candidateUI={entry.candidateUI}
-      />,
-    );
+  it("shows candidate-safe detail/briefing preview fields: skills, architecture, free/paid status", async () => {
+    await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
 
     // database-connection-saturation is paid (one free scenario per
     // difficulty level now lives on a different Senior slug,
@@ -104,14 +119,8 @@ describe("GenericIncidentConsole", () => {
     }
   });
 
-  it("starts the incident and shows the scenario's own architecture nodes", () => {
-    render(
-      <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
-        candidateUI={entry.candidateUI}
-      />,
-    );
+  it("starts the incident and shows the scenario's own architecture nodes", async () => {
+    await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
 
     acknowledgeIncident();
 
@@ -120,13 +129,7 @@ describe("GenericIncidentConsole", () => {
   });
 
   it("Phase 6.1: reaches a resolved result view only after Finish Incident is confirmed, never automatically (candidate_declared scenario)", async () => {
-    render(
-      <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
-        candidateUI={entry.candidateUI}
-      />,
-    );
+    await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
     acknowledgeIncident();
 
     advanceSeconds(31);
@@ -177,6 +180,11 @@ describe("GenericIncidentConsole", () => {
   it("Phase 6.1: declaring Finish before stabilizing shows a declared_unstable result, not a resolved one", async () => {
     vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/simulation")) {
+        return new Response(JSON.stringify({ simulation: entry.definition.simulation }), {
+          status: 200,
+        });
+      }
       if (url.includes("/finish-preview")) {
         return new Response(
           JSON.stringify({ outcome: "declared_unstable", completionTier: null, score: { total: 410, breakdown: {}, maxPoints: {} } }),
@@ -186,13 +194,7 @@ describe("GenericIncidentConsole", () => {
       return new Response(JSON.stringify({ score: { total: 0, breakdown: {}, maxPoints: {} } }), { status: 200 });
     });
 
-    render(
-      <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
-        candidateUI={entry.candidateUI}
-      />,
-    );
+    await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
     acknowledgeIncident();
     advanceSeconds(31);
 
@@ -219,6 +221,11 @@ describe("GenericIncidentConsole", () => {
     // later wall-clock Finish-click time instead.
     vi.mocked(global.fetch).mockImplementation(async (input: RequestInfo | URL) => {
       const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/simulation")) {
+        return new Response(JSON.stringify({ simulation: entry.definition.simulation }), {
+          status: 200,
+        });
+      }
       if (url.includes("/finish-preview")) {
         return new Response(
           JSON.stringify({
@@ -233,13 +240,7 @@ describe("GenericIncidentConsole", () => {
       return new Response(JSON.stringify({ score: { total: 0, breakdown: {}, maxPoints: {} } }), { status: 200 });
     });
 
-    render(
-      <GenericIncidentConsole
-        scenario={entry.definition}
-        simulation={entry.definition.simulation}
-        candidateUI={entry.candidateUI}
-      />,
-    );
+    await renderConsole(toPublicScenarioMetadata(entry.definition), entry.candidateUI);
     acknowledgeIncident();
 
     advanceSeconds(31);

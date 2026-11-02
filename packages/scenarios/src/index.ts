@@ -1,4 +1,6 @@
 export type { ScenarioDefinition, ScenarioLibraryMetadata, ScenarioCategory, ScenarioStructure } from "./types";
+export type { PublicScenarioMetadata } from "./public-metadata";
+export { toPublicScenarioMetadata } from "./public-metadata";
 export { buildIncidentNarrative, hasIncidentNarrative } from "./narrative";
 export type { IncidentNarrative, IncidentNarrativeEntry } from "./narrative";
 export {

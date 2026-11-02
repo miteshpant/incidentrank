@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import type { PublicScenarioMetadata } from "@incidentrank/scenarios";
 import type { LibraryEntry } from "./library-browser";
 
 let currentSearchParams = new URLSearchParams();
@@ -13,79 +13,63 @@ vi.mock("next/navigation", () => ({
 
 import { LibraryBrowser } from "./library-browser";
 
-function scenario(overrides: Partial<ScenarioDefinition> = {}): ScenarioDefinition {
-  const base: ScenarioDefinition = {
-    id: "test-scenario",
+function scenario(overrides: Partial<PublicScenarioMetadata> = {}): PublicScenarioMetadata {
+  const base: PublicScenarioMetadata = {
     slug: "test-scenario",
-    version: 1,
     name: "Test Scenario",
     description: "A test scenario description.",
     difficulty: "senior",
     estimatedMinutes: 15,
     isFree: true,
-    structure: "linear",
-    // Simulation is never read by LibraryBrowser — a minimal stub is fine.
-    simulation: {} as ScenarioDefinition["simulation"],
-    library: {
-      category: "Databases & Storage",
-      tags: ["Postgres"],
-      skills: ["Diagnosing things"],
-      shortDescription: "Short description.",
-    },
+    category: "Databases & Storage",
+    tags: ["Postgres"],
+    publicSkills: ["Diagnosing things"],
+    architecture: { nodes: [], edges: [] },
   };
   return { ...base, ...overrides };
 }
 
 const KAFKA: LibraryEntry = {
   definition: scenario({
-    id: "kafka-consumer-lag",
     slug: "kafka-consumer-lag",
     name: "Kafka Consumer Lag",
     difficulty: "intermediate",
     estimatedMinutes: 8,
     isFree: true,
-    library: {
-      category: "Messaging & Streaming",
-      tags: ["Kafka", "Backpressure"],
-      skills: ["Diagnosing lag"],
-      shortDescription: "A Kafka consumer group falls behind.",
-    },
+    category: "Messaging & Streaming",
+    tags: ["Kafka", "Backpressure"],
+    publicSkills: ["Diagnosing lag"],
+    description: "A Kafka consumer group falls behind.",
   }),
   progress: null,
 };
 
 const CACHE_STAMPEDE: LibraryEntry = {
   definition: scenario({
-    id: "cache-stampede",
     slug: "cache-stampede",
     name: "Cache Stampede",
     difficulty: "staff",
     estimatedMinutes: 35,
     isFree: false,
-    library: {
-      category: "Caching",
-      tags: ["Redis", "Concurrency"],
-      skills: ["Diagnosing stampedes"],
-      shortDescription: "A cache expiry causes a thundering herd.",
-    },
+    category: "Caching",
+    tags: ["Redis", "Concurrency"],
+    publicSkills: ["Diagnosing stampedes"],
+    description: "A cache expiry causes a thundering herd.",
   }),
   progress: null,
 };
 
 const DB_SATURATION: LibraryEntry = {
   definition: scenario({
-    id: "database-connection-saturation",
     slug: "database-connection-saturation",
     name: "Database Connection Saturation",
     difficulty: "senior",
     estimatedMinutes: 15,
     isFree: true,
-    library: {
-      category: "Databases & Storage",
-      tags: ["Postgres", "Connection Pooling"],
-      skills: ["Diagnosing pool exhaustion"],
-      shortDescription: "A connection pool is exhausted.",
-    },
+    category: "Databases & Storage",
+    tags: ["Postgres", "Connection Pooling"],
+    publicSkills: ["Diagnosing pool exhaustion"],
+    description: "A connection pool is exhausted.",
   }),
   progress: { attemptCount: 2, bestScore: 870, completed: true },
 };

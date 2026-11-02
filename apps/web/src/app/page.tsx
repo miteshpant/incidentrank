@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { scenarios } from "@incidentrank/db";
@@ -8,6 +9,49 @@ import { HomeCtaRow } from "@/components/home/home-cta-row";
 import { WeeklyChallengeCard } from "@/components/home/weekly-challenge-card";
 import { getActiveWeeklyChallenge } from "@/lib/server/weekly-challenge";
 import { db } from "@/lib/server/db";
+import { appBaseUrl } from "@/lib/server/app-url";
+
+export const metadata: Metadata = {
+  title: "IncidentRank — Production is the test.",
+  description:
+    "Diagnose incidents. Operate the system. Restore production. Prove how you think under pressure.",
+  alternates: { canonical: "/" },
+};
+
+/**
+ * Organization + SoftwareApplication structured data (docs/
+ * implementation_plan/seopphase.md §11) — only real, supported product
+ * facts: name/description/category. No fabricated ratings, reviews,
+ * certifications, or pricing claims.
+ */
+function HomeStructuredData() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Organization",
+        name: "IncidentRank",
+        url: appBaseUrl(),
+      },
+      {
+        "@type": "SoftwareApplication",
+        name: "IncidentRank",
+        applicationCategory: "EducationalApplication",
+        operatingSystem: "Web",
+        description:
+          "Diagnose incidents. Operate the system. Restore production. Prove how you think under pressure.",
+        url: appBaseUrl(),
+      },
+    ],
+  };
+
+  return (
+    <script
+      type="application/ld+json"
+      dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+    />
+  );
+}
 
 const HOW_IT_WORKS = [
   {
@@ -44,6 +88,7 @@ export default async function HomePage() {
 
   return (
     <main className="flex flex-1 flex-col">
+      <HomeStructuredData />
       <PageViewTracker eventName="homepage_view" />
       <SiteHeader />
 

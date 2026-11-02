@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import type { PublicScenarioMetadata } from "@incidentrank/scenarios";
 import type { PracticeAccessResult } from "@/lib/practice-access";
 import { UseIncidentPassButton } from "./use-incident-pass-button";
 import { ScenarioMetadata } from "./scenario-metadata";
@@ -42,7 +42,7 @@ export function LockedScenarioScreen({
   access,
   availablePassId,
 }: {
-  scenario: ScenarioDefinition;
+  scenario: PublicScenarioMetadata;
   access?: PracticeAccessResult;
   /** Required to render the "Use Incident Pass" affordance — only
    * meaningful when access.reason === "incident_pass_available". */

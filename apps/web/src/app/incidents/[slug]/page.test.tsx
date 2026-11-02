@@ -1,8 +1,42 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
 import { createDb, users, attempts, incidentPasses, type Db } from "@incidentrank/db";
 import { grantIncidentPass, bindIncidentPass } from "@/lib/server/incident-passes";
+
+// GenericIncidentConsole now fetches its simulation config lazily from
+// GET /api/incidents/[slug]/simulation (never as a server-passed prop —
+// see docs/implementation_plan/seopphase.md §1/§15) — stub it so the
+// playable-console assertions below don't hang on "Loading…" forever.
+// The real access check already happened server-side to even reach this
+// render, so unconditionally serving a (deliberately minimal, unused-by-
+// these-assertions) simulation object here is safe for test purposes.
+vi.stubGlobal(
+  "fetch",
+  vi.fn(async () =>
+    new Response(
+      JSON.stringify({
+        simulation: {
+          tickMs: 1000,
+          architecture: { nodes: [], edges: [] },
+          controls: [],
+          initialValues: {},
+          initialComponentHealth: {},
+          severityFields: [],
+          numericWatchFields: [],
+          timedEvents: [],
+          rules: [],
+          revenueLossRatePerMinute: { healthy: 0, critical: 0 },
+          infrastructureCost: { baselineMonthlyUsd: 0, perUnitMonthlyUsd: {} },
+          successCondition: { conditions: [], sustainedSeconds: 0 },
+          failureCondition: { conditions: [], sustainedSeconds: 0 },
+          actionClassifications: [],
+        },
+      }),
+      { status: 200 },
+    ),
+  ),
+);
 
 vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
 
@@ -48,6 +82,9 @@ describe("ScenarioPracticePage", () => {
       params: Promise.resolve({ slug: "kafka-consumer-lag" }),
     });
     render(element);
+    await act(async () => {
+      await Promise.resolve();
+    });
 
     expect(
       screen.getByRole("heading", { name: "Kafka Consumer Lag" }),
@@ -105,8 +142,47 @@ describe("ScenarioPracticePage", () => {
         params: Promise.resolve({ slug: "rate-limit-misconfiguration" }),
       });
       render(element);
+      await act(async () => {
+        await Promise.resolve();
+      });
 
       expect(screen.getByRole("button", { name: /acknowledge incident/i })).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * docs/implementation_plan/seopphase.md §15/§22's literal check: a
+   * crawler must never see scoring rules, controls, timed events, or any
+   * other private scenario-internals key for a PAID (locked) scenario —
+   * the highest-risk case, since the locked screen renders without any
+   * access grant at all. Renders the real page (not a mock) and inspects
+   * the actual produced DOM/text content.
+   */
+  describe("IP-leakage regression: locked (paid) scenario page never exposes private internals", () => {
+    beforeEach(() => {
+      vi.stubEnv("NODE_ENV", "development");
+      vi.stubEnv("DEV_UNLOCK_PAID_SCENARIOS", undefined);
+    });
+
+    it("renders only public-safe content for a locked scenario — no rules/scoring/timedEvents substrings anywhere in the rendered output", async () => {
+      const element = await ScenarioPracticePage({
+        params: Promise.resolve({ slug: "rate-limit-misconfiguration" }),
+      });
+      const { container } = render(element);
+
+      const rendered = container.innerHTML;
+      for (const marker of [
+        "successCondition",
+        "acceptableCondition",
+        "feedbackRules",
+        "timedEvents",
+        "goldenPath",
+        "initialState",
+        "failureCondition",
+        "actionClassifications",
+      ]) {
+        expect(rendered.includes(marker)).toBe(false);
+      }
     });
   });
 
@@ -178,6 +254,9 @@ describe("ScenarioPracticePage", () => {
         params: Promise.resolve({ slug: PAID_SCENARIO_SLUG }),
       });
       render(element);
+      await act(async () => {
+        await Promise.resolve();
+      });
 
       expect(screen.getByRole("button", { name: /acknowledge incident/i })).toBeInTheDocument();
       expect(screen.queryByText(/coming soon/i)).toBeNull();

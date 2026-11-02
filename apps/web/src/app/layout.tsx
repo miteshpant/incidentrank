@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
+import { appBaseUrl } from "@/lib/server/app-url";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -15,6 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(appBaseUrl()),
   title: "IncidentRank — Production is the test.",
   description:
     "Diagnose incidents. Operate the system. Restore production. Prove how you think under pressure.",

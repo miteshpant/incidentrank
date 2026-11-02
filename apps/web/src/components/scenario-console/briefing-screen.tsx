@@ -2,11 +2,11 @@
 
 import { SignInButton } from "@clerk/nextjs";
 import type { ArchitectureDefinition } from "@incidentrank/simulator";
-import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import type { PublicScenarioMetadata } from "@incidentrank/scenarios";
 import { BriefingContent } from "./briefing-content";
 
 interface GenericBriefingScreenProps {
-  scenario: ScenarioDefinition;
+  scenario: PublicScenarioMetadata;
   architecture: ArchitectureDefinition;
   onAcknowledge: () => void;
   showSignInNudge: boolean;

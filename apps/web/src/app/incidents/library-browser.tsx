@@ -3,10 +3,10 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import type { PublicScenarioMetadata } from "@incidentrank/scenarios";
 import type { ScenarioPracticeProgress } from "@/lib/server/practice-progress";
 
-const DIFFICULTY_LABEL: Record<ScenarioDefinition["difficulty"], string> = {
+const DIFFICULTY_LABEL: Record<PublicScenarioMetadata["difficulty"], string> = {
   beginner: "Beginner",
   intermediate: "Intermediate",
   senior: "Senior",
@@ -32,7 +32,7 @@ const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: "name", label: "Name" },
 ];
 
-const DIFFICULTY_RANK: Record<ScenarioDefinition["difficulty"], number> = {
+const DIFFICULTY_RANK: Record<PublicScenarioMetadata["difficulty"], number> = {
   beginner: 0,
   intermediate: 1,
   senior: 2,
@@ -42,7 +42,10 @@ const DIFFICULTY_RANK: Record<ScenarioDefinition["difficulty"], number> = {
 };
 
 export interface LibraryEntry {
-  definition: ScenarioDefinition;
+  /** Public-safe projection only — never the full ScenarioDefinition
+   * (docs/implementation_plan/seopphase.md §1/§15: this prop is
+   * serialized into the RSC payload for all catalog entries at once). */
+  definition: PublicScenarioMetadata;
   progress: ScenarioPracticeProgress | null;
 }
 
@@ -81,7 +84,7 @@ export function LibraryBrowser({ entries, isSignedIn }: LibraryBrowserProps) {
   const allTags = useMemo(() => {
     const set = new Set<string>();
     for (const entry of entries) {
-      for (const tag of entry.definition.library?.tags ?? []) set.add(tag);
+      for (const tag of entry.definition.tags ?? []) set.add(tag);
     }
     return [...set].sort();
   }, [entries]);
@@ -89,7 +92,7 @@ export function LibraryBrowser({ entries, isSignedIn }: LibraryBrowserProps) {
   const allCategories = useMemo(() => {
     const set = new Set<string>();
     for (const entry of entries) {
-      if (entry.definition.library) set.add(entry.definition.library.category);
+      if (entry.definition.category) set.add(entry.definition.category);
     }
     return [...set].sort();
   }, [entries]);
@@ -123,21 +126,20 @@ export function LibraryBrowser({ entries, isSignedIn }: LibraryBrowserProps) {
 
     return entries.filter((entry) => {
       const { definition } = entry;
-      const lib = definition.library;
 
       if (q) {
         const haystack = [
           definition.name,
           definition.description,
-          lib?.category ?? "",
-          ...(lib?.tags ?? []),
+          definition.category ?? "",
+          ...(definition.tags ?? []),
         ]
           .join(" ")
           .toLowerCase();
         if (!haystack.includes(q)) return false;
       }
 
-      if (categories.length > 0 && (!lib || !categories.includes(lib.category))) {
+      if (categories.length > 0 && (!definition.category || !categories.includes(definition.category))) {
         return false;
       }
 
@@ -156,7 +158,7 @@ export function LibraryBrowser({ entries, isSignedIn }: LibraryBrowserProps) {
       }
 
       if (tags.length > 0) {
-        const entryTags = lib?.tags ?? [];
+        const entryTags = definition.tags ?? [];
         if (!tags.some((t) => entryTags.includes(t))) return false;
       }
 
@@ -259,7 +261,7 @@ export function LibraryBrowser({ entries, isSignedIn }: LibraryBrowserProps) {
         </FilterGroup>
 
         <FilterGroup label="Difficulty">
-          {(Object.keys(DIFFICULTY_LABEL) as Array<ScenarioDefinition["difficulty"]>).map((d) => (
+          {(Object.keys(DIFFICULTY_LABEL) as Array<PublicScenarioMetadata["difficulty"]>).map((d) => (
             <CheckboxOption
               key={d}
               label={DIFFICULTY_LABEL[d]}
@@ -400,7 +402,6 @@ function CheckboxOption({
 
 function ScenarioCard({ entry, isSignedIn }: { entry: LibraryEntry; isSignedIn: boolean }) {
   const { definition, progress } = entry;
-  const lib = definition.library;
   const completed = isSignedIn && (progress?.completed ?? false);
 
   return (
@@ -426,10 +427,10 @@ function ScenarioCard({ entry, isSignedIn }: { entry: LibraryEntry; isSignedIn: 
       </div>
 
       <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs text-muted">
-        {lib && (
+        {definition.category && (
           <div>
             <dt className="uppercase tracking-wide">Category</dt>
-            <dd className="mt-1 text-foreground">{lib.category}</dd>
+            <dd className="mt-1 text-foreground">{definition.category}</dd>
           </div>
         )}
         <div>
@@ -443,12 +444,12 @@ function ScenarioCard({ entry, isSignedIn }: { entry: LibraryEntry; isSignedIn: 
       </dl>
 
       <p className="mt-4 flex-1 text-sm text-muted text-pretty">
-        {lib?.shortDescription ?? definition.description}
+        {definition.description}
       </p>
 
-      {lib && lib.tags.length > 0 && (
+      {definition.tags && definition.tags.length > 0 && (
         <div className="mt-4 flex flex-wrap gap-1.5">
-          {lib.tags.map((tag) => (
+          {definition.tags.map((tag) => (
             <span
               key={tag}
               className="rounded border border-border px-2 py-0.5 font-mono text-[10px] text-muted"

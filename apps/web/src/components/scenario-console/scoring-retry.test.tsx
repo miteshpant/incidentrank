@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ScenarioSimulationDefinition } from "@incidentrank/simulator";
 import type { ScenarioDefinition } from "@incidentrank/scenarios";
+import { toPublicScenarioMetadata } from "@incidentrank/scenarios";
 import { GenericIncidentConsole } from "./generic-incident-console";
 
 vi.mock("@clerk/nextjs", () => import("@/test/clerk-mock-impl"));
@@ -104,6 +105,10 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/simulation")) {
+          return new Response(JSON.stringify({ simulation }), { status: 200 });
+        }
+
         // Phase 10G: acknowledging/finishing now also fires fire-and-
         // forget analytics calls through the same global fetch — those
         // must never count toward this test's score-preview call
@@ -129,8 +134,11 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
     );
 
     render(
-      <GenericIncidentConsole scenario={scenario} simulation={simulation} candidateUI={candidateUI} />,
+      <GenericIncidentConsole scenario={toPublicScenarioMetadata(scenario)} candidateUI={candidateUI} />,
     );
+    await act(async () => {
+      await Promise.resolve();
+    });
     acknowledgeIncident();
 
     // The failure condition is satisfied from the first tick, but the
@@ -167,8 +175,11 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
     // the server sending the correct one.
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
+      vi.fn(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/simulation")) {
+          return new Response(JSON.stringify({ simulation }), { status: 200 });
+        }
+        return new Response(
           JSON.stringify({
             score: {
               total: 321,
@@ -177,13 +188,16 @@ describe("Scoring retry after a failed score-preview request (automatic-failure 
             },
           }),
           { status: 200 },
-        ),
-      ),
+        );
+      }),
     );
 
     render(
-      <GenericIncidentConsole scenario={scenario} simulation={simulation} candidateUI={candidateUI} />,
+      <GenericIncidentConsole scenario={toPublicScenarioMetadata(scenario)} candidateUI={candidateUI} />,
     );
+    await act(async () => {
+      await Promise.resolve();
+    });
     acknowledgeIncident();
     advanceSeconds(35 * 60);
 

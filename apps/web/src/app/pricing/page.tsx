@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
@@ -6,6 +7,13 @@ import { PricingContent } from "./pricing-content";
 
 // Per-request: entitlement state and Founding capacity both change live.
 export const instant = false;
+
+export const metadata: Metadata = {
+  title: "Pricing | IncidentRank",
+  description:
+    "Unlock every premium production incident in the IncidentRank catalog — Pro and Founding plans for ongoing system design and incident-response practice.",
+  alternates: { canonical: "/pricing" },
+};
 
 export default function PricingPage() {
   return (
