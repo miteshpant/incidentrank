@@ -103,13 +103,14 @@ export async function AnalyticsView({ range }: { range: AnalyticsRange }) {
           <tbody>
             {funnel.map((stage, i) => {
               const prior = i > 0 ? funnel[i - 1] : null;
-              const dropOffPct = prior ? pct(prior.count - stage.count, prior.count) : null;
+              const showDropOff = prior && stage.sequential;
+              const dropOffPct = showDropOff ? pct(prior.count - stage.count, prior.count) : null;
               return (
                 <tr key={stage.eventName} className="border-b border-border/60">
                   <td className="py-2 pr-4">{stage.name}</td>
                   <td className="py-2 pr-4 font-mono">{stage.count}</td>
                   <td className="py-2 font-mono text-muted">
-                    {prior ? pctLabel(dropOffPct) : "—"}
+                    {showDropOff ? pctLabel(dropOffPct) : "—"}
                   </td>
                 </tr>
               );

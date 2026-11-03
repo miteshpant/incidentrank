@@ -169,17 +169,26 @@ export interface AnalyticsFunnelStage {
   name: string;
   eventName: AnalyticsEventName;
   count: number;
+  /**
+   * False when this stage isn't actually gated behind the prior one (so a
+   * "drop-off vs. prior stage" figure would be meaningless, or even
+   * negative if this stage's count exceeds the prior stage's). Signup
+   * Clicked can be reached from anywhere in the UI, not only after
+   * finishing an incident, so it is never a true sub-population of
+   * "Finished" the way every other adjacent pair is.
+   */
+  sequential: boolean;
 }
 
-const FUNNEL_STAGES: { name: string; eventName: AnalyticsEventName }[] = [
-  { name: "Incident Viewed", eventName: "incident_view" },
-  { name: "Acknowledged", eventName: "incident_acknowledged" },
-  { name: "Started", eventName: "incident_started" },
-  { name: "First Action", eventName: "first_action_applied" },
-  { name: "Finish Clicked", eventName: "finish_clicked" },
-  { name: "Finished", eventName: "incident_finished" },
-  { name: "Signup Clicked", eventName: "signup_clicked" },
-  { name: "Registered", eventName: "signup_completed" },
+const FUNNEL_STAGES: { name: string; eventName: AnalyticsEventName; sequential: boolean }[] = [
+  { name: "Incident Viewed", eventName: "incident_view", sequential: true },
+  { name: "Acknowledged", eventName: "incident_acknowledged", sequential: true },
+  { name: "Started", eventName: "incident_started", sequential: true },
+  { name: "First Action", eventName: "first_action_applied", sequential: true },
+  { name: "Finish Clicked", eventName: "finish_clicked", sequential: true },
+  { name: "Finished", eventName: "incident_finished", sequential: true },
+  { name: "Signup Clicked", eventName: "signup_clicked", sequential: false },
+  { name: "Registered", eventName: "signup_completed", sequential: true },
 ];
 
 /** Spec §7 — the funnel table with stage counts, in declared order. */
